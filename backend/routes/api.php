@@ -1,0 +1,48 @@
+<?php
+
+use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\ItemController;
+use App\Http\Controllers\Api\LoanController;
+use App\Http\Controllers\Api\UserController;
+use Illuminate\Support\Facades\Route;
+
+// Public routes
+Route::post('/login', [AuthController::class, 'login']);
+
+// Authenticated routes
+Route::middleware('auth:sanctum')->group(function () {
+    Route::post('/logout', [AuthController::class, 'logout']);
+    Route::get('/user', [AuthController::class, 'user']);
+
+    // Items - all authenticated users can view
+    Route::get('/items', [ItemController::class, 'index']);
+    Route::get('/items/{item}', [ItemController::class, 'show']);
+
+    // Items management - admin & assistant
+    Route::middleware('role:admin,assistant')->group(function () {
+        Route::post('/items', [ItemController::class, 'store']);
+        Route::put('/items/{item}', [ItemController::class, 'update']);
+        Route::delete('/items/{item}', [ItemController::class, 'destroy']);
+    });
+
+    // Loans - all staff can view
+    Route::get('/loans', [LoanController::class, 'index']);
+    Route::get('/loans/{loan}', [LoanController::class, 'show']);
+    Route::get('/loans/qr/{uuid}', [LoanController::class, 'showByUuid']);
+
+    // Loan management - admin & assistant only (petugas creates & verifies)
+    Route::middleware('role:admin,assistant')->group(function () {
+        Route::post('/loans', [LoanController::class, 'store']);
+        Route::post('/loans/{loan}/approve', [LoanController::class, 'approve']);
+        Route::post('/loans/{loan}/reject', [LoanController::class, 'reject']);
+        Route::post('/loans/{loan}/return', [LoanController::class, 'returnItem']);
+    });
+
+    // User management - admin only
+    Route::middleware('role:admin')->group(function () {
+        Route::get('/users', [UserController::class, 'index']);
+        Route::post('/users', [UserController::class, 'store']);
+        Route::put('/users/{user}', [UserController::class, 'update']);
+        Route::delete('/users/{user}', [UserController::class, 'destroy']);
+    });
+});

@@ -1,0 +1,399 @@
+import { useEffect, useRef, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import api from '../api/axios'
+import {
+  ArrowLeft,
+  Camera,
+  CameraOff,
+  RefreshCw,
+  Package,
+  Send,
+  User,
+  Mail,
+  Phone,
+  IdCard,
+  CheckCircle,
+} from 'lucide-react'
+
+function NewLoan() {
+  const navigate = useNavigate()
+  const videoRef = useRef(null)
+  const streamRef = useRef(null)
+
+  const [items, setItems] = useState([])
+  const [selectedItem, setSelectedItem] = useState('')
+  const [qty, setQty] = useState(1)
+  const [cameraActive, setCameraActive] = useState(false)
+  const [photo, setPhoto] = useState(null)
+  const [photoError, setPhotoError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+  const [loadingItems, setLoadingItems] = useState(true)
+
+  // Borrower form data
+  const [borrowerName, setBorrowerName] = useState('')
+  const [borrowerEmail, setBorrowerEmail] = useState('')
+  const [borrowerPhone, setBorrowerPhone] = useState('')
+  const [borrowerStudentId, setBorrowerStudentId] = useState('')
+
+  useEffect(() => {
+    const fetchItems = async () => {
+      try {
+        const response = await api.get('/items?per_page=100')
+        setItems(response.data.data || [])
+      } catch (err) {
+        setError('Gagal memuat daftar barang')
+      } finally {
+        setLoadingItems(false)
+      }
+    }
+    fetchItems()
+
+    return () => {
+      stopCamera()
+    }
+  }, [])
+
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop())
+      streamRef.current = null
+    }
+    setCameraActive(false)
+  }
+
+  const startCamera = () => {
+    setPhotoError('')
+    setCameraActive(true)
+  }
+
+  // Start camera stream when cameraActive becomes true (after video element is in DOM)
+  useEffect(() => {
+    if (!cameraActive) return
+
+    let cancelled = false
+
+    const startStream = async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+        })
+        if (cancelled) {
+          stream.getTracks().forEach((track) => track.stop())
+          return
+        }
+        streamRef.current = stream
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream
+          await videoRef.current.play()
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setPhotoError('Tidak dapat mengakses kamera. Pastikan izin kamera diberikan dan gunakan HTTPS atau localhost.')
+          setCameraActive(false)
+        }
+      }
+    }
+
+    startStream()
+
+    return () => {
+      cancelled = true
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop())
+        streamRef.current = null
+      }
+    }
+  }, [cameraActive])
+
+  const capturePhoto = () => {
+    if (!videoRef.current) return
+    const canvas = document.createElement('canvas')
+    canvas.width = videoRef.current.videoWidth
+    canvas.height = videoRef.current.videoHeight
+    const ctx = canvas.getContext('2d')
+    ctx.drawImage(videoRef.current, 0, 0)
+    canvas.toBlob((blob) => {
+      const filename = `borrow-photo-${Date.now()}.jpg`
+      const file = new File([blob], filename, { type: 'image/jpeg' })
+      setPhoto(file)
+      setPhotoError('')
+      stopCamera()
+    }, 'image/jpeg', 0.9)
+  }
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setError('')
+
+    if (!photo) {
+      setPhotoError('Wajib mengambil foto peminjam sebagai verifikasi identitas visual.')
+      return
+    }
+
+    if (!selectedItem) {
+      setError('Silakan pilih barang yang akan dipinjam.')
+      return
+    }
+
+    if (!borrowerName || !borrowerEmail) {
+      setError('Nama dan email peminjam wajib diisi.')
+      return
+    }
+
+    setSubmitting(true)
+    const formData = new FormData()
+    formData.append('item_id', selectedItem)
+    formData.append('qty', qty)
+    formData.append('borrower_name', borrowerName)
+    formData.append('borrower_email', borrowerEmail)
+    if (borrowerPhone) formData.append('borrower_phone', borrowerPhone)
+    if (borrowerStudentId) formData.append('borrower_student_id', borrowerStudentId)
+    formData.append('borrow_photo', photo)
+
+    try {
+      const response = await api.post('/loans', formData)
+      setSuccess('Peminjaman berhasil dibuat! QR Code telah dikirim ke email peminjam.')
+      // Navigate to loan detail after short delay
+      setTimeout(() => {
+        const loan = response.data.loan
+        navigate(`/loans/${loan.id}`)
+      }, 1500)
+    } catch (err) {
+      const data = err.response?.data
+      if (data?.errors) {
+        setError(Object.values(data.errors).flat().join(', '))
+      } else {
+        setError(data?.message || 'Gagal membuat peminjaman')
+      }
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="max-w-3xl mx-auto">
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Buat Peminjaman Baru</h1>
+          <p className="text-slate-500 mt-1">
+            Petugas mendaftarkan peminjaman untuk mahasiswa & kirim QR via email
+          </p>
+        </div>
+        <Link to="/loans" className="inline-flex items-center gap-2 text-slate-500 hover:text-slate-700">
+          <ArrowLeft className="w-4 h-4" />
+          Kembali
+        </Link>
+      </div>
+
+      {success && (
+        <div className="mb-6 bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm rounded-lg px-4 py-3 flex items-center gap-2">
+          <CheckCircle className="w-5 h-5" />
+          {success}
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit} className="space-y-6">
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-600 text-sm rounded-lg px-4 py-3">
+            {error}
+          </div>
+        )}
+
+        {/* Step 1: Pilih barang */}
+        <div className="bg-white rounded-xl border border-slate-200 p-6">
+          <h2 className="font-semibold text-slate-900 mb-4 flex items-center gap-2">
+            <Package className="w-5 h-5 text-cyan-600" />
+            1. Pilih Barang
+          </h2>
+
+          {loadingItems ? (
+            <p className="text-slate-500">Memuat daftar barang...</p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Barang</label>
+                <select
+                  value={selectedItem}
+                  onChange={(e) => {
+                    setSelectedItem(e.target.value)
+                    setQty(1)
+                  }}
+                  className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none bg-white"
+                  required
+                >
+                  <option value="">Pilih barang...</option>
+                  {items.filter((item) => item.stock > 0).map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name} (Stok: {item.stock})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Jumlah</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={qty}
+                  onChange={(e) => setQty(Math.max(1, parseInt(e.target.value) || 1))}
+                  className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none"
+                  required
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Step 2: Data Peminjam */}
+        <div className="bg-white rounded-xl border border-slate-200 p-6">
+          <h2 className="font-semibold text-slate-900 mb-4 flex items-center gap-2">
+            <User className="w-5 h-5 text-cyan-600" />
+            2. Data Peminjam (Mahasiswa)
+          </h2>
+          <p className="text-sm text-slate-500 mb-4">
+            Mahasiswa mengisi data langsung di komputer petugas. QR Code akan dikirim ke email yang dimasukkan.
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Nama Lengkap *</label>
+              <div className="relative">
+                <User className="w-5 h-5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={borrowerName}
+                  onChange={(e) => setBorrowerName(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none"
+                  placeholder="Nama mahasiswa"
+                  required
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Email *</label>
+              <div className="relative">
+                <Mail className="w-5 h-5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="email"
+                  value={borrowerEmail}
+                  onChange={(e) => setBorrowerEmail(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none"
+                  placeholder="email@kampus.ac.id"
+                  required
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">No. Telepon (Opsional)</label>
+              <div className="relative">
+                <Phone className="w-5 h-5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="tel"
+                  value={borrowerPhone}
+                  onChange={(e) => setBorrowerPhone(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none"
+                  placeholder="08xxxxxxxxxx"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">NIM / NIP (Opsional)</label>
+              <div className="relative">
+                <IdCard className="w-5 h-5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={borrowerStudentId}
+                  onChange={(e) => setBorrowerStudentId(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none"
+                  placeholder="Nomor induk mahasiswa"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Step 3: Foto verifikasi */}
+        <div className="bg-white rounded-xl border border-slate-200 p-6">
+          <h2 className="font-semibold text-slate-900 mb-4 flex items-center gap-2">
+            <Camera className="w-5 h-5 text-cyan-600" />
+            3. Foto Verifikasi Peminjam
+          </h2>
+          <p className="text-sm text-slate-500 mb-4">
+            Petugas memfoto wajah mahasiswa yang meminjam sebagai bukti identitas visual.
+          </p>
+
+          {photoError && (
+            <div className="bg-red-50 border border-red-200 text-red-600 text-sm rounded-lg px-4 py-3 mb-4">
+              {photoError}
+            </div>
+          )}
+
+          {photo ? (
+            <div className="space-y-3">
+              <img
+                src={URL.createObjectURL(photo)}
+                alt="Foto verifikasi peminjam"
+                className="w-full max-w-md h-64 object-cover rounded-lg border border-slate-200"
+              />
+              <button
+                type="button"
+                onClick={() => setPhoto(null)}
+                className="inline-flex items-center gap-2 text-red-600 font-medium text-sm hover:text-red-700"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Ambil ulang foto
+              </button>
+            </div>
+          ) : cameraActive ? (
+            <div className="space-y-3">
+              <video
+                ref={videoRef}
+                className="w-full max-w-md h-64 object-cover rounded-lg border border-slate-200 bg-black"
+              />
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={capturePhoto}
+                  className="inline-flex items-center gap-2 bg-cyan-600 hover:bg-cyan-700 text-white px-4 py-2.5 rounded-lg font-medium transition-colors"
+                >
+                  <Camera className="w-5 h-5" />
+                  Ambil Foto
+                </button>
+                <button
+                  type="button"
+                  onClick={stopCamera}
+                  className="inline-flex items-center gap-2 text-slate-500 hover:text-slate-700 px-4 py-2.5"
+                >
+                  <CameraOff className="w-4 h-4" />
+                  Matikan Kamera
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={startCamera}
+              className="inline-flex items-center gap-2 bg-white border-2 border-dashed border-slate-300 hover:border-cyan-500 hover:text-cyan-600 text-slate-500 px-6 py-4 rounded-lg font-medium transition-colors w-full max-w-md justify-center"
+            >
+              <Camera className="w-6 h-6" />
+              Nyalakan Kamera
+            </button>
+          )}
+        </div>
+
+        <button
+          type="submit"
+          disabled={submitting}
+          className="inline-flex items-center gap-2 bg-cyan-600 hover:bg-cyan-700 text-white px-6 py-3 rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto justify-center"
+        >
+          <Send className="w-5 h-5" />
+          {submitting ? 'Memproses...' : 'Buat Peminjaman & Kirim QR'}
+        </button>
+      </form>
+    </div>
+  )
+}
+
+export default NewLoan
