@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import api from '../api/axios'
-import { QRCodeSVG } from 'qrcode.react'
 import {
   ArrowLeft,
   CheckCircle,
@@ -13,6 +12,7 @@ import {
   Calendar,
   ShieldCheck,
   Image,
+  Mail,
 } from 'lucide-react'
 
 function LoanDetail() {
@@ -119,14 +119,17 @@ function LoanDetail() {
     })
   }
 
-  const qrValue = loan.uuid
-
   return (
     <div className="max-w-5xl mx-auto">
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Detail Peminjaman</h1>
-          <p className="text-slate-500 mt-1 font-mono text-xs">ID: {loan.uuid}</p>
+          <div className="flex items-center gap-3 mt-1">
+            <p className="font-mono text-xs text-slate-500">UUID: {loan.uuid}</p>
+            <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-mono font-bold bg-slate-900 text-cyan-400">
+              {loan.loan_code}
+            </span>
+          </div>
         </div>
         <Link to="/loans" className="inline-flex items-center gap-2 text-slate-500 hover:text-slate-700">
           <ArrowLeft className="w-4 h-4" />
@@ -135,23 +138,26 @@ function LoanDetail() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left column - QR Code & status */}
+        {/* Left column - Status & info */}
         <div className="space-y-6">
-          <div className="bg-white rounded-xl border border-slate-200 p-6 text-center">
-            <h2 className="font-semibold text-slate-900 mb-4">QR Code Transaksi</h2>
-            <div className="inline-block bg-white p-4 border-2 border-dashed border-slate-200 rounded-lg">
-              <QRCodeSVG value={qrValue} size={200} level="H" />
-            </div>
-            <p className="text-xs text-slate-500 mt-3">
-              Tunjukkan QR Code ini kepada petugas saat mengambil atau mengembalikan barang.
-            </p>
-          </div>
-
           <div className="bg-white rounded-xl border border-slate-200 p-6">
             <h2 className="font-semibold text-slate-900 mb-3">Status</h2>
             <span className={`inline-flex px-3 py-1 rounded-full text-sm font-medium ${status.className}`}>
               {status.text}
             </span>
+          </div>
+
+          <div className="bg-cyan-50 border border-cyan-200 rounded-xl p-6">
+            <div className="flex items-start gap-3">
+              <Mail className="w-5 h-5 text-cyan-600 mt-0.5 shrink-0" />
+              <div>
+                <h2 className="font-semibold text-cyan-900 text-sm mb-1">QR Code via Email</h2>
+                <p className="text-xs text-cyan-700 leading-relaxed">
+                  QR Code transaksi telah dikirim ke email peminjam: <strong>{loan.borrower_email}</strong>.
+                  Peminjam menunjukkan email/QR kepada petugas untuk verifikasi.
+                </p>
+              </div>
+            </div>
           </div>
         </div>
 

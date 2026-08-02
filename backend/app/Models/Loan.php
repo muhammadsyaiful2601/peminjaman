@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 #[Fillable([
     'uuid',
+    'loan_code',
     'item_id',
     'qty',
     'borrower_name',

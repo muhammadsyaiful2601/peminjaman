@@ -14,6 +14,7 @@ return new class extends Migration
         Schema::create('loans', function (Blueprint $table) {
             $table->id();
             $table->uuid('uuid')->unique();
+            $table->string('loan_code')->unique();
             $table->foreignId('item_id')->constrained()->onDelete('cascade');
             $table->integer('qty')->default(1);
             // Borrower info stored directly (no login required for mahasiswa)

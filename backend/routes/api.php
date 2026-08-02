@@ -9,6 +9,9 @@ use Illuminate\Support\Facades\Route;
 // Public routes
 Route::post('/login', [AuthController::class, 'login']);
 
+// Public QR download (borrower doesn't need login, UUID acts as security token)
+Route::get('/loans/qr/{uuid}/download', [LoanController::class, 'downloadQr']);
+
 // Authenticated routes
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
@@ -36,6 +39,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/loans/{loan}/approve', [LoanController::class, 'approve']);
         Route::post('/loans/{loan}/reject', [LoanController::class, 'reject']);
         Route::post('/loans/{loan}/return', [LoanController::class, 'returnItem']);
+
+        // Verify by code and upload PDF
+        Route::get('/loans/code/{code}', [LoanController::class, 'showByCode']);
+        Route::post('/loans/upload-pdf', [LoanController::class, 'uploadPdf']);
     });
 
     // User management - admin only

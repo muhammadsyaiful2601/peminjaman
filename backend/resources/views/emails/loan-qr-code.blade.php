@@ -7,7 +7,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QR Code Peminjaman Barang</title>
+    <title>Bukti Peminjaman Barang</title>
 </head>
 <body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f1f5f9; color: #1e293b;">
 
@@ -22,23 +22,14 @@
         <!-- Content -->
         <div style="background: #ffffff; padding: 30px; border-radius: 0 0 12px 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
 
-            <h2 style="color: #0f172a; margin: 0 0 16px 0; font-size: 20px;">QR Code Peminjaman Anda</h2>
+            <h2 style="color: #0f172a; margin: 0 0 16px 0; font-size: 20px;">Bukti Peminjaman Barang</h2>
 
             <p style="color: #475569; line-height: 1.6; margin: 0 0 20px 0;">
                 Halo <strong>{{ $loan->borrower_name }}</strong>,<br><br>
-                Peminjaman barang Anda telah didaftarkan oleh petugas. Berikut adalah QR Code transaksi Anda.
-                Tunjukkan QR Code ini kepada petugas saat pengambilan dan pengembalian barang.
+                Peminjaman barang Anda telah didaftarkan oleh petugas. Unduh bukti peminjaman
+                beserta QR Code menggunakan tombol di bawah. Tunjukkan QR Code tersebut kepada
+                petugas saat pengambilan dan pengembalian barang.
             </p>
-
-            <!-- QR Code -->
-            <div style="text-align: center; margin: 30px 0;">
-                <div style="display: inline-block; padding: 20px; border: 2px dashed #cbd5e1; border-radius: 12px; background: #ffffff;">
-                    <img src="{{ $qrDataUrl }}" alt="QR Code" style="width: 220px; height: 220px;">
-                </div>
-                <p style="color: #64748b; font-size: 12px; margin: 12px 0 0 0; font-family: monospace;">
-                    {{ $loan->uuid }}
-                </p>
-            </div>
 
             <!-- Loan Details -->
             <div style="background: #f8fafc; border-radius: 8px; padding: 20px; margin: 20px 0;">
@@ -69,12 +60,22 @@
                 </table>
             </div>
 
+            <!-- Download Button -->
+            <div style="text-align: center; margin: 30px 0;">
+                <a href="{{ $downloadUrl }}" style="display: inline-block; background: #06b6d4; color: #ffffff; text-decoration: none; padding: 16px 36px; border-radius: 8px; font-size: 16px; font-weight: 600; letter-spacing: 0.3px;">
+                    ⬇️ Unduh Bukti Peminjaman (PDF)
+                </a>
+                <p style="color: #94a3b8; font-size: 12px; margin: 12px 0 0 0;">
+                    Klik tombol di atas untuk mengunduh PDF berisi QR Code, data diri, dan detail barang.
+                </p>
+            </div>
+
             <!-- Instructions -->
             <div style="background: #ecfeff; border-left: 4px solid #06b6d4; border-radius: 4px; padding: 16px; margin: 20px 0;">
                 <p style="margin: 0; color: #0e7490; font-size: 14px; line-height: 1.5;">
                     <strong>📌 Petunjuk:</strong><br>
-                    1. Tunjukkan email ini (atau QR Code di atas) kepada petugas.<br>
-                    2. Petugas akan memverifikasi dan menyerahkan barang.<br>
+                    1. Unduh bukti peminjaman (PDF) menggunakan tombol di atas.<br>
+                    2. Tunjukkan QR Code dari PDF kepada petugas saat pengambilan barang.<br>
                     3. Saat mengembalikan, tunjukkan QR Code yang sama kepada petugas.
                 </p>
             </div>

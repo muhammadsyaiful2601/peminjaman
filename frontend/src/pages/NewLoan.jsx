@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import api from '../api/axios'
 import {
   ArrowLeft,
@@ -13,10 +13,10 @@ import {
   Phone,
   IdCard,
   CheckCircle,
+  Plus,
 } from 'lucide-react'
 
 function NewLoan() {
-  const navigate = useNavigate()
   const videoRef = useRef(null)
   const streamRef = useRef(null)
 
@@ -28,7 +28,7 @@ function NewLoan() {
   const [photoError, setPhotoError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
+  const [successLoan, setSuccessLoan] = useState(null)
   const [loadingItems, setLoadingItems] = useState(true)
 
   // Borrower form data
@@ -154,12 +154,7 @@ function NewLoan() {
 
     try {
       const response = await api.post('/loans', formData)
-      setSuccess('Peminjaman berhasil dibuat! QR Code telah dikirim ke email peminjam.')
-      // Navigate to loan detail after short delay
-      setTimeout(() => {
-        const loan = response.data.loan
-        navigate(`/loans/${loan.id}`)
-      }, 1500)
+      setSuccessLoan(response.data.loan)
     } catch (err) {
       const data = err.response?.data
       if (data?.errors) {
@@ -170,6 +165,97 @@ function NewLoan() {
     } finally {
       setSubmitting(false)
     }
+  }
+
+  const handleNewLoan = () => {
+    // Reset all form state
+    setSuccessLoan(null)
+    setSelectedItem('')
+    setQty(1)
+    setPhoto(null)
+    setError('')
+    setPhotoError('')
+    setBorrowerName('')
+    setBorrowerEmail('')
+    setBorrowerPhone('')
+    setBorrowerStudentId('')
+  }
+
+  // Success page after loan is created
+  if (successLoan) {
+    return (
+      <div className="max-w-2xl mx-auto">
+        <div className="bg-white rounded-xl border border-slate-200 p-8 text-center">
+          <div className="inline-flex items-center justify-center w-20 h-20 bg-emerald-100 rounded-full mb-6">
+            <CheckCircle className="w-12 h-12 text-emerald-600" />
+          </div>
+
+          <h1 className="text-2xl font-bold text-slate-900 mb-3">Peminjaman Berhasil Dibuat!</h1>
+          <p className="text-slate-500 mb-8">
+            QR Code transaksi telah dikirim ke email peminjam. Peminjam dapat menunjukkan email tersebut
+            kepada petugas untuk verifikasi peminjaman dan pengembalian barang.
+          </p>
+
+          {/* Loan summary */}
+          <div className="bg-slate-50 rounded-lg p-6 text-left mb-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="sm:col-span-2 text-center mb-2">
+                <p className="text-sm text-slate-500">Kode Peminjaman</p>
+                <p className="font-mono font-bold text-2xl text-cyan-600 tracking-wider">{successLoan.loan_code}</p>
+              </div>
+              <div>
+                <p className="text-sm text-slate-500">Peminjam</p>
+                <p className="font-medium text-slate-900">{successLoan.borrower_name}</p>
+              </div>
+              <div>
+                <p className="text-sm text-slate-500">Email</p>
+                <p className="font-medium text-slate-900 text-sm">{successLoan.borrower_email}</p>
+              </div>
+              <div>
+                <p className="text-sm text-slate-500">Barang</p>
+                <p className="font-medium text-slate-900">{successLoan.item?.name}</p>
+              </div>
+              <div>
+                <p className="text-sm text-slate-500">Jumlah</p>
+                <p className="font-medium text-slate-900">{successLoan.qty} unit</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Email notification info */}
+          <div className="bg-cyan-50 border border-cyan-200 rounded-lg p-4 mb-6 text-left">
+            <div className="flex items-start gap-3">
+              <Mail className="w-5 h-5 text-cyan-600 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-cyan-900">QR Code Terkirim via Email</p>
+                <p className="text-xs text-cyan-700 mt-1">
+                  Email berisi QR Code telah dikirim ke <strong>{successLoan.borrower_email}</strong>.
+                  Peminjam cukup membuka email dan menunjukkan QR Code kepada petugas.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <button
+              onClick={handleNewLoan}
+              className="inline-flex items-center gap-2 bg-cyan-600 hover:bg-cyan-700 text-white px-6 py-2.5 rounded-lg font-medium transition-colors justify-center"
+            >
+              <Plus className="w-5 h-5" />
+              Buat Peminjaman Lagi
+            </button>
+            <Link
+              to="/loans"
+              className="inline-flex items-center gap-2 bg-white border border-slate-300 text-slate-700 px-6 py-2.5 rounded-lg font-medium hover:bg-slate-50 transition-colors justify-center"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Lihat Daftar Peminjaman
+            </Link>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -186,13 +272,6 @@ function NewLoan() {
           Kembali
         </Link>
       </div>
-
-      {success && (
-        <div className="mb-6 bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm rounded-lg px-4 py-3 flex items-center gap-2">
-          <CheckCircle className="w-5 h-5" />
-          {success}
-        </div>
-      )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {error && (

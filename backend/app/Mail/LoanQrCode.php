@@ -15,13 +15,12 @@ class LoanQrCode extends Mailable
 
     public function __construct(
         public Loan $loan,
-        public string $qrDataUrl,
     ) {}
 
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'QR Code Peminjaman Barang - ' . $this->loan->item->name,
+            subject: 'Bukti Peminjaman Barang - ' . $this->loan->item->name,
         );
     }
 
@@ -29,6 +28,9 @@ class LoanQrCode extends Mailable
     {
         return new Content(
             view: 'emails.loan-qr-code',
+            with: [
+                'downloadUrl' => url('/api/loans/qr/' . $this->loan->uuid . '/download'),
+            ],
         );
     }
 }
