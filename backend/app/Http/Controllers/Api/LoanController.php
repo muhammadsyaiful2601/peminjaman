@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Mail\LoanQrCode;
+use App\Mail\ReturnConfirmation;
 use App\Models\Item;
 use App\Models\Loan;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -315,6 +316,7 @@ class LoanController extends Controller
         $validated = $request->validate([
             'condition_on_return' => ['required', 'string', 'in:bagus,rusak,hilang'],
             'condition_note' => ['nullable', 'string', 'max:1000'],
+            'return_photo' => ['nullable', 'image', 'max:5120'],
         ]);
 
         // Increase stock back
@@ -325,17 +327,30 @@ class LoanController extends Controller
             $condition .= ' - ' . $validated['condition_note'];
         }
 
-        $loan->update([
+        $updateData = [
             'status' => 'returned',
             'returned_at' => now(),
             'verified_by' => $request->user()->id,
             'condition_on_return' => $condition,
-        ]);
+        ];
+
+        if ($request->hasFile('return_photo')) {
+            $updateData['return_photo'] = $request->file('return_photo')->store('return-photos', 'public');
+        }
+
+        $loan->update($updateData);
 
         $loan->load(['item', 'creator', 'verifier']);
 
+        // Send return confirmation (bukti barang diterima) to borrower
+        try {
+            Mail::to($loan->borrower_email)->send(new ReturnConfirmation($loan));
+        } catch (\Exception $e) {
+            \Log::error('Failed to send return confirmation email: ' . $e->getMessage());
+        }
+
         return response()->json([
-            'message' => 'Barang berhasil dikembalikan. Stok telah diperbarui.',
+            'message' => 'Barang berhasil dikembalikan. Stok telah diperbarui. Bukti dikirim ke email peminjam.',
             'loan' => $loan,
         ]);
     }

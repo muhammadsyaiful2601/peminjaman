@@ -22,6 +22,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'created_by',
     'verified_by',
     'condition_on_return',
+    'return_photo',
 ])]
 class Loan extends Model
 {

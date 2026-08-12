@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Html5Qrcode } from 'html5-qrcode'
 import api from '../api/axios'
+import CameraCapture, { dataURLtoFile } from '../components/CameraCapture'
 import {
   ScanLine,
   CameraOff,
@@ -12,6 +13,7 @@ import {
   Upload,
   KeyRound,
   Undo2,
+  Mail,
 } from 'lucide-react'
 
 function ScanQR() {
@@ -26,6 +28,7 @@ function ScanQR() {
   const [processing, setProcessing] = useState(false)
   const [loanCode, setLoanCode] = useState('')
   const [returnForm, setReturnForm] = useState({ condition: 'bagus', note: '' })
+  const [returnPhoto, setReturnPhoto] = useState(null)
   const [actionLoading, setActionLoading] = useState(false)
 
   // Start scanner when scanning becomes true
@@ -169,16 +172,25 @@ function ScanQR() {
   // Handle return (auto-return when verified)
   const handleReturn = async (e) => {
     e.preventDefault()
-    if (!window.confirm('Konfirmasi pengembalian barang ini?')) return
+    if (!returnPhoto) {
+      setError('Ambil foto bukti pengembalian terlebih dahulu.')
+      return
+    }
+    if (!window.confirm('Konfirmasi pengembalian barang ini? Bukti akan dikirim ke email peminjam.')) return
     setActionLoading(true)
     try {
-      await api.post(`/loans/${result.id}/return`, {
-        condition_on_return: returnForm.condition,
-        condition_note: returnForm.note || undefined,
+      const formData = new FormData()
+      formData.append('condition_on_return', returnForm.condition)
+      if (returnForm.note) formData.append('condition_note', returnForm.note)
+      formData.append('return_photo', dataURLtoFile(returnPhoto, 'return-proof.jpg'))
+      await api.post(`/loans/${result.id}/return`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
       })
       // Refresh loan data
       const response = await api.get(`/loans/${result.id}`)
       setResult(response.data.loan)
+      setReturnPhoto(null)
+      setReturnForm({ condition: 'bagus', note: '' })
     } catch (err) {
       alert(err.response?.data?.message || 'Gagal memproses pengembalian')
     } finally {
@@ -205,6 +217,7 @@ function ScanQR() {
     setError('')
     setLoanCode('')
     setReturnForm({ condition: 'bagus', note: '' })
+    setReturnPhoto(null)
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
@@ -310,24 +323,46 @@ function ScanQR() {
                   <Undo2 className="w-5 h-5 text-cyan-600" />
                   Proses Pengembalian
                 </h3>
-                <form onSubmit={handleReturn} className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Kondisi Barang</label>
-                    <select value={returnForm.condition} onChange={(e) => setReturnForm({ ...returnForm, condition: e.target.value })} className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none bg-white" required>
-                      <option value="bagus">Bagus</option>
-                      <option value="rusak">Rusak</option>
-                      <option value="hilang">Hilang</option>
-                    </select>
+                {!returnPhoto ? (
+                  <div className="space-y-3">
+                    <p className="text-sm text-slate-500">
+                      Ambil foto bukti barang yang dikembalikan, lalu isi formulir bukti barang diterima.
+                      Bukti akan dikirim ke email peminjam.
+                    </p>
+                    <CameraCapture onCapture={setReturnPhoto} />
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Catatan (Opsional)</label>
-                    <textarea value={returnForm.note} onChange={(e) => setReturnForm({ ...returnForm, note: e.target.value })} className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none" rows="2" placeholder="Catatan kondisi barang..." />
-                  </div>
-                  <button type="submit" disabled={actionLoading} className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-lg font-medium transition-colors disabled:opacity-50">
-                    <Undo2 className="w-5 h-5" />
-                    {actionLoading ? 'Memproses...' : 'Konfirmasi Pengembalian'}
-                  </button>
-                </form>
+                ) : (
+                  <form onSubmit={handleReturn} className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Foto Bukti Pengembalian</label>
+                      <img src={returnPhoto} alt="Bukti" className="w-full max-w-sm mx-auto h-40 object-cover rounded-lg border border-slate-200" />
+                      <button
+                        type="button"
+                        onClick={() => setReturnPhoto(null)}
+                        className="mt-2 text-sm text-cyan-600 hover:underline"
+                      >
+                        Ambil Ulang Foto
+                      </button>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Kondisi Barang</label>
+                      <select value={returnForm.condition} onChange={(e) => setReturnForm({ ...returnForm, condition: e.target.value })} className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none bg-white" required>
+                        <option value="bagus">Bagus</option>
+                        <option value="rusak">Rusak</option>
+                        <option value="hilang">Hilang</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Catatan (Opsional)</label>
+                      <textarea value={returnForm.note} onChange={(e) => setReturnForm({ ...returnForm, note: e.target.value })} className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none" rows="2" placeholder="Catatan kondisi barang..." />
+                    </div>
+                    <button type="submit" disabled={actionLoading} className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-lg font-medium transition-colors disabled:opacity-50">
+                      <Undo2 className="w-5 h-5" />
+                      <Mail className="w-4 h-4" />
+                      {actionLoading ? 'Memproses...' : 'Konfirmasi & Kirim ke Peminjam'}
+                    </button>
+                  </form>
+                )}
               </div>
             )}
 
