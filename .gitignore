@@ -1,0 +1,33 @@
+# ============================================================
+#  File sensitif / rahasia — JANGAN pernah di-commit ke git
+# ============================================================
+
+# Environment
+.env
+.env.*
+!.env.example
+.env.local
+.env.production
+.env.backup
+
+# Kredensial & kunci privat
+*.pem
+*.key
+*.p12
+*.pfx
+*.p8
+*.crt
+*.cer
+id_rsa
+id_rsa.pub
+*.jks
+credentials.json
+*.ps1-cred
+
+# Config lokal & backup
+config.php
+Thumbs.db
+*.sql
+*.sql.gz
+
+# Artefak framework (aman untuk di-ignore)
