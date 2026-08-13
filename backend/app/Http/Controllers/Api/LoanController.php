@@ -9,6 +9,7 @@ use App\Models\Item;
 use App\Models\Loan;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
@@ -65,19 +66,27 @@ class LoanController extends Controller
         // Generate unique loan code (e.g. PJM-2026-0001)
         $loanCode = $this->generateLoanCode();
 
-        $loan = Loan::create([
-            'uuid' => (string) Str::uuid(),
-            'loan_code' => $loanCode,
-            'item_id' => $item->id,
-            'qty' => $validated['qty'],
-            'borrower_name' => $validated['borrower_name'],
-            'borrower_email' => $validated['borrower_email'],
-            'borrower_phone' => $validated['borrower_phone'] ?? null,
-            'borrower_student_id' => $validated['borrower_student_id'] ?? null,
-            'borrow_photo' => $photoPath,
-            'status' => 'pending',
-            'created_by' => $request->user()->id,
-        ]);
+        // Barang langsung diserahkan ke peminjam, jadi status langsung 'borrowed'
+        // dan stok berkurang segera (tanpa tahap pending).
+        $loan = DB::transaction(function () use ($item, $loanCode, $validated, $photoPath, $request) {
+            $item->decrement('stock', $validated['qty']);
+
+            return Loan::create([
+                'uuid' => (string) Str::uuid(),
+                'loan_code' => $loanCode,
+                'item_id' => $item->id,
+                'qty' => $validated['qty'],
+                'borrower_name' => $validated['borrower_name'],
+                'borrower_email' => $validated['borrower_email'],
+                'borrower_phone' => $validated['borrower_phone'] ?? null,
+                'borrower_student_id' => $validated['borrower_student_id'] ?? null,
+                'borrow_photo' => $photoPath,
+                'status' => 'borrowed',
+                'borrowed_at' => now(),
+                'created_by' => $request->user()->id,
+                'verified_by' => $request->user()->id,
+            ]);
+        });
 
         $loan->load(['item', 'creator']);
 
@@ -89,7 +98,7 @@ class LoanController extends Controller
         }
 
         return response()->json([
-            'message' => 'Peminjaman berhasil dibuat. QR Code telah dikirim ke email peminjam.',
+            'message' => 'Peminjaman berhasil dibuat. Barang telah diserahkan kepada peminjam dan QR Code telah dikirim ke email.',
             'loan' => $loan,
             'qr_payload' => $loan->uuid,
         ], 201);
@@ -249,60 +258,6 @@ class LoanController extends Controller
         $filename = 'bukti-peminjaman-' . $loan->borrower_name . '.pdf';
 
         return $pdf->download($filename);
-    }
-
-    public function approve(Request $request, Loan $loan)
-    {
-        if ($loan->status !== 'pending') {
-            return response()->json([
-                'message' => 'Transaksi tidak dalam status pending',
-            ], 422);
-        }
-
-        $item = $loan->item;
-
-        if ($item->stock < $loan->qty) {
-            return response()->json([
-                'message' => 'Stok barang tidak mencukupi. Stok tersedia: ' . $item->stock,
-            ], 422);
-        }
-
-        // Decrease stock
-        $item->decrement('stock', $loan->qty);
-
-        $loan->update([
-            'status' => 'borrowed',
-            'borrowed_at' => now(),
-            'verified_by' => $request->user()->id,
-        ]);
-
-        $loan->load(['item', 'creator', 'verifier']);
-
-        return response()->json([
-            'message' => 'Peminjaman disetujui. Barang telah diserahkan.',
-            'loan' => $loan,
-        ]);
-    }
-
-    public function reject(Request $request, Loan $loan)
-    {
-        if ($loan->status !== 'pending') {
-            return response()->json([
-                'message' => 'Transaksi tidak dalam status pending',
-            ], 422);
-        }
-
-        $loan->update([
-            'status' => 'rejected',
-            'verified_by' => $request->user()->id,
-        ]);
-
-        $loan->load(['item', 'creator', 'verifier']);
-
-        return response()->json([
-            'message' => 'Peminjaman ditolak.',
-            'loan' => $loan,
-        ]);
     }
 
     public function returnItem(Request $request, Loan $loan)

@@ -5,8 +5,6 @@ import api from '../api/axios'
 import CameraCapture, { dataURLtoFile } from '../components/CameraCapture'
 import {
   ArrowLeft,
-  CheckCircle,
-  XCircle,
   Undo2,
   User,
   Package,
@@ -44,32 +42,6 @@ function LoanDetail() {
   useEffect(() => {
     fetchLoan()
   }, [id])
-
-  const handleApprove = async () => {
-    if (!window.confirm('Setujui peminjaman ini? Barang akan diserahkan.')) return
-    setActionLoading(true)
-    try {
-      await api.post(`/loans/${id}/approve`)
-      fetchLoan()
-    } catch (err) {
-      alert(err.response?.data?.message || 'Gagal menyetujui peminjaman')
-    } finally {
-      setActionLoading(false)
-    }
-  }
-
-  const handleReject = async () => {
-    if (!window.confirm('Tolak peminjaman ini?')) return
-    setActionLoading(true)
-    try {
-      await api.post(`/loans/${id}/reject`)
-      fetchLoan()
-    } catch (err) {
-      alert(err.response?.data?.message || 'Gagal menolak peminjaman')
-    } finally {
-      setActionLoading(false)
-    }
-  }
 
   const handleReturn = async (e) => {
     e.preventDefault()
@@ -167,7 +139,7 @@ function LoanDetail() {
                 <h2 className="font-semibold text-cyan-900 text-sm mb-1">QR Code via Email</h2>
                 <p className="text-xs text-cyan-700 leading-relaxed">
                   QR Code transaksi telah dikirim ke email peminjam: <strong>{loan.borrower_email}</strong>.
-                  Peminjam menunjukkan email/QR kepada petugas untuk verifikasi.
+                  Saat pengembalian, peminjam menunjukkan email/QR ini kepada petugas untuk verifikasi pengembalian barang.
                 </p>
               </div>
             </div>
@@ -255,11 +227,11 @@ function LoanDetail() {
             </h2>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
-                <p className="text-sm text-slate-500">Diajukan</p>
+                <p className="text-sm text-slate-500">Dibuat</p>
                 <p className="font-medium text-slate-900 text-sm">{formatDate(loan.created_at)}</p>
               </div>
               <div>
-                <p className="text-sm text-slate-500">Disetujui</p>
+                <p className="text-sm text-slate-500">Diserahkan</p>
                 <p className="font-medium text-slate-900 text-sm">{formatDate(loan.borrowed_at)}</p>
               </div>
               <div>
@@ -286,30 +258,6 @@ function LoanDetail() {
           </div>
 
           {/* Aksi untuk staff */}
-          {isStaff && loan.status === 'pending' && (
-            <div className="bg-white rounded-xl border border-slate-200 p-6">
-              <h2 className="font-semibold text-slate-900 mb-4">Verifikasi Peminjaman</h2>
-              <div className="flex gap-3">
-                <button
-                  onClick={handleApprove}
-                  disabled={actionLoading}
-                  className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-lg font-medium transition-colors disabled:opacity-50"
-                >
-                  <CheckCircle className="w-5 h-5" />
-                  Setujui & Serahkan
-                </button>
-                <button
-                  onClick={handleReject}
-                  disabled={actionLoading}
-                  className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-6 py-2.5 rounded-lg font-medium transition-colors disabled:opacity-50"
-                >
-                  <XCircle className="w-5 h-5" />
-                  Tolak
-                </button>
-              </div>
-            </div>
-          )}
-
           {isStaff && loan.status === 'borrowed' && (
             <div className="bg-white rounded-xl border border-slate-200 p-6">
               <h2 className="font-semibold text-slate-900 mb-4 flex items-center gap-2">

@@ -192,8 +192,8 @@ function NewLoan() {
 
           <h1 className="text-2xl font-bold text-slate-900 mb-3">Peminjaman Berhasil Dibuat!</h1>
           <p className="text-slate-500 mb-8">
-            QR Code transaksi telah dikirim ke email peminjam. Peminjam dapat menunjukkan email tersebut
-            kepada petugas untuk verifikasi peminjaman dan pengembalian barang.
+            Barang telah langsung diserahkan kepada peminjam (status: Dipinjam). QR Code transaksi telah
+            dikirim ke email peminjam dan digunakan untuk verifikasi pengembalian barang.
           </p>
 
           {/* Loan summary */}
@@ -230,7 +230,7 @@ function NewLoan() {
                 <p className="text-sm font-medium text-cyan-900">QR Code Terkirim via Email</p>
                 <p className="text-xs text-cyan-700 mt-1">
                   Email berisi QR Code telah dikirim ke <strong>{successLoan.borrower_email}</strong>.
-                  Peminjam cukup membuka email dan menunjukkan QR Code kepada petugas.
+                  Saat pengembalian, peminjam menunjukkan email/QR ini kepada petugas untuk verifikasi pengembalian barang.
                 </p>
               </div>
             </div>

@@ -1,5 +1,6 @@
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from './context/AuthContext'
+import useIdleTimeout from './hooks/useIdleTimeout'
 import Layout from './components/Layout'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
@@ -11,6 +12,27 @@ import NewLoan from './pages/NewLoan'
 import ScanQR from './pages/ScanQR'
 import Users from './pages/Users'
 import Profile from './pages/Profile'
+
+// Durasi tanpa aktivitas sebelum akun logout otomatis (dalam milidetik).
+// Default: 15 menit. Ubah angka ini untuk menyesuaikan kebijakan sesi.
+const SESSION_IDLE_TIMEOUT_MS = 15 * 60 * 1000 // 15 menit
+
+// Memantau aktivitas pengguna dan logout otomatis setelah idle.
+function IdleTimeoutHandler() {
+  const { user, logout } = useAuth()
+  const navigate = useNavigate()
+
+  useIdleTimeout({
+    timeout: SESSION_IDLE_TIMEOUT_MS,
+    enabled: !!user,
+    onTimeout: async () => {
+      await logout()
+      navigate('/login', { replace: true })
+    },
+  })
+
+  return null
+}
 
 function ProtectedRoute({ children, roles = [] }) {
   const { user } = useAuth()
@@ -28,8 +50,10 @@ function ProtectedRoute({ children, roles = [] }) {
 
 function App() {
   return (
-    <Routes>
-      <Route path="/login" element={<Login />} />
+    <>
+      <IdleTimeoutHandler />
+      <Routes>
+        <Route path="/login" element={<Login />} />
 
       <Route
         path="/"
@@ -85,7 +109,8 @@ function App() {
         />
         <Route path="profile" element={<Profile />} />
       </Route>
-    </Routes>
+      </Routes>
+    </>
   )
 }
 

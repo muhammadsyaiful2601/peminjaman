@@ -100,14 +100,10 @@
             <tr>
                 <td class="label">Status</td>
                 <td class="value">
-                    @if($loan->status === 'pending')
-                        <span class="status-badge">Menunggu Verifikasi</span>
-                    @elseif($loan->status === 'borrowed')
-                        <span class="status-badge" style="background:#d1fae5;color:#065f46;">Dipinjam</span>
-                    @elseif($loan->status === 'returned')
+                    @if($loan->status === 'returned')
                         <span class="status-badge" style="background:#d1fae5;color:#065f46;">Dikembalikan</span>
-                    @elseif($loan->status === 'rejected')
-                        <span class="status-badge" style="background:#fee2e2;color:#991b1b;">Ditolak</span>
+                    @else
+                        <span class="status-badge" style="background:#d1fae5;color:#065f46;">Dipinjam</span>
                     @endif
                 </td>
             </tr>
@@ -124,9 +120,9 @@
     <div class="instructions">
         <p>
             <strong>📌 Petunjuk:</strong><br>
-            1. Tunjukkan QR Code atau kode peminjaman kepada petugas saat pengambilan barang.<br>
-            2. Petugas akan memverifikasi dan menyerahkan barang.<br>
-            3. Saat mengembalikan, tunjukkan QR Code atau kode peminjaman yang sama kepada petugas.
+            1. Barang telah diserahkan kepada peminjam (status: Dipinjam).<br>
+            2. Saat mengembalikan, tunjukkan QR Code atau kode peminjaman kepada petugas.<br>
+            3. Petugas akan memverifikasi pengembalian dan kondisi barang.
         </p>
     </div>
 

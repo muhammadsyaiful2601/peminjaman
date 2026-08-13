@@ -36,8 +36,6 @@ Route::middleware('auth:sanctum')->group(function () {
     // Loan management - admin & assistant only (petugas creates & verifies)
     Route::middleware('role:admin,assistant')->group(function () {
         Route::post('/loans', [LoanController::class, 'store']);
-        Route::post('/loans/{loan}/approve', [LoanController::class, 'approve']);
-        Route::post('/loans/{loan}/reject', [LoanController::class, 'reject']);
         Route::post('/loans/{loan}/return', [LoanController::class, 'returnItem']);
 
         // Verify by code and upload PDF

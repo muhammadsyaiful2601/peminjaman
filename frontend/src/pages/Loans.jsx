@@ -53,10 +53,8 @@ function Loans() {
 
   const statusFilter = [
     { value: '', label: 'Semua' },
-    { value: 'pending', label: 'Menunggu' },
     { value: 'borrowed', label: 'Dipinjam' },
     { value: 'returned', label: 'Dikembalikan' },
-    { value: 'rejected', label: 'Ditolak' },
   ]
 
   return (

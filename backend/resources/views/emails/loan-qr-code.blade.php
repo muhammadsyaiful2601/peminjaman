@@ -26,9 +26,10 @@
 
             <p style="color: #475569; line-height: 1.6; margin: 0 0 20px 0;">
                 Halo <strong>{{ $loan->borrower_name }}</strong>,<br><br>
-                Peminjaman barang Anda telah didaftarkan oleh petugas. Unduh bukti peminjaman
-                beserta QR Code menggunakan tombol di bawah. Tunjukkan QR Code tersebut kepada
-                petugas saat pengambilan dan pengembalian barang.
+                Peminjaman barang Anda telah dibuat dan barang telah diserahkan kepada Anda
+                (status: <strong>Dipinjam</strong>). Unduh bukti peminjaman beserta QR Code menggunakan
+                tombol di bawah. Simpan QR Code tersebut dan tunjukkan kepada petugas saat Anda
+                mengembalikan barang.
             </p>
 
             <!-- Loan Details -->
@@ -54,7 +55,7 @@
                     <tr>
                         <td style="padding: 8px 0; color: #64748b;">Status</td>
                         <td style="padding: 8px 0;">
-                            <span style="background: #fef3c7; color: #92400e; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600;">Menunggu Verifikasi</span>
+                            <span style="background: #d1fae5; color: #065f46; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600;">Dipinjam</span>
                         </td>
                     </tr>
                 </table>
@@ -75,8 +76,8 @@
                 <p style="margin: 0; color: #0e7490; font-size: 14px; line-height: 1.5;">
                     <strong>📌 Petunjuk:</strong><br>
                     1. Unduh bukti peminjaman (PDF) menggunakan tombol di atas.<br>
-                    2. Tunjukkan QR Code dari PDF kepada petugas saat pengambilan barang.<br>
-                    3. Saat mengembalikan, tunjukkan QR Code yang sama kepada petugas.
+                    2. Barang telah diserahkan kepada Anda (status: Dipinjam).<br>
+                    3. Saat mengembalikan barang, tunjukkan QR Code dari PDF ini kepada petugas untuk verifikasi pengembalian.
                 </p>
             </div>
 

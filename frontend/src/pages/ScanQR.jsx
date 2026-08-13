@@ -61,7 +61,7 @@ function ScanQR() {
 
             const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
             if (!uuidPattern.test(decodedText.trim())) {
-              setError('QR Code tidak valid. Pastikan ini adalah QR Code transaksi peminjaman.')
+              setError('QR Code tidak valid. Pastikan ini adalah QR Code transaksi pengembalian.')
               setProcessing(false)
               return
             }
@@ -198,20 +198,6 @@ function ScanQR() {
     }
   }
 
-  const handleApprove = async () => {
-    if (!window.confirm('Setujui peminjaman ini? Barang akan diserahkan.')) return
-    setActionLoading(true)
-    try {
-      await api.post(`/loans/${result.id}/approve`)
-      const response = await api.get(`/loans/${result.id}`)
-      setResult(response.data.loan)
-    } catch (err) {
-      alert(err.response?.data?.message || 'Gagal menyetujui')
-    } finally {
-      setActionLoading(false)
-    }
-  }
-
   const resetResult = () => {
     setResult(null)
     setError('')
@@ -237,9 +223,9 @@ function ScanQR() {
   return (
     <div className="max-w-3xl mx-auto">
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-slate-900">Verifikasi Peminjaman</h1>
+        <h1 className="text-2xl font-bold text-slate-900">Verifikasi Pengembalian</h1>
         <p className="text-slate-500 mt-1">
-          Pilih metode verifikasi: scan QR, upload PDF, atau masukkan kode peminjaman
+          Pilih metode: scan QR, upload PDF, atau masukkan kode peminjaman untuk memproses pengembalian barang
         </p>
       </div>
 
@@ -308,15 +294,6 @@ function ScanQR() {
             )}
 
             {/* Actions based on status */}
-            {result.status === 'pending' && (
-              <div className="pt-4 border-t border-slate-200">
-                <button onClick={handleApprove} disabled={actionLoading} className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-lg font-medium transition-colors disabled:opacity-50">
-                  <CheckCircle className="w-5 h-5" />
-                  {actionLoading ? 'Memproses...' : 'Setujui & Serahkan'}
-                </button>
-              </div>
-            )}
-
             {result.status === 'borrowed' && (
               <div className="pt-4 border-t border-slate-200">
                 <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
