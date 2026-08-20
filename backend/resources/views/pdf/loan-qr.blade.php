@@ -5,8 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #1e293b; padding: 40px; }
-        .header { text-align: center; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 3px solid #06b6d4; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #1e293b; padding: 40px 40px 95px; }
+        .header { margin-bottom: 30px; padding-bottom: 16px; border-bottom: 3px solid #06b6d4; }
+        .header-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+        .header-table td { border: 0; vertical-align: middle; }
+        .header-logo { width: 70px; height: 70px; object-fit: contain; }
+        .header-left { width: 20%; text-align: left; }
+        .header-center { width: 60%; text-align: center; }
+        .header-right { width: 20%; text-align: right; }
         .header h1 { font-size: 28px; color: #0f172a; margin-bottom: 5px; }
         .header p { font-size: 14px; color: #64748b; }
         .loan-code-box { text-align: center; margin: 20px 0; }
@@ -17,6 +23,14 @@
         .info-table td { padding: 8px 12px; font-size: 14px; border-bottom: 1px solid #e2e8f0; }
         .info-table td.label { color: #64748b; width: 35%; font-weight: 500; }
         .info-table td.value { color: #0f172a; font-weight: 600; }
+        .items-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+        .items-table th { background: #0f172a; color: #ffffff !important; padding: 10px 12px; font-size: 12px; text-align: left; }
+        .items-table td { padding: 10px 12px; font-size: 13px; border-bottom: 1px solid #e2e8f0; vertical-align: top; word-wrap: break-word; }
+        .items-table tbody tr:nth-child(even) { background: #f8fafc; }
+        .items-table .item-name { width: 35%; font-weight: 600; color: #0f172a; }
+        .items-table .item-code { width: 20%; color: #475569; font-family: monospace; font-size: 12px; }
+        .items-table .item-category { width: 30%; color: #475569; }
+        .items-table .item-qty { width: 15%; color: #0f172a; font-weight: 700; text-align: center; }
         .photo-section { text-align: center; margin: 20px 0; }
         .photo-section img { width: 200px; height: 200px; object-fit: cover; border-radius: 8px; border: 2px solid #e2e8f0; }
         .photo-label { font-size: 12px; color: #64748b; margin-top: 8px; }
@@ -24,7 +38,7 @@
         .qr-box { display: inline-block; padding: 20px; border: 2px dashed #cbd5e1; border-radius: 12px; }
         .qr-uuid { font-family: monospace; font-size: 11px; color: #64748b; margin-top: 10px; word-break: break-all; }
         .status-badge { display: inline-block; background: #fef3c7; color: #92400e; padding: 4px 16px; border-radius: 12px; font-size: 12px; font-weight: 600; }
-        .footer { margin-top: 40px; padding-top: 20px; border-top: 2px solid #e2e8f0; text-align: center; }
+        .footer { position: fixed; bottom: 25px; left: 40px; right: 40px; padding-top: 14px; border-top: 2px solid #e2e8f0; text-align: center; }
         .footer p { font-size: 12px; color: #94a3b8; line-height: 1.6; }
         .instructions { background: #ecfeff; border-left: 4px solid #06b6d4; padding: 16px; border-radius: 4px; margin: 20px 0; }
         .instructions p { font-size: 13px; color: #0e7490; line-height: 1.8; }
@@ -32,8 +46,20 @@
 </head>
 <body>
     <div class="header">
-        <h1>📋 PinjamBarang</h1>
-        <p>Sistem Peminjaman Barang Kampus</p>
+        <table class="header-table">
+            <tr>
+                <td class="header-left">
+                    <img class="header-logo" src="{{ public_path('images/logo_kampus.png') }}" alt="Logo Kampus">
+                </td>
+                <td class="header-center">
+                    <h1>PinjamBarang</h1>
+                    <p>Sistem Peminjaman Barang Kampus</p>
+                </td>
+                <td class="header-right">
+                    <img class="header-logo" src="{{ public_path('images/si.png') }}" alt="Logo Sistem Informasi">
+                </td>
+            </tr>
+        </table>
     </div>
 
     <div class="loan-code-box">
@@ -76,23 +102,27 @@
 
     <div class="section">
         <div class="section-title">Data Barang Pinjaman</div>
-        <table class="info-table">
-            <tr>
-                <td class="label">Nama Barang</td>
-                <td class="value">{{ $loan->item->name }}</td>
-            </tr>
-            <tr>
-                <td class="label">Kode Barang</td>
-                <td class="value">{{ $loan->item->item_code }}</td>
-            </tr>
-            <tr>
-                <td class="label">Kategori</td>
-                <td class="value">{{ $loan->item->category }}</td>
-            </tr>
-            <tr>
-                <td class="label">Jumlah Dipinjam</td>
-                <td class="value">{{ $loan->qty }} unit</td>
-            </tr>
+        <table class="items-table">
+            <thead>
+                <tr>
+                    <th class="item-name">Nama Barang</th>
+                    <th class="item-code">Kode</th>
+                    <th class="item-category">Kategori</th>
+                    <th class="item-qty">Jumlah</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach($loan->loanItems->isNotEmpty() ? $loan->loanItems : collect([(object) ['item' => $loan->item, 'qty' => $loan->qty]]) as $loanItem)
+                <tr>
+                    <td class="item-name">{{ $loanItem->item->name }}</td>
+                    <td class="item-code">{{ $loanItem->item->item_code }}</td>
+                    <td class="item-category">{{ $loanItem->item->category }}</td>
+                    <td class="item-qty">{{ $loanItem->qty }} unit</td>
+                </tr>
+                @endforeach
+            </tbody>
+        </table>
+        <table class="info-table" style="margin-top: 12px;">
             <tr>
                 <td class="label">Tanggal Peminjaman</td>
                 <td class="value">{{ $loan->created_at->format('d M Y, H:i') }} WIB</td>

@@ -36,16 +36,14 @@
                 <h3 style="color: #0f172a; margin: 0 0 16px 0; font-size: 16px;">Detail Peminjaman & Pengembalian</h3>
                 <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
                     <tr>
-                        <td style="padding: 8px 0; color: #64748b; width: 40%;">Barang</td>
-                        <td style="padding: 8px 0; color: #0f172a; font-weight: 600;">{{ $loan->item->name }}</td>
-                    </tr>
-                    <tr>
-                        <td style="padding: 8px 0; color: #64748b;">Kode Barang</td>
-                        <td style="padding: 8px 0; color: #0f172a; font-weight: 600;">{{ $loan->item->item_code }}</td>
-                    </tr>
-                    <tr>
-                        <td style="padding: 8px 0; color: #64748b;">Jumlah</td>
-                        <td style="padding: 8px 0; color: #0f172a; font-weight: 600;">{{ $loan->qty }} unit</td>
+                        <td style="padding: 8px 0; color: #64748b; width: 40%; vertical-align: top;">Barang yang dikembalikan</td>
+                        <td style="padding: 8px 0; color: #0f172a; font-weight: 600;">
+                            <ul style="padding-left: 18px; margin: 0;">
+                                @foreach($loan->loanItems->isNotEmpty() ? $loan->loanItems : collect([(object) ['item' => $loan->item, 'qty' => $loan->qty]]) as $loanItem)
+                                <li style="padding-bottom: 6px;">{{ $loanItem->item->name }} - {{ $loanItem->qty }} unit (Kode: {{ $loanItem->item->item_code }})</li>
+                                @endforeach
+                            </ul>
+                        </td>
                     </tr>
                     <tr>
                         <td style="padding: 8px 0; color: #64748b;">Tanggal Pinjam</td>

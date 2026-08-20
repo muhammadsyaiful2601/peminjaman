@@ -96,6 +96,7 @@ function LoanDetail() {
   const formatDate = (date) => {
     if (!date) return '-'
     return new Date(date).toLocaleString('id-ID', {
+      timeZone: 'Asia/Jakarta',
       day: 'numeric',
       month: 'long',
       year: 'numeric',
@@ -184,23 +185,27 @@ function LoanDetail() {
               <Package className="w-5 h-5 text-cyan-600" />
               Informasi Barang
             </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div>
-                <p className="text-sm text-slate-500">Nama Barang</p>
-                <p className="font-medium text-slate-900">{loan.item?.name}</p>
-              </div>
-              <div>
-                <p className="text-sm text-slate-500">Kode</p>
-                <p className="font-medium text-slate-900">{loan.item?.item_code}</p>
-              </div>
-              <div>
-                <p className="text-sm text-slate-500">Kategori</p>
-                <p className="font-medium text-slate-900">{loan.item?.category}</p>
-              </div>
-              <div>
-                <p className="text-sm text-slate-500">Jumlah</p>
-                <p className="font-medium text-slate-900">{loan.qty}</p>
-              </div>
+            <div className="space-y-3">
+              {(loan.loan_items?.length ? loan.loan_items : [{ item: loan.item, qty: loan.qty }]).map((loanItem) => (
+                <div key={loanItem.item?.id} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 border-b border-slate-100 last:border-0 pb-3 last:pb-0">
+                  <div>
+                    <p className="text-sm text-slate-500">Nama Barang</p>
+                    <p className="font-medium text-slate-900">{loanItem.item?.name}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-slate-500">Kode</p>
+                    <p className="font-medium text-slate-900">{loanItem.item?.item_code}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-slate-500">Kategori</p>
+                    <p className="font-medium text-slate-900">{loanItem.item?.category}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-slate-500">Jumlah</p>
+                    <p className="font-medium text-slate-900">{loanItem.qty}</p>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
 

@@ -147,8 +147,16 @@ function Loans() {
                           <p className="font-medium text-slate-900">{loan.borrower_name}</p>
                           <p className="text-xs text-slate-500">{loan.borrower_email}</p>
                         </td>
-                        <td className="px-6 py-3 text-slate-600">{loan.item?.name}</td>
-                        <td className="px-6 py-3 text-slate-600">{loan.qty}</td>
+                        <td className="px-6 py-3 text-slate-600">
+                          {loan.loan_items?.length
+                            ? loan.loan_items.map((loanItem) => `${loanItem.item?.name} (${loanItem.qty})`).join(', ')
+                            : loan.item?.name}
+                        </td>
+                        <td className="px-6 py-3 text-slate-600">
+                          {loan.loan_items?.length
+                            ? loan.loan_items.reduce((totalQty, loanItem) => totalQty + loanItem.qty, 0)
+                            : loan.qty}
+                        </td>
                         <td className="px-6 py-3">
                           <span
                             className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${status.className}`}
@@ -158,6 +166,7 @@ function Loans() {
                         </td>
                         <td className="px-6 py-3 text-slate-500">
                           {new Date(loan.created_at).toLocaleDateString('id-ID', {
+                            timeZone: 'Asia/Jakarta',
                             day: 'numeric',
                             month: 'short',
                             year: 'numeric',

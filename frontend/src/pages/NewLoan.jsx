@@ -21,8 +21,7 @@ function NewLoan() {
   const streamRef = useRef(null)
 
   const [items, setItems] = useState([])
-  const [selectedItem, setSelectedItem] = useState('')
-  const [qty, setQty] = useState(1)
+  const [loanItems, setLoanItems] = useState([{ item_id: '', qty: 1 }])
   const [cameraActive, setCameraActive] = useState(false)
   const [photo, setPhoto] = useState(null)
   const [photoError, setPhotoError] = useState('')
@@ -132,8 +131,8 @@ function NewLoan() {
       return
     }
 
-    if (!selectedItem) {
-      setError('Silakan pilih barang yang akan dipinjam.')
+    if (loanItems.some((loanItem) => !loanItem.item_id)) {
+      setError('Silakan pilih semua barang yang akan dipinjam.')
       return
     }
 
@@ -144,8 +143,10 @@ function NewLoan() {
 
     setSubmitting(true)
     const formData = new FormData()
-    formData.append('item_id', selectedItem)
-    formData.append('qty', qty)
+    loanItems.forEach((loanItem, index) => {
+      formData.append(`items[${index}][item_id]`, loanItem.item_id)
+      formData.append(`items[${index}][qty]`, loanItem.qty)
+    })
     formData.append('borrower_name', borrowerName)
     formData.append('borrower_email', borrowerEmail)
     if (borrowerPhone) formData.append('borrower_phone', borrowerPhone)
@@ -170,8 +171,7 @@ function NewLoan() {
   const handleNewLoan = () => {
     // Reset all form state
     setSuccessLoan(null)
-    setSelectedItem('')
-    setQty(1)
+    setLoanItems([{ item_id: '', qty: 1 }])
     setPhoto(null)
     setError('')
     setPhotoError('')
@@ -211,13 +211,15 @@ function NewLoan() {
                 <p className="text-sm text-slate-500">Email</p>
                 <p className="font-medium text-slate-900 text-sm">{successLoan.borrower_email}</p>
               </div>
-              <div>
-                <p className="text-sm text-slate-500">Barang</p>
-                <p className="font-medium text-slate-900">{successLoan.item?.name}</p>
-              </div>
-              <div>
-                <p className="text-sm text-slate-500">Jumlah</p>
-                <p className="font-medium text-slate-900">{successLoan.qty} unit</p>
+              <div className="sm:col-span-2">
+                <p className="text-sm text-slate-500 mb-1">Barang yang dipinjam</p>
+                <div className="space-y-1">
+                  {(successLoan.loan_items?.length ? successLoan.loan_items : [{ item: successLoan.item, qty: successLoan.qty }]).map((loanItem) => (
+                    <p key={loanItem.item?.id} className="font-medium text-slate-900">
+                      {loanItem.item?.name} <span className="text-slate-500">({loanItem.qty} unit)</span>
+                    </p>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
@@ -290,37 +292,44 @@ function NewLoan() {
           {loadingItems ? (
             <p className="text-slate-500">Memuat daftar barang...</p>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Barang</label>
-                <select
-                  value={selectedItem}
-                  onChange={(e) => {
-                    setSelectedItem(e.target.value)
-                    setQty(1)
-                  }}
-                  className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none bg-white"
-                  required
-                >
-                  <option value="">Pilih barang...</option>
-                  {items.filter((item) => item.stock > 0).map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.name} (Stok: {item.stock})
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Jumlah</label>
-                <input
-                  type="number"
-                  min="1"
-                  value={qty}
-                  onChange={(e) => setQty(Math.max(1, parseInt(e.target.value) || 1))}
-                  className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none"
-                  required
-                />
-              </div>
+            <div className="space-y-3">
+              {loanItems.map((loanItem, index) => (
+                <div key={index} className="grid grid-cols-1 sm:grid-cols-[1fr_140px_auto] gap-3 items-end">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Barang {index + 1}</label>
+                    <select
+                      value={loanItem.item_id}
+                      onChange={(e) => setLoanItems((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, item_id: e.target.value } : item))}
+                      className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none bg-white"
+                      required
+                    >
+                      <option value="">Pilih barang...</option>
+                      {items.filter((item) => item.stock > 0).map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.name} (Stok: {item.stock})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Jumlah</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={loanItem.qty}
+                      onChange={(e) => setLoanItems((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, qty: Math.max(1, parseInt(e.target.value) || 1) } : item))}
+                      className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none"
+                      required
+                    />
+                  </div>
+                  {loanItems.length > 1 && (
+                    <button type="button" onClick={() => setLoanItems((current) => current.filter((_, itemIndex) => itemIndex !== index))} className="px-3 py-2.5 text-red-600 hover:text-red-700 text-sm font-medium">Hapus</button>
+                  )}
+                </div>
+              ))}
+              <button type="button" onClick={() => setLoanItems((current) => [...current, { item_id: '', qty: 1 }])} className="inline-flex items-center gap-2 text-cyan-600 hover:text-cyan-700 text-sm font-medium">
+                <Plus className="w-4 h-4" /> Tambah barang lain
+              </button>
             </div>
           )}
         </div>

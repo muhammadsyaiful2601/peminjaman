@@ -20,7 +20,7 @@ class LoanQrCode extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Bukti Peminjaman Barang - ' . $this->loan->item->name,
+            subject: 'Bukti Peminjaman Barang - ' . $this->loan->loan_code,
         );
     }
 

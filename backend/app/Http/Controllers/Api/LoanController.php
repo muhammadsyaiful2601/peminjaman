@@ -19,7 +19,7 @@ class LoanController extends Controller
 {
     public function index(Request $request)
     {
-        $query = Loan::with(['item', 'creator', 'verifier']);
+        $query = Loan::with(['item', 'loanItems.item', 'creator', 'verifier']);
 
         if ($request->has('status')) {
             $query->where('status', $request->status);
@@ -44,8 +44,11 @@ class LoanController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'item_id' => ['required', 'exists:items,id'],
-            'qty' => ['required', 'integer', 'min:1'],
+            'items' => ['nullable', 'array', 'min:1'],
+            'items.*.item_id' => ['required', 'integer', 'distinct', 'exists:items,id'],
+            'items.*.qty' => ['required', 'integer', 'min:1'],
+            'item_id' => ['required_without:items', 'exists:items,id'],
+            'qty' => ['required_without:items', 'integer', 'min:1'],
             'borrower_name' => ['required', 'string', 'max:255'],
             'borrower_email' => ['required', 'email', 'max:255'],
             'borrower_phone' => ['nullable', 'string', 'max:20'],
@@ -53,13 +56,10 @@ class LoanController extends Controller
             'borrow_photo' => ['required', 'image', 'max:5120'],
         ]);
 
-        $item = Item::findOrFail($validated['item_id']);
-
-        if ($item->stock < $validated['qty']) {
-            return response()->json([
-                'message' => 'Stok barang tidak mencukupi. Stok tersedia: ' . $item->stock,
-            ], 422);
-        }
+        $loanItems = $validated['items'] ?? [[
+            'item_id' => $validated['item_id'],
+            'qty' => $validated['qty'],
+        ]];
 
         $photoPath = $request->file('borrow_photo')->store('borrow-photos', 'public');
 
@@ -68,14 +68,30 @@ class LoanController extends Controller
 
         // Barang langsung diserahkan ke peminjam, jadi status langsung 'borrowed'
         // dan stok berkurang segera (tanpa tahap pending).
-        $loan = DB::transaction(function () use ($item, $loanCode, $validated, $photoPath, $request) {
-            $item->decrement('stock', $validated['qty']);
+        $loan = DB::transaction(function () use ($loanItems, $loanCode, $validated, $photoPath, $request) {
+            $items = Item::whereIn('id', collect($loanItems)->pluck('item_id'))
+                ->lockForUpdate()
+                ->get()
+                ->keyBy('id');
 
-            return Loan::create([
+            foreach ($loanItems as $loanItem) {
+                $item = $items->get($loanItem['item_id']);
+                if ($item->stock < $loanItem['qty']) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'items' => "Stok {$item->name} tidak mencukupi. Stok tersedia: {$item->stock}",
+                    ]);
+                }
+            }
+
+            foreach ($loanItems as $loanItem) {
+                $items->get($loanItem['item_id'])->decrement('stock', $loanItem['qty']);
+            }
+
+            $loan = Loan::create([
                 'uuid' => (string) Str::uuid(),
                 'loan_code' => $loanCode,
-                'item_id' => $item->id,
-                'qty' => $validated['qty'],
+                'item_id' => $loanItems[0]['item_id'],
+                'qty' => $loanItems[0]['qty'],
                 'borrower_name' => $validated['borrower_name'],
                 'borrower_email' => $validated['borrower_email'],
                 'borrower_phone' => $validated['borrower_phone'] ?? null,
@@ -86,9 +102,13 @@ class LoanController extends Controller
                 'created_by' => $request->user()->id,
                 'verified_by' => $request->user()->id,
             ]);
+
+            $loan->loanItems()->createMany($loanItems);
+
+            return $loan;
         });
 
-        $loan->load(['item', 'creator']);
+        $loan->load(['item', 'loanItems.item', 'creator']);
 
         // Send QR Code via email to borrower
         try {
@@ -128,7 +148,7 @@ class LoanController extends Controller
 
     public function show(Loan $loan)
     {
-        $loan->load(['item', 'creator', 'verifier']);
+        $loan->load(['item', 'loanItems.item', 'creator', 'verifier']);
 
         return response()->json([
             'loan' => $loan,
@@ -137,7 +157,7 @@ class LoanController extends Controller
 
     public function showByUuid(string $uuid)
     {
-        $loan = Loan::with(['item', 'creator', 'verifier'])
+        $loan = Loan::with(['item', 'loanItems.item', 'creator', 'verifier'])
             ->where('uuid', $uuid)
             ->first();
 
@@ -157,7 +177,7 @@ class LoanController extends Controller
      */
     public function showByCode(string $code)
     {
-        $loan = Loan::with(['item', 'creator', 'verifier'])
+        $loan = Loan::with(['item', 'loanItems.item', 'creator', 'verifier'])
             ->where('loan_code', $code)
             ->first();
 
@@ -193,7 +213,7 @@ class LoanController extends Controller
             $loan = null;
 
             if (preg_match($uuidPattern, $text, $matches)) {
-                $loan = Loan::with(['item', 'creator', 'verifier'])
+                $loan = Loan::with(['item', 'loanItems.item', 'creator', 'verifier'])
                     ->where('uuid', $matches[0])
                     ->first();
             }
@@ -202,7 +222,7 @@ class LoanController extends Controller
             if (! $loan) {
                 $codePattern = '/PJM-\d{4}-\d{4}/i';
                 if (preg_match($codePattern, $text, $matches)) {
-                    $loan = Loan::with(['item', 'creator', 'verifier'])
+                    $loan = Loan::with(['item', 'loanItems.item', 'creator', 'verifier'])
                         ->where('loan_code', $matches[0])
                         ->first();
                 }
@@ -229,7 +249,7 @@ class LoanController extends Controller
      */
     public function downloadQr(string $uuid)
     {
-        $loan = Loan::with('item')->where('uuid', $uuid)->first();
+        $loan = Loan::with(['item', 'loanItems.item'])->where('uuid', $uuid)->first();
 
         if (! $loan) {
             return response()->json([
@@ -274,8 +294,15 @@ class LoanController extends Controller
             'return_photo' => ['nullable', 'image', 'max:5120'],
         ]);
 
-        // Increase stock back
-        $loan->item->increment('stock', $loan->qty);
+        // Increase stock back for every item in the transaction.
+        $loan->load('loanItems.item');
+        if ($loan->loanItems->isEmpty()) {
+            $loan->item->increment('stock', $loan->qty);
+        } else {
+            foreach ($loan->loanItems as $loanItem) {
+                $loanItem->item->increment('stock', $loanItem->qty);
+            }
+        }
 
         $condition = $validated['condition_on_return'];
         if (! empty($validated['condition_note'])) {
@@ -295,7 +322,7 @@ class LoanController extends Controller
 
         $loan->update($updateData);
 
-        $loan->load(['item', 'creator', 'verifier']);
+        $loan->load(['item', 'loanItems.item', 'creator', 'verifier']);
 
         // Send return confirmation (bukti barang diterima) to borrower
         try {

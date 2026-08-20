@@ -185,6 +185,7 @@ function Dashboard() {
                       </td>
                       <td className="px-6 py-3 text-slate-500">
                         {new Date(loan.created_at).toLocaleDateString('id-ID', {
+                          timeZone: 'Asia/Jakarta',
                           day: 'numeric',
                           month: 'short',
                           year: 'numeric',

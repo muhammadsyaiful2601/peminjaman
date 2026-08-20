@@ -20,7 +20,7 @@ class ReturnConfirmation extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Konfirmasi Pengembalian Barang - ' . $this->loan->item->name,
+            subject: 'Konfirmasi Pengembalian Barang - ' . $this->loan->loan_code,
         );
     }
 

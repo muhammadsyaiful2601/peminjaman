@@ -13,9 +13,8 @@ import ScanQR from './pages/ScanQR'
 import Users from './pages/Users'
 import Profile from './pages/Profile'
 
-// Durasi tanpa aktivitas sebelum akun logout otomatis (dalam milidetik).
-// Default: 15 menit. Ubah angka ini untuk menyesuaikan kebijakan sesi.
-const SESSION_IDLE_TIMEOUT_MS = 15 * 60 * 1000 // 15 menit
+// Sesi kerja berakhir setelah 8 jam tanpa aktivitas.
+const SESSION_IDLE_TIMEOUT_MS = 8 * 60 * 60 * 1000 // 8 jam
 
 // Memantau aktivitas pengguna dan logout otomatis setelah idle.
 function IdleTimeoutHandler() {
