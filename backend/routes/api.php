@@ -8,6 +8,8 @@ use Illuminate\Support\Facades\Route;
 
 // Public routes
 Route::post('/login', [AuthController::class, 'login']);
+Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
+Route::post('/reset-password', [AuthController::class, 'resetPassword']);
 
 // Public QR download (borrower doesn't need login, UUID acts as security token)
 Route::get('/loans/qr/{uuid}/download', [LoanController::class, 'downloadQr']);
@@ -16,6 +18,7 @@ Route::get('/loans/qr/{uuid}/download', [LoanController::class, 'downloadQr']);
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/user', [AuthController::class, 'user']);
+    Route::post('/email/verification-notification', [AuthController::class, 'sendVerificationNotification']);
 
     // Items - all authenticated users can view
     Route::get('/items', [ItemController::class, 'index']);
