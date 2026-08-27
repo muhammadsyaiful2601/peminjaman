@@ -12,6 +12,7 @@ Aplikasi web untuk inventaris, peminjaman multi-barang, pengembalian, verifikasi
 - Bukti peminjaman dan pengembalian dikirim melalui email.
 - PDF berisi data peminjam, foto verifikasi, seluruh barang, QR Code, logo kampus, dan logo SI.
 - Laporan peminjaman dapat difilter, dicetak sebagai dokumen resmi, dan diunduh sebagai PDF.
+- Peminjaman resmi mendukung peminjaman skala besar dengan surat PDF dan banyak barang.
 - Waktu aplikasi menggunakan WIB (`Asia/Jakarta`).
 
 ## Fitur
@@ -65,6 +66,12 @@ Laporan dapat:
 
 Saat mencetak langsung dari browser, nonaktifkan opsi **Headers and footers** pada dialog print agar URL dan metadata browser tidak ikut tercetak.
 
+### Peminjaman Resmi Skala Besar
+
+Halaman `/loans/official` digunakan petugas untuk membuat peminjaman resmi yang terdiri dari banyak jenis barang dan jumlah unit. Form menyediakan data peminjam, NIM mahasiswa opsional, tujuan kegiatan, periode peminjaman, serta nama dan NIP penandatangan. Setelah dikirim, sistem memeriksa stok secara atomik, membuat transaksi peminjaman, mengurangi stok, dan mengunduh surat resmi dalam format PDF.
+
+Data transaksi peminjam tersimpan pada daftar peminjaman. Setelah surat dibuat, tombol **Proses Barang Kembali** membuka detail transaksi. Petugas dapat mengambil foto bukti, memilih kondisi barang, dan sistem mengirim surat bukti pengembalian ke email peminjam.
+
 ## Alur Operasional
 
 1. Petugas login.
@@ -112,7 +119,7 @@ frontend/
     src/components/                Layout, kamera, dan komponen UI
     src/context/                   AuthContext
     src/hooks/                     Idle session hook
-    src/pages/                     Dashboard, barang, peminjaman, laporan, scan, user, profil
+    src/pages/                     Dashboard, barang, peminjaman resmi, laporan, scan, user, profil
 ```
 
 ## Persyaratan
@@ -250,6 +257,7 @@ Semua endpoint berada di bawah prefix `/api`. Kecuali login dan download PDF QR,
 | GET | `/api/loans/{loan}` | Auth | Detail transaksi |
 | GET | `/api/loans/qr/{uuid}` | Auth | Lookup melalui UUID QR |
 | GET | `/api/loans/report/download` | Auth | Mengunduh laporan peminjaman dalam format PDF; mendukung filter status/tanggal dan data penandatangan |
+| POST | `/api/loans/official/download` | Admin/Asisten | Membuat peminjaman skala besar dan mengunduh surat resmi PDF |
 | GET | `/api/loans/code/{code}` | Admin/Asisten | Lookup melalui kode peminjaman |
 | POST | `/api/loans` | Admin/Asisten | Membuat transaksi dan mengurangi stok |
 | POST | `/api/loans/{loan}/return` | Admin/Asisten | Memproses pengembalian |

@@ -12,6 +12,7 @@ import {
   ScanLine,
   PlusCircle,
   FileText,
+  FileSignature,
   Menu,
   X,
 } from 'lucide-react'
@@ -43,6 +44,7 @@ function Layout() {
   if (user?.role === 'admin' || user?.role === 'assistant') {
     navItems.push({ to: '/loans/new', label: 'Buat Peminjaman', icon: PlusCircle })
     navItems.push({ to: '/scan', label: 'Scan Pengembalian', icon: ScanLine })
+    navItems.push({ to: '/loans/official', label: 'Peminjaman Skala Besar', icon: FileSignature })
   }
 
     navItems.push({ to: '/reports', label: 'Laporan', icon: FileText })

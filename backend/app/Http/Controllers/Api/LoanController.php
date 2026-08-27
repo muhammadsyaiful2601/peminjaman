@@ -78,6 +78,80 @@ class LoanController extends Controller
         return $pdf->download('laporan-peminjaman-' . now()->format('Y-m-d') . '.pdf');
     }
 
+    public function downloadOfficialLoan(Request $request)
+    {
+        $validated = $request->validate([
+            'items' => ['required', 'array', 'min:1'],
+            'items.*.item_id' => ['required', 'integer', 'distinct', 'exists:items,id'],
+            'items.*.qty' => ['required', 'integer', 'min:1'],
+            'borrower_name' => ['required', 'string', 'max:255'],
+            'borrower_email' => ['required', 'email', 'max:255'],
+            'borrower_nim' => ['nullable', 'string', 'max:50'],
+            'purpose' => ['required', 'string', 'max:500'],
+            'borrowed_date' => ['required', 'date'],
+            'return_date' => ['required', 'date', 'after_or_equal:borrowed_date'],
+            'signatory_name' => ['required', 'string', 'max:255'],
+            'signatory_nip' => ['required', 'string', 'max:100'],
+            'officer_name' => ['required', 'string', 'max:255'],
+            'officer_nip' => ['required', 'string', 'max:100'],
+        ]);
+
+        $admin = $request->user();
+        $loanItems = $validated['items'];
+        $loanCode = $this->generateLoanCode();
+
+        $loan = DB::transaction(function () use ($loanItems, $loanCode, $validated, $admin) {
+            $items = Item::whereIn('id', collect($loanItems)->pluck('item_id'))
+                ->lockForUpdate()
+                ->get()
+                ->keyBy('id');
+
+            foreach ($loanItems as $loanItem) {
+                $item = $items->get($loanItem['item_id']);
+                if ($item->stock < $loanItem['qty']) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'items' => "Stok {$item->name} tidak mencukupi. Stok tersedia: {$item->stock}",
+                    ]);
+                }
+            }
+
+            foreach ($loanItems as $loanItem) {
+                $items->get($loanItem['item_id'])->decrement('stock', $loanItem['qty']);
+            }
+
+            $loan = Loan::create([
+                'uuid' => (string) Str::uuid(),
+                'loan_code' => $loanCode,
+                'item_id' => $loanItems[0]['item_id'],
+                'qty' => $loanItems[0]['qty'],
+                'borrower_name' => $validated['borrower_name'],
+                'borrower_email' => $validated['borrower_email'],
+                'borrower_student_id' => $validated['borrower_nim'] ?? null,
+                'status' => 'borrowed',
+                'borrowed_at' => $validated['borrowed_date'],
+                'created_by' => $admin->id,
+                'verified_by' => $admin->id,
+            ]);
+
+            $loan->loanItems()->createMany($loanItems);
+            return $loan->load(['item', 'loanItems.item']);
+        });
+
+        $pdf = Pdf::loadView('pdf.official-loan', [
+            'loan' => $loan,
+            'borrowedDate' => $validated['borrowed_date'],
+            'returnDate' => $validated['return_date'],
+            'purpose' => $validated['purpose'],
+            'signatoryName' => $validated['signatory_name'],
+            'signatoryNip' => $validated['signatory_nip'],
+            'officerName' => $validated['officer_name'],
+            'officerNip' => $validated['officer_nip'],
+        ]);
+
+        return $pdf->download('surat-peminjaman-resmi-' . $loan->loan_code . '.pdf')
+            ->withHeaders(['X-Loan-Id' => $loan->id]);
+    }
+
     public function store(Request $request)
     {
         $validated = $request->validate([
