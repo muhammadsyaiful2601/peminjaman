@@ -11,6 +11,7 @@ Aplikasi web untuk inventaris, peminjaman multi-barang, pengembalian, verifikasi
 - Stok dikurangi ketika transaksi dibuat, bukan ketika disetujui.
 - Bukti peminjaman dan pengembalian dikirim melalui email.
 - PDF berisi data peminjam, foto verifikasi, seluruh barang, QR Code, logo kampus, dan logo SI.
+- Laporan peminjaman dapat difilter, dicetak sebagai dokumen resmi, dan diunduh sebagai PDF.
 - Waktu aplikasi menggunakan WIB (`Asia/Jakarta`).
 
 ## Fitur
@@ -50,7 +51,19 @@ Petugas wajib memilih kondisi `bagus`, `rusak`, atau `hilang`. Catatan kondisi o
 | Mengelola akun user | Ya | Tidak |
 | Mengubah profil sendiri | Ya | Ya |
 
-Token akun disimpan di browser dan dikirim sebagai `Authorization: Bearer`. Sesi otomatis berakhir setelah 8 jam tanpa aktivitas. Token Sanctum juga dikonfigurasi berlaku selama 480 menit. Logout manual atau respons API `401` akan menghapus sesi lokal.
+Token akun disimpan di browser dan dikirim sebagai `Authorization: Bearer`. Sesi otomatis berakhir setelah 30 menit tanpa aktivitas, termasuk setelah browser dibuka kembali. Token Sanctum juga dikonfigurasi berlaku selama 30 menit. Logout manual atau respons API `401` akan menghapus sesi lokal.
+
+### Laporan Peminjaman
+
+Halaman `/reports` menyediakan laporan transaksi dengan filter tanggal dan status. Laporan menampilkan ringkasan jumlah transaksi serta tabel detail peminjaman. Nama penandatangan dan NIP dapat diisi, tersimpan otomatis di browser, dan dicantumkan pada dokumen.
+
+Laporan dapat:
+
+- Dicetak langsung sebagai dokumen resmi dengan kop Politeknik Negeri Padang, Jurusan Teknologi Informasi, dan Program Studi Sistem Informasi.
+- Diunduh sebagai PDF melalui backend Dompdf.
+- Memuat periode laporan, tanggal cetak, tabel bergaris, nama penandatangan, dan NIP.
+
+Saat mencetak langsung dari browser, nonaktifkan opsi **Headers and footers** pada dialog print agar URL dan metadata browser tidak ikut tercetak.
 
 ## Alur Operasional
 
@@ -88,10 +101,10 @@ backend/
     app/Models/                   User, Item, Loan, LoanItem
     config/                       Konfigurasi aplikasi dan Sanctum
     database/migrations/           Struktur tabel
-    database/seeders/              Akun demo dan data barang
-    public/images/                 Logo PDF
+    database/seeders/              Seeder akun dan data dummy
+    public/images/                 Logo PDF bukti transaksi
     resources/views/emails/        Template email
-    resources/views/pdf/           Template PDF bukti
+    resources/views/pdf/            Template PDF bukti dan laporan
     routes/api.php                 Route REST API
 
 frontend/
@@ -99,7 +112,7 @@ frontend/
     src/components/                Layout, kamera, dan komponen UI
     src/context/                   AuthContext
     src/hooks/                     Idle session hook
-    src/pages/                     Dashboard, barang, peminjaman, scan, user, profil
+    src/pages/                     Dashboard, barang, peminjaman, laporan, scan, user, profil
 ```
 
 ## Persyaratan
@@ -136,6 +149,14 @@ Untuk menghapus dan membuat ulang seluruh database lokal:
 ```bash
 php artisan migrate:fresh --seed
 ```
+
+Untuk menambahkan atau memperbarui 100 peminjaman dummy tanpa mengubah seeder utama:
+
+```bash
+php artisan db:seed --class=LoanDummySeeder
+```
+
+Seeder dummy menggunakan prefix `DUMMY-PJM-`, sehingga aman dijalankan ulang dan hanya mengganti data dummy yang dibuatnya.
 
 ### 2. Frontend
 
@@ -228,6 +249,7 @@ Semua endpoint berada di bawah prefix `/api`. Kecuali login dan download PDF QR,
 | GET | `/api/loans` | Auth | Daftar, filter status, search, pagination |
 | GET | `/api/loans/{loan}` | Auth | Detail transaksi |
 | GET | `/api/loans/qr/{uuid}` | Auth | Lookup melalui UUID QR |
+| GET | `/api/loans/report/download` | Auth | Mengunduh laporan peminjaman dalam format PDF; mendukung filter status/tanggal dan data penandatangan |
 | GET | `/api/loans/code/{code}` | Admin/Asisten | Lookup melalui kode peminjaman |
 | POST | `/api/loans` | Admin/Asisten | Membuat transaksi dan mengurangi stok |
 | POST | `/api/loans/{loan}/return` | Admin/Asisten | Memproses pengembalian |

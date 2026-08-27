@@ -198,7 +198,7 @@ function Reports() {
               <h2>POLITEKNIK NEGERI PADANG</h2>
               <h3>JURUSAN TEKNOLOGI INFORMASI</h3>
               <p>PROGRAM STUDI SISTEM INFORMASI</p>
-              <p className="official-address">Kampus Politeknik Negeri Padang, Limau Manis, Padang</p>
+              <p className="official-address">Kampus Politeknik Negeri Padang, Tanah Datar</p>
             </div>
           </div>
           <div className="official-rule" />
