@@ -40,7 +40,7 @@
             <h1>POLITEKNIK NEGERI PADANG</h1>
             <h2>JURUSAN TEKNOLOGI INFORMASI</h2>
             <p>PROGRAM STUDI SISTEM INFORMASI</p>
-            <p class="address">Kampus Politeknik Negeri Padang, Limau Manis, Padang</p>
+            <p class="address">Kampus Politeknik Negeri Padang, Tanah Datar</p>
         </div>
     </div>
     <div class="rule"></div>
