@@ -5,7 +5,6 @@ import {
   LayoutDashboard,
   Package,
   ArrowLeftRight,
-  QrCode,
   Users,
   UserCircle,
   LogOut,
@@ -16,6 +15,7 @@ import {
   Menu,
   X,
 } from 'lucide-react'
+import logoPnp from '../assets/Logo_Politeknik_Negeri_Padang_(2014).svg'
 
 function Layout() {
   const { user, logout } = useAuth()
@@ -64,9 +64,7 @@ function Layout() {
       <aside className="fixed inset-y-0 left-0 w-64 bg-white border-r border-slate-200 text-slate-800 hidden md:flex flex-col">
         <div className="px-6 py-6 border-b border-slate-100">
           <h1 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-            <span className="inline-flex items-center justify-center w-9 h-9 bg-cyan-600 rounded-lg">
-              <QrCode className="w-5 h-5 text-white" />
-            </span>
+            <img src={logoPnp} alt="Logo Politeknik Negeri Padang" className="h-10 w-10 object-contain" />
             PinjamBarang
           </h1>
           <p className="text-xs text-slate-400 mt-2">Sistem Peminjaman Barang Kampus</p>
@@ -132,9 +130,7 @@ function Layout() {
               <Menu className="w-6 h-6" />
             </button>
             <h1 className="font-bold flex items-center gap-2">
-              <span className="inline-flex items-center justify-center w-8 h-8 bg-cyan-600 rounded-lg">
-                <QrCode className="w-4 h-4 text-white" />
-              </span>
+              <img src={logoPnp} alt="Logo Politeknik Negeri Padang" className="h-9 w-9 object-contain" />
               PinjamBarang
             </h1>
           </div>
@@ -159,9 +155,7 @@ function Layout() {
         >
           <div className="px-6 py-6 border-b border-slate-100 flex items-center justify-between">
             <h1 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-              <span className="inline-flex items-center justify-center w-9 h-9 bg-cyan-600 rounded-lg">
-                <QrCode className="w-5 h-5 text-white" />
-              </span>
+              <img src={logoPnp} alt="Logo Politeknik Negeri Padang" className="h-10 w-10 object-contain" />
               PinjamBarang
             </h1>
             <button
