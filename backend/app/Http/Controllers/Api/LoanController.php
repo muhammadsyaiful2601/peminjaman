@@ -41,6 +41,43 @@ class LoanController extends Controller
         return response()->json($loans);
     }
 
+    public function downloadReport(Request $request)
+    {
+        $request->validate([
+            'status' => ['nullable', 'in:pending,borrowed,returned,rejected'],
+            'start_date' => ['nullable', 'date'],
+            'end_date' => ['nullable', 'date', 'after_or_equal:start_date'],
+            'signatory_name' => ['nullable', 'string', 'max:255'],
+            'signatory_nip' => ['nullable', 'string', 'max:100'],
+        ]);
+
+        $query = Loan::with(['item', 'loanItems.item'])
+            ->orderByDesc('created_at');
+
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+
+        if ($request->filled('start_date')) {
+            $query->whereDate('created_at', '>=', $request->start_date);
+        }
+
+        if ($request->filled('end_date')) {
+            $query->whereDate('created_at', '<=', $request->end_date);
+        }
+
+        $loans = $query->get();
+        $pdf = Pdf::loadView('pdf.loan-report', [
+            'loans' => $loans,
+            'signatoryName' => $request->signatory_name,
+            'signatoryNip' => $request->signatory_nip,
+            'startDate' => $request->start_date,
+            'endDate' => $request->end_date,
+        ]);
+
+        return $pdf->download('laporan-peminjaman-' . now()->format('Y-m-d') . '.pdf');
+    }
+
     public function store(Request $request)
     {
         $validated = $request->validate([

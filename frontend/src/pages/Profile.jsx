@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import api from '../api/axios'
-import { UserCircle, Mail, Shield, Save } from 'lucide-react'
+import { UserCircle, Mail, Shield, Save, CheckCircle, Send } from 'lucide-react'
 
 function Profile() {
   const { user, setUser } = useAuth()
@@ -10,6 +10,7 @@ function Profile() {
   const [password, setPassword] = useState('')
   const [passwordConfirmation, setPasswordConfirmation] = useState('')
   const [saving, setSaving] = useState(false)
+  const [sendingVerification, setSendingVerification] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
 
@@ -17,6 +18,14 @@ function Profile() {
     setName(user?.name || '')
     setEmail(user?.email || '')
   }, [user])
+
+  useEffect(() => {
+    api.get('/user').then((response) => {
+      const currentUser = response.data.user
+      setUser(currentUser)
+      localStorage.setItem('user', JSON.stringify(currentUser))
+    }).catch(() => {})
+  }, [setUser])
 
   const roleLabels = {
     admin: 'Petugas Utama',
@@ -30,7 +39,7 @@ function Profile() {
     setMessage('')
     setSaving(true)
 
-    const payload = { name, email }
+    const payload = { name, username: user.username, email }
     if (password) {
       if (password !== passwordConfirmation) {
         setError('Konfirmasi password tidak cocok')
@@ -44,7 +53,7 @@ function Profile() {
     try {
       const response = await api.put(`/users/${user.id}`, payload)
       const updatedUser = response.data.user
-      const currentUser = { ...user, name: updatedUser.name, email: updatedUser.email }
+      const currentUser = { ...user, ...updatedUser }
       setUser(currentUser)
       localStorage.setItem('user', JSON.stringify(currentUser))
       setPassword('')
@@ -59,6 +68,20 @@ function Profile() {
       }
     } finally {
       setSaving(false)
+    }
+  }
+
+  const sendVerification = async () => {
+    setSendingVerification(true)
+    setError('')
+    setMessage('')
+    try {
+      const response = await api.post('/email/verification-notification')
+      setMessage(response.data.message)
+    } catch (err) {
+      setError(err.response?.data?.message || 'Gagal mengirim link verifikasi')
+    } finally {
+      setSendingVerification(false)
     }
   }
 
@@ -85,6 +108,31 @@ function Profile() {
       </div>
 
       <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-slate-200 p-6 space-y-5">
+        {!user?.email_verified_at && !user?.email_verified ? (
+          <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-lg px-4 py-4">
+            <div className="flex items-start gap-3">
+              <Mail className="w-5 h-5 mt-0.5 shrink-0" />
+              <div className="flex-1">
+                <p className="font-medium">Email belum terverifikasi</p>
+                <p className="text-sm mt-1">Verifikasi email untuk membuka seluruh fitur aplikasi.</p>
+                <button
+                  type="button"
+                  onClick={sendVerification}
+                  disabled={sendingVerification}
+                  className="inline-flex items-center gap-2 mt-3 bg-amber-600 hover:bg-amber-700 text-white px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+                >
+                  <Send className="w-4 h-4" />
+                  {sendingVerification ? 'Mengirim...' : 'Kirim Link Verifikasi'}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg px-4 py-3 flex items-center gap-2 text-sm">
+            <CheckCircle className="w-5 h-5" /> Email sudah terverifikasi.
+          </div>
+        )}
+
         {message && (
           <div className="bg-emerald-50 border border-emerald-200 text-emerald-600 text-sm rounded-lg px-4 py-3">
             {message}
@@ -96,6 +144,17 @@ function Profile() {
             {error}
           </div>
         )}
+
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">Username</label>
+          <input
+            type="text"
+            value={user?.username || ''}
+            onChange={(e) => setUser({ ...user, username: e.target.value })}
+            className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none"
+            required
+          />
+        </div>
 
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1">Nama Lengkap</label>

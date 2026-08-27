@@ -1,8 +1,10 @@
-import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from './context/AuthContext'
 import useIdleTimeout from './hooks/useIdleTimeout'
 import Layout from './components/Layout'
 import Login from './pages/Login'
+import ForgotPassword from './pages/ForgotPassword'
+import ResetPassword from './pages/ResetPassword'
 import Dashboard from './pages/Dashboard'
 import Items from './pages/Items'
 import ItemForm from './pages/ItemForm'
@@ -12,9 +14,10 @@ import NewLoan from './pages/NewLoan'
 import ScanQR from './pages/ScanQR'
 import Users from './pages/Users'
 import Profile from './pages/Profile'
+import Reports from './pages/Reports'
 
-// Sesi kerja berakhir setelah 8 jam tanpa aktivitas.
-const SESSION_IDLE_TIMEOUT_MS = 8 * 60 * 60 * 1000 // 8 jam
+// Sesi kerja berakhir setelah 30 menit tanpa aktivitas.
+const SESSION_IDLE_TIMEOUT_MS = 30 * 60 * 1000
 
 // Memantau aktivitas pengguna dan logout otomatis setelah idle.
 function IdleTimeoutHandler() {
@@ -24,6 +27,7 @@ function IdleTimeoutHandler() {
   useIdleTimeout({
     timeout: SESSION_IDLE_TIMEOUT_MS,
     enabled: !!user,
+    storageKey: 'lastActivityAt',
     onTimeout: async () => {
       await logout()
       navigate('/login', { replace: true })
@@ -35,9 +39,14 @@ function IdleTimeoutHandler() {
 
 function ProtectedRoute({ children, roles = [] }) {
   const { user } = useAuth()
+  const location = useLocation()
 
   if (!user) {
     return <Navigate to="/login" replace />
+  }
+
+  if (!user.email_verified && !user.email_verified_at && location.pathname !== '/profile') {
+    return <Navigate to="/profile" replace />
   }
 
   if (roles.length > 0 && !roles.includes(user.role)) {
@@ -53,6 +62,8 @@ function App() {
       <IdleTimeoutHandler />
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
 
       <Route
         path="/"
@@ -90,6 +101,7 @@ function App() {
           }
         />
         <Route path="loans/:id" element={<LoanDetail />} />
+        <Route path="reports" element={<Reports />} />
         <Route
           path="scan"
           element={

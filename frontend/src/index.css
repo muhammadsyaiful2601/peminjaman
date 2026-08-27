@@ -1,1 +1,198 @@
 @import "tailwindcss";
+
+@keyframes dashboard-fade-in {
+	from {
+		opacity: 0;
+		transform: translateY(10px);
+	}
+
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+.dashboard-fade-in {
+	animation: dashboard-fade-in 450ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.dashboard-fade-in {
+		animation: none;
+	}
+}
+
+@media print {
+	@page {
+		margin: 1.2cm;
+	}
+
+	aside,
+	header {
+		display: none !important;
+	}
+
+	main {
+		padding: 0 !important;
+	}
+
+	body {
+		background: white;
+	}
+
+	.report-toolbar,
+	.report-filters,
+	.report-summary,
+	.report-signature-fields {
+		display: none !important;
+	}
+
+	.report-page {
+		font-size: 11px;
+	}
+
+	.report-content,
+	.report-summary > div {
+		border-color: #cbd5e1;
+		box-shadow: none;
+	}
+
+	.report-content {
+		border: 0 !important;
+		border-radius: 0 !important;
+		background: white !important;
+	}
+
+	.report-summary {
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+	}
+
+	.report-content {
+		overflow: visible;
+	}
+
+	.report-content table {
+		font-size: 10px;
+	}
+
+	.report-content th,
+	.report-content td {
+		padding: 6px 8px;
+	}
+
+	.report-table {
+		border-collapse: collapse;
+		border: 1px solid #334155;
+	}
+
+	.report-table th,
+	.report-table td {
+		border: 1px solid #64748b;
+		vertical-align: top;
+	}
+
+	.report-table th {
+		background: #e2e8f0 !important;
+		color: #0f172a !important;
+		font-weight: 700;
+		text-align: center;
+	}
+
+	.official-letterhead {
+		display: flex;
+		align-items: center;
+		min-height: 92px;
+		text-align: center;
+	}
+
+	.official-logo {
+		width: 76px;
+		height: 82px;
+		object-fit: contain;
+		margin-right: 18px;
+	}
+
+	.official-identity {
+		flex: 1;
+	}
+
+	.official-identity h2,
+	.official-identity h3,
+	.official-identity p,
+	.official-title h1,
+	.official-title p,
+	.official-meta,
+	.official-signature p {
+		margin: 0;
+	}
+
+	.official-identity h2 {
+		font-size: 18px;
+		font-weight: 700;
+	}
+
+	.official-identity h3 {
+		font-size: 14px;
+		font-weight: 700;
+	}
+
+	.official-identity p {
+		font-size: 12px;
+		font-weight: 600;
+	}
+
+	.official-identity .official-address {
+		font-size: 9px;
+		font-weight: 400;
+		margin-top: 3px;
+	}
+
+	.official-rule {
+		border-top: 2px solid #0f172a;
+		border-bottom: 1px solid #0f172a;
+		height: 4px;
+		margin-bottom: 20px;
+	}
+
+	.official-title {
+		text-align: center;
+		margin-bottom: 14px;
+	}
+
+	.official-title h1 {
+		font-size: 15px;
+		font-weight: 700;
+		letter-spacing: 0;
+	}
+
+	.official-title p {
+		font-size: 11px;
+		margin-top: 3px;
+	}
+
+	.official-meta {
+		display: flex;
+		justify-content: space-between;
+		font-size: 10px;
+		margin-bottom: 8px;
+	}
+
+	.official-signature {
+		margin-left: 68%;
+		margin-top: 42px;
+		font-size: 11px;
+		line-height: 1.45;
+	}
+
+	.signature-role {
+		margin-top: 32px !important;
+	}
+
+	.signature-space {
+		height: 52px;
+	}
+
+	.signature-name {
+		font-weight: 700;
+	}
+}

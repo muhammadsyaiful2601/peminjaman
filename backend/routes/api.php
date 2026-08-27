@@ -33,6 +33,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Loans - all staff can view
     Route::get('/loans', [LoanController::class, 'index']);
+    Route::get('/loans/report/download', [LoanController::class, 'downloadReport']);
     Route::get('/loans/{loan}', [LoanController::class, 'show']);
     Route::get('/loans/qr/{uuid}', [LoanController::class, 'showByUuid']);
 

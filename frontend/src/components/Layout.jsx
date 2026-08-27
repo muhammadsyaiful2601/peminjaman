@@ -11,6 +11,7 @@ import {
   LogOut,
   ScanLine,
   PlusCircle,
+  FileText,
   Menu,
   X,
 } from 'lucide-react'
@@ -36,13 +37,15 @@ function Layout() {
   const navItems = [
     { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
     { to: '/items', label: 'Katalog Barang', icon: Package },
-    { to: '/loans', label: 'Peminjaman', icon: ArrowLeftRight },
+    { to: '/loans', label: 'Peminjaman', icon: ArrowLeftRight, end: true },
   ]
 
   if (user?.role === 'admin' || user?.role === 'assistant') {
     navItems.push({ to: '/loans/new', label: 'Buat Peminjaman', icon: PlusCircle })
     navItems.push({ to: '/scan', label: 'Scan Pengembalian', icon: ScanLine })
   }
+
+    navItems.push({ to: '/reports', label: 'Laporan', icon: FileText })
 
   if (user?.role === 'admin') {
     navItems.push({ to: '/users', label: 'Kelola User', icon: Users })

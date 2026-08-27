@@ -11,7 +11,7 @@ function Users() {
   const [total, setTotal] = useState(0)
   const [showModal, setShowModal] = useState(false)
   const [editingUser, setEditingUser] = useState(null)
-  const [form, setForm] = useState({ name: '', email: '', password: '', password_confirmation: '', role: 'assistant' })
+  const [form, setForm] = useState({ name: '', username: '', email: '', password: '', password_confirmation: '', role: 'assistant' })
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
@@ -55,7 +55,7 @@ function Users() {
 
   const openAddModal = () => {
     setEditingUser(null)
-    setForm({ name: '', email: '', password: '', password_confirmation: '', role: 'assistant' })
+    setForm({ name: '', username: '', email: '', password: '', password_confirmation: '', role: 'assistant' })
     setError('')
     setShowModal(true)
   }
@@ -64,6 +64,7 @@ function Users() {
     setEditingUser(user)
     setForm({
       name: user.name,
+      username: user.username || '',
       email: user.email,
       password: '',
       password_confirmation: '',
@@ -159,6 +160,7 @@ function Users() {
                 <thead className="bg-slate-50">
                   <tr>
                     <th className="px-6 py-3 text-left font-medium text-slate-500">Nama</th>
+                    <th className="px-6 py-3 text-left font-medium text-slate-500">Username</th>
                     <th className="px-6 py-3 text-left font-medium text-slate-500">Email</th>
                     <th className="px-6 py-3 text-left font-medium text-slate-500">Role</th>
                     <th className="px-6 py-3 text-right font-medium text-slate-500">Aksi</th>
@@ -168,6 +170,7 @@ function Users() {
                   {users.map((user) => (
                     <tr key={user.id} className="hover:bg-slate-50">
                       <td className="px-6 py-3 font-medium text-slate-900">{user.name}</td>
+                      <td className="px-6 py-3 text-slate-600">{user.username}</td>
                       <td className="px-6 py-3 text-slate-600">{user.email}</td>
                       <td className="px-6 py-3">
                         <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${roleColors[user.role] || 'bg-gray-100 text-gray-700'}`}>
@@ -240,6 +243,17 @@ function Users() {
                   {error}
                 </div>
               )}
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Username</label>
+                <input
+                  type="text"
+                  value={form.username}
+                  onChange={(e) => setForm({ ...form, username: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none"
+                  required
+                />
+              </div>
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Nama Lengkap</label>
