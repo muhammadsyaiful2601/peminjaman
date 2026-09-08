@@ -27,7 +27,11 @@ class AuthController extends Controller
         }
 
         if (! $user->hasVerifiedEmail()) {
-            $user->sendEmailVerificationNotification();
+            try {
+                $user->sendEmailVerificationNotification();
+            } catch (\Throwable $exception) {
+                report($exception);
+            }
         }
 
         $token = $user->createToken('auth_token')->plainTextToken;

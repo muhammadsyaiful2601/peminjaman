@@ -2,6 +2,27 @@
 
 Aplikasi web untuk inventaris, peminjaman multi-barang, pengembalian, verifikasi foto, dan bukti transaksi berbasis QR Code. Mahasiswa tidak membuat akun. Petugas memasukkan data peminjam dan menyerahkan barang melalui aplikasi.
 
+## Pilih Mode Deployment
+
+Repository ini menyediakan dua mode penggunaan:
+
+| Mode | Cocok untuk | Database | Server eksternal |
+| :--- | :--- | :--- | :--- |
+| Website | Dipakai banyak komputer melalui jaringan/domain | MySQL production | PHP web server + database |
+| Desktop Windows | Dipakai offline pada satu komputer petugas | SQLite lokal | Tidak perlu Laragon/XAMPP/MySQL |
+
+Website dan desktop memakai source frontend, API, migration, seeder, dan aturan bisnis yang sama. Perbedaannya hanya pada cara menjalankan backend dan database.
+
+## Daftar Isi Deployment
+
+- [Prasyarat](#persyaratan)
+- [Menjalankan Lokal](#menjalankan-di-lokal)
+- [Deploy Website Production](#deploy-website-production)
+- [Build dan Instalasi Desktop](#build-dan-instalasi-desktop-windows)
+- [Publikasi ke GitHub](#publikasi-ke-github)
+- [Keamanan Secret](#keamanan-secret)
+- [Checklist Setelah Deploy](#checklist-setelah-deploy)
+
 ## Ringkasan Sistem
 
 - Frontend React SPA untuk dashboard petugas.
@@ -216,6 +237,25 @@ MAIL_FROM_NAME="Politeknik Negeri Padang"
 
 Pada konfigurasi contoh, mailer dapat menggunakan `log`; email hanya ditulis ke log Laravel dan tidak dikirim ke penerima.
 
+### SQLite untuk Pengembangan
+
+Jika tidak ingin menjalankan MySQL saat pengembangan website, ubah `backend/.env` menjadi:
+
+```dotenv
+DB_CONNECTION=sqlite
+DB_DATABASE=C:/path/ke/repository/backend/database/database.sqlite
+```
+
+Buat file database lalu jalankan migration:
+
+```powershell
+New-Item -ItemType File backend/database/database.sqlite -Force
+cd backend
+php artisan migrate --seed
+```
+
+Untuk website production multi-pengguna, gunakan MySQL atau MariaDB. SQLite desktop hanya ditujukan untuk data lokal satu komputer.
+
 ## Akun Seed Default
 
 Seeder membuat akun berikut jika belum ada:
@@ -341,6 +381,229 @@ npm run lint
 
 Test otomatis yang tersedia saat ini masih berupa test contoh Laravel. Belum tersedia test integrasi khusus untuk stok, multi-item, autentikasi, role, email, PDF, dan pengembalian.
 
+## Deploy Website Production
+
+Gunakan website untuk banyak komputer melalui domain atau jaringan. Server membutuhkan PHP 8.3+, extension Laravel, Composer 2, Node.js 20+, dan MySQL/MariaDB.
+
+```bash
+git clone https://github.com/USERNAME/REPOSITORY.git /var/www/peminjaman
+cd /var/www/peminjaman/backend
+composer install --no-dev --optimize-autoloader
+cp .env.example .env
+php artisan key:generate --force
+cd ../frontend
+npm ci
+npm run build
+```
+
+Document root web server harus menunjuk ke `backend/public`. Sajikan isi `frontend/dist` pada domain yang sama atau proxy `/api` dan `/storage` ke Laravel. Aktifkan HTTPS agar kamera dan verifikasi email bekerja.
+
+### Environment production
+
+Buat database MySQL dengan collation `utf8mb4`, lalu isi `backend/.env`:
+
+```dotenv
+APP_ENV=production
+APP_DEBUG=false
+APP_URL=https://peminjaman.example.ac.id
+FRONTEND_URL=https://peminjaman.example.ac.id
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=peminjaman
+DB_USERNAME=peminjaman_app
+DB_PASSWORD=PASSWORD_KUAT
+FILESYSTEM_DISK=public
+QUEUE_CONNECTION=database
+CACHE_STORE=file
+SESSION_DRIVER=file
+MAIL_MAILER=smtp
+MAIL_HOST=smtp.example.com
+MAIL_PORT=587
+MAIL_USERNAME=...
+MAIL_PASSWORD=...
+MAIL_ENCRYPTION=tls
+MAIL_FROM_ADDRESS=no-reply@example.com
+MAIL_FROM_NAME="Peminjaman Barang PNP"
+```
+
+`MAIL_FROM_ADDRESS` wajib valid. Setelah `.env` siap:
+
+```bash
+cd /var/www/peminjaman/backend
+php artisan migrate --force
+php artisan db:seed --force
+php artisan storage:link
+php artisan optimize
+sudo chown -R www-data:www-data storage bootstrap/cache public/storage
+sudo chmod -R ug+rwx storage bootstrap/cache
+php artisan queue:work --sleep=3 --tries=3 --timeout=120
+```
+
+Jalankan `queue:work` sebagai service Supervisor/systemd pada production. Setelah update, jalankan `php artisan queue:restart`.
+
+### Update website
+
+```bash
+cd /var/www/peminjaman
+git pull origin main
+cd backend
+composer install --no-dev --optimize-autoloader
+php artisan migrate --force
+php artisan optimize
+php artisan queue:restart
+cd ../frontend
+npm ci
+npm run build
+```
+
+## Build dan Instalasi Desktop Windows
+
+Desktop membundel PHP portable, Laravel, frontend, dan SQLite. Komputer pengguna tidak membutuhkan Laragon, XAMPP, MySQL, Composer, atau Node.js. Database dibuat otomatis di `%APPDATA%`.
+
+```powershell
+Push-Location frontend
+npm install
+npm run build
+Pop-Location
+Push-Location desktop
+npm install
+powershell -ExecutionPolicy Bypass -File scripts\prepare-php.ps1
+npm run dist
+Pop-Location
+```
+
+Uji pipeline sebelum dibagikan:
+
+```powershell
+node desktop/scripts/smoke-test.mjs
+```
+
+Instalasi komputer kampus:
+
+1. Jalankan `Peminjaman Barang PNP Setup 1.0.1.exe`.
+2. Pilih lokasi instalasi, termasuk drive `C:` atau `E:`.
+3. Buka aplikasi dan tunggu migration SQLite serta seed selesai.
+4. Isi SMTP melalui wizard atau **Aplikasi → Pengaturan Email**.
+5. Kirim email tes dan simpan konfigurasi.
+6. Login awal dengan `admin` / `password`, lalu ganti password.
+
+Resource mengikuti lokasi instalasi. Data dan database tersimpan di `%APPDATA%\Peminjaman Barang PNP`. Untuk backup, tutup aplikasi lalu salin folder tersebut; database utama adalah `peminjaman.sqlite`.
+
+## Tutorial Mandiri untuk Komputer Lain
+
+Bagian ini ditujukan untuk pengguna kampus yang tidak ingin membuka terminal atau menulis kode.
+
+### Cara paling mudah memasang aplikasi desktop
+
+1. Buka halaman **Releases** pada repository GitHub aplikasi.
+2. Pilih release terbaru.
+3. Unduh file installer Windows dengan ekstensi `.exe`.
+4. Setelah unduhan selesai, buka file installer tersebut.
+5. Jika Windows menampilkan peringatan keamanan, pilih informasi selengkapnya lalu tetap jalankan hanya jika file berasal dari repository resmi kampus.
+6. Ikuti langkah instalasi sampai selesai.
+7. Pilih lokasi pemasangan. Drive `C:` maupun `E:` dapat digunakan.
+8. Buka aplikasi melalui shortcut Desktop atau Start Menu.
+9. Tunggu proses persiapan database selesai pada pembukaan pertama.
+10. Isi pengaturan SMTP melalui jendela konfigurasi email.
+11. Gunakan tombol **Kirim Email Tes** untuk memastikan email berjalan.
+12. Simpan pengaturan email.
+13. Masuk menggunakan akun awal yang diberikan administrator.
+14. Segera ubah password akun setelah berhasil masuk.
+
+Komputer pengguna tidak perlu memasang Laragon, XAMPP, MySQL, PHP, Composer, Node.js, atau aplikasi tambahan lain. Aplikasi desktop sudah membawa backend PHP dan menggunakan database SQLite lokal.
+
+### Cara mendapatkan source melalui GitHub Desktop
+
+Langkah ini hanya diperlukan oleh pengembang atau administrator yang ingin mengambil source project, bukan oleh pengguna biasa aplikasi desktop.
+
+1. Pasang **GitHub Desktop** dari situs resmi GitHub.
+2. Masuk menggunakan akun GitHub yang memiliki akses ke repository.
+3. Pilih **Clone a repository**.
+4. Pilih repository `peminjaman` dari daftar repository GitHub.
+5. Tentukan folder penyimpanan project.
+6. Tekan **Clone** dan tunggu sampai selesai.
+7. Untuk mengambil perubahan terbaru, buka project di GitHub Desktop lalu tekan **Fetch origin** dan **Pull origin**.
+
+Source hasil clone belum menjadi aplikasi siap pakai. Untuk penggunaan biasa, unduh installer dari halaman **Releases**. Source clone hanya diperlukan untuk pengembangan atau pembuatan installer baru.
+
+### Cara menyiapkan website dari hasil clone
+
+Deployment website tidak dapat dilakukan hanya dengan membuka folder hasil clone. Website membutuhkan server hosting, PHP, database MySQL, domain, dan pengaturan email.
+
+Administrator website perlu melakukan hal berikut melalui panel hosting atau meminta bantuan penyedia server:
+
+1. Hubungkan hosting dengan repository GitHub.
+2. Pilih branch utama sebagai sumber deployment.
+3. Atur folder website ke folder `backend/public`.
+4. Buat database MySQL dan pengguna database.
+5. Isi pengaturan aplikasi, alamat website, database, dan SMTP pada halaman environment hosting.
+6. Jalankan migration dan seeder melalui fitur deployment hosting.
+7. Aktifkan penyimpanan file publik untuk gambar dan PDF.
+8. Aktifkan worker queue agar email peminjaman dan pengembalian dikirim.
+9. Aktifkan HTTPS.
+10. Uji login, input barang, peminjaman, pengembalian, upload foto, PDF, QR, dan email.
+
+Jika hosting tidak menyediakan pengaturan PHP, database, dan queue, gunakan installer desktop untuk komputer petugas atau minta administrator server menyiapkan website menggunakan bagian **Deploy Website Production**.
+
+### Pengaturan email pada komputer desktop
+
+Pengaturan email hanya perlu dilakukan satu kali pada setiap komputer desktop.
+
+1. Buka aplikasi.
+2. Pada halaman login, tekan **Pengaturan Email**, atau gunakan menu **Aplikasi → Pengaturan Email**.
+3. Masukkan alamat server SMTP dari penyedia email.
+4. Masukkan port SMTP.
+5. Masukkan username SMTP.
+6. Masukkan password atau SMTP key.
+7. Masukkan email pengirim yang sudah terdaftar pada penyedia SMTP.
+8. Masukkan alamat email tujuan untuk pengujian.
+9. Tekan **Kirim Email Tes**.
+10. Periksa inbox dan folder spam.
+11. Jika berhasil, tekan **Simpan & Mulai Aplikasi**.
+
+Email membutuhkan koneksi internet. Fitur inventaris dan transaksi tetap menggunakan database lokal, tetapi email tidak dapat dikirim ketika komputer offline.
+
+### Backup data desktop
+
+1. Tutup aplikasi.
+2. Buka File Explorer.
+3. Masukkan `%APPDATA%` pada baris alamat.
+4. Cari folder `Peminjaman Barang PNP`.
+5. Salin folder tersebut ke flash drive, hard disk eksternal, atau penyimpanan aman.
+
+Untuk memulihkan data, tutup aplikasi pada komputer tujuan lalu ganti folder data aplikasinya dengan salinan backup. Jangan mengedit file SQLite secara manual.
+
+## Publikasi ke GitHub
+
+Pastikan `.env`, password SMTP, `APP_KEY`, database SQLite, `vendor`, dan `node_modules` tidak ikut commit.
+
+```powershell
+git status --short
+git diff -- . ':!desktop/release'
+```
+
+Untuk repository baru:
+
+```powershell
+git init
+git add README.md .gitignore backend frontend desktop start-dev.bat
+git commit -m "Initial release aplikasi peminjaman"
+git branch -M main
+git remote add origin https://github.com/muhammadsyaiful2601/peminjaman.git
+git push -u origin main
+```
+
+Ganti URL remote dengan repository Anda. Gunakan Personal Access Token atau Git Credential Manager, bukan password GitHub biasa.
+
+Installer `.exe` sebaiknya dibagikan melalui GitHub Release, bukan di-commit ke source. Setelah `npm run dist`, buat tag seperti `v1.0.1`, buat Release, lalu upload installer dari `desktop/release/` sebagai Release Asset.
+
+## Keamanan Secret
+
+- Rotasi credential SMTP yang pernah dibagikan atau masuk history Git.
+- Gunakan `APP_DEBUG=false` dan HTTPS pada website production.
+- Document root web server harus `backend/public`.
+
 ## Checklist Deployment
 
 1. Siapkan PHP 8.3+, Composer, Node.js, dan database production.
@@ -357,3 +620,22 @@ Test otomatis yang tersedia saat ini masih berupa test contoh Laravel. Belum ter
 12. Ganti password akun seed dan periksa permission file upload.
 
 Tidak ada Dockerfile, konfigurasi Nginx/Apache, atau pipeline CI/CD di repository ini. Konfigurasi web server dan proses build production perlu disiapkan sesuai provider hosting yang digunakan.
+
+## Aplikasi Desktop (Electron)
+
+Aplikasi ini juga tersedia sebagai **aplikasi desktop Windows offline** di folder `desktop/`:
+PHP runtime + SQLite dibundel, jadi tidak perlu XAMPP/Laragon atau server. Fitur email
+tetap dapat dipakai saat komputer terhubung internet (dikonfigurasi lewat wizard saat
+pertama kali dibuka, dapat dibuka ulang via menu **Aplikasi → Pengaturan Email**).
+
+```powershell
+cd desktop
+npm install
+npm start                                  # mode pengembangan (php di PATH)
+powershell -ExecutionPolicy Bypass -File scripts\prepare-php.ps1   # unduh PHP portable
+npm run dist                               # build installer ke desktop/release/
+node scripts/smoke-test.mjs                # uji pipeline tanpa GUI
+```
+
+Detail arsitektur dan perilaku first-run (migrasi otomatis, akun seed `admin`/`password`,
+penyimpanan data di AppData) dibaca di [`desktop/README.md`](desktop/README.md).

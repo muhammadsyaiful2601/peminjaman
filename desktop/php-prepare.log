@@ -1,0 +1,9 @@
+Mengunduh PHP dari https://windows.php.net/downloads/releases/php-8.4.25-nts-Win32-vs17-x64.zip ...
+Ekstrak ke D:\coding\peminjaman-2\peminjaman\desktop\scripts\..\resources\php ...
+Verifikasi:
+PHP 8.4.25 (cli) (built: Aug 25 2026 18:38:23) (NTS Visual C++ 2022 x64)
+Copyright (c) The PHP Group
+Built by The PHP Group
+Zend Engine v4.4.25, Copyright (c) Zend Technologies
+
+PHP portable siap di: D:\coding\peminjaman-2\peminjaman\desktop\scripts\..\resources\php

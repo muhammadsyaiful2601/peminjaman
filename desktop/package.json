@@ -1,0 +1,72 @@
+{
+  "name": "peminjaman-pnp-desktop",
+  "productName": "Peminjaman Barang PNP",
+  "version": "1.0.1",
+  "description": "Aplikasi Desktop Sistem Peminjaman Barang Politeknik Negeri Padang (offline, tanpa XAMPP/Laragon)",
+  "main": "main.js",
+  "author": "Politeknik Negeri Padang",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "icons": "node scripts/generate-icons.mjs",
+    "prepare-build": "node scripts/prepare-build.mjs",
+    "dist": "npm run icons && npm run prepare-build && electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "png-to-ico": "^2.1.6",
+    "sharp": "^0.33.5"
+  },
+  "build": {
+    "appId": "id.ac.pnp.peminjaman",
+    "productName": "Peminjaman Barang PNP",
+    "copyright": "Politeknik Negeri Padang",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "setup.html",
+      "setup.js",
+      "splash.html",
+      "assets/**"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/backend",
+        "to": "backend"
+      },
+      {
+        "from": "resources/frontend-dist",
+        "to": "frontend-dist"
+      },
+      {
+        "from": "resources/php",
+        "to": "php"
+      }
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Peminjaman Barang PNP",
+      "installerLanguages": ["id_ID", "en_US"]
+    }
+  }
+}

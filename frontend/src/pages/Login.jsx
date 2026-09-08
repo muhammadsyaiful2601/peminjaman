@@ -1,7 +1,7 @@
 ﻿import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { QrCode, UserRound, Lock, Eye, EyeOff } from 'lucide-react'
+import { QrCode, UserRound, Lock, Eye, EyeOff, Mail } from 'lucide-react'
 import logoPnp from '../assets/Logo_Politeknik_Negeri_Padang_(2014).svg'
 import foto from '../assets/foto.png'
 
@@ -16,6 +16,7 @@ function Login() {
   const [loginSuccess, setLoginSuccess] = useState(false)
   const [loginProgress, setLoginProgress] = useState(0)
   const [logoError, setLogoError] = useState(false)
+  const isDesktop = Boolean(window.desktop?.isDesktop)
 
   useEffect(() => {
     if (!loginSuccess) {
@@ -162,6 +163,16 @@ function Login() {
                   Lupa password?
                 </Link>
               </div>
+              {isDesktop && (
+                <button
+                  type="button"
+                  onClick={() => window.desktop.openEmailSetup()}
+                  className="w-full inline-flex items-center justify-center gap-2 border border-slate-200 text-slate-600 hover:border-cyan-300 hover:text-cyan-700 font-medium py-2.5 rounded-lg transition-colors"
+                >
+                  <Mail className="w-4 h-4" />
+                  Pengaturan Email
+                </button>
+              )}
             </form>
           </div>
         </div>

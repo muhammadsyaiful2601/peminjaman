@@ -1,0 +1,18 @@
+# Dependensi
+node_modules/
+
+# Hasil build
+release/
+resources/backend/
+resources/frontend-dist/
+resources/php/
+
+# Ikon hasil generate (dari SVG kampus)
+build/icon.png
+build/icon.ico
+build/icon-*.png
+
+# Log & artefak test
+npm-install.log
+npm-install.err.log
+.smoke/

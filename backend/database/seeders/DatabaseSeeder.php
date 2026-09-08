@@ -19,13 +19,13 @@ class DatabaseSeeder extends Seeder
         // Admin user
         User::firstOrCreate(
             ['username' => 'admin'],
-            ['name' => 'Admin Utama', 'username' => 'admin', 'password' => 'password', 'role' => 'admin']
+            ['name' => 'Admin Utama', 'username' => 'admin', 'email' => 'admin@pnp.local', 'password' => 'password', 'role' => 'admin']
         );
 
         // Assistant user
         User::firstOrCreate(
             ['username' => 'asisten'],
-            ['name' => 'Asisten Petugas', 'username' => 'asisten', 'password' => 'password', 'role' => 'assistant', 'email_verified_at' => now()]
+            ['name' => 'Asisten Petugas', 'username' => 'asisten', 'email' => 'asisten@pnp.local', 'password' => 'password', 'role' => 'assistant', 'email_verified_at' => now()]
         );
 
         Technician::firstOrCreate(

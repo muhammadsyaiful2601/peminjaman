@@ -1,0 +1,138 @@
+
+> peminjaman-pnp-desktop@1.0.0 dist
+> npm run icons && npm run prepare-build && electron-builder
+
+
+> peminjaman-pnp-desktop@1.0.0 icons
+> node scripts/generate-icons.mjs
+
+[icons] build/icon.ico & build/icon.png dibuat dari logo PNP.
+
+> peminjaman-pnp-desktop@1.0.0 prepare-build
+> node scripts/prepare-build.mjs
+
+[build] Menyalin backend -> D:\coding\peminjaman-2\peminjaman\desktop\resources\backend
+[build] Menyalin frontend/dist -> D:\coding\peminjaman-2\peminjaman\desktop\resources\frontend-dist
+[build] PHP runtime ditemukan di resources/php
+[build] Ukuran backend template : 77.9 MB
+[build] Ukuran frontend dist    : 1.6 MB
+[build] Selesai. Lanjutkan dengan: npx electron-builder
+  • electron-builder  version=25.1.8 os=10.0.26200
+  • loaded configuration  file=package.json ("build" field)
+  • executing @electron/rebuild  electronVersion=33.4.11 arch=x64 buildFromSource=false appDir=./
+  • installing native dependencies  arch=x64
+  • completed installing native dependencies
+  • packaging       platform=win32 arch=x64 electron=33.4.11 appOutDir=release\win-unpacked
+  • downloading     url=https://github.com/electron/electron/releases/download/v33.4.11/electron-v33.4.11-win32-x64.zip size=115 MB parts=8
+  • downloaded      url=https://github.com/electron/electron/releases/download/v33.4.11/electron-v33.4.11-win32-x64.zip duration=51.507s
+  • updating asar integrity executable resource  executablePath=release\win-unpacked\Peminjaman Barang PNP.exe
+  • signing with signtool.exe  path=release\win-unpacked\resources\php\deplister.exe
+  • no signing info identified, signing is skipped  signHook=false cscInfo=null
+  • signing with signtool.exe  path=release\win-unpacked\resources\php\php.exe
+  • no signing info identified, signing is skipped  signHook=false cscInfo=null
+  • signing with signtool.exe  path=release\win-unpacked\resources\php\php-cgi.exe
+  • no signing info identified, signing is skipped  signHook=false cscInfo=null
+  • signing with signtool.exe  path=release\win-unpacked\resources\php\php-win.exe
+  • no signing info identified, signing is skipped  signHook=false cscInfo=null
+  • signing with signtool.exe  path=release\win-unpacked\resources\backend\vendor\symfony\console\Resources\bin\hiddeninput.exe
+  • no signing info identified, signing is skipped  signHook=false cscInfo=null
+  • signing with signtool.exe  path=release\win-unpacked\Peminjaman Barang PNP.exe
+  • no signing info identified, signing is skipped  signHook=false cscInfo=null
+  • building        target=nsis file=release\Peminjaman Barang PNP Setup 1.0.0.exe archs=x64 oneClick=false perMachine=false
+  • signing with signtool.exe  path=release\win-unpacked\resources\elevate.exe
+  • no signing info identified, signing is skipped  signHook=false cscInfo=null
+  ⨯ C:\Users\FRXZERO\AppData\Local\electron-builder\Cache\nsis\nsis-3.0.4.1\Bin\makensis.exe process failed ERR_ELECTRON_BUILDER_CANNOT_EXECUTE
+Exit code:
+1
+Output:
+Command line defined: "APP_ID=id.ac.pnp.peminjaman"
+Command line defined: "APP_GUID=b957d05d-7bfc-5506-9397-4f8f4380ffdd"
+Command line defined: "UNINSTALL_APP_KEY=b957d05d-7bfc-5506-9397-4f8f4380ffdd"
+Command line defined: "PRODUCT_NAME=Peminjaman Barang PNP"
+Command line defined: "PRODUCT_FILENAME=Peminjaman Barang PNP"
+Command line defined: "APP_FILENAME=Peminjaman Barang PNP"
+Command line defined: "APP_DESCRIPTION=Aplikasi Desktop Sistem Peminjaman Barang Politeknik Negeri Padang (offline, tanpa XAMPP/Laragon)"
+Command line defined: "VERSION=1.0.0"
+Command line defined: "PROJECT_DIR=D:\coding\peminjaman-2\peminjaman\desktop"
+Command line defined: "BUILD_RESOURCES_DIR=D:\coding\peminjaman-2\peminjaman\desktop\build"
+Command line defined: "APP_PACKAGE_NAME=peminjaman-pnp-desktop"
+Command line defined: "MUI_ICON=D:\coding\peminjaman-2\peminjaman\desktop\build\icon.ico"
+Command line defined: "MUI_UNICON=D:\coding\peminjaman-2\peminjaman\desktop\build\icon.ico"
+Command line defined: "APP_64=D:\coding\peminjaman-2\peminjaman\desktop\release\peminjaman-pnp-desktop-1.0.0-x64.nsis.7z"
+Command line defined: "APP_64_NAME=peminjaman-pnp-desktop-1.0.0-x64.nsis.7z"
+Command line defined: "APP_64_HASH=D4F20249D0C1D23FC0DB7D34247ACBBE3B8455AFC60C1A8FE8847211232550448A8C253817A7AAA86A5ED60293B0644CF1EA6A1327D09B72BE5790739C333A4C"
+Command line defined: "APP_64_UNPACKED_SIZE=450201"
+Command line defined: "COMPANY_NAME=Politeknik Negeri Padang"
+Command line defined: "APP_INSTALLER_STORE_FILE=peminjaman-pnp-desktop-updater\installer.exe"
+Command line defined: "COMPRESSION_METHOD=7z"
+Command line defined: "MULTIUSER_INSTALLMODE_ALLOW_ELEVATION"
+Command line defined: "INSTALL_MODE_PER_ALL_USERS_REQUIRED"
+Command line defined: "allowToChangeInstallationDirectory"
+Command line defined: "SHORTCUT_NAME=Peminjaman Barang PNP"
+Command line defined: "UNINSTALL_DISPLAY_NAME=Peminjaman Barang PNP 1.0.0"
+Command line defined: "MUI_WELCOMEFINISHPAGE_BITMAP=${NSISDIR}\Contrib\Graphics\Wizard\nsis3-metro.bmp"
+Command line defined: "MUI_UNWELCOMEFINISHPAGE_BITMAP=${NSISDIR}\Contrib\Graphics\Wizard\nsis3-metro.bmp"
+Command line defined: "ESTIMATED_SIZE=450200"
+Command line defined: "COMPRESS=auto"
+Command line defined: "BUILD_UNINSTALLER"
+Command line defined: "UNINSTALLER_OUT_FILE=D:\coding\peminjaman-2\peminjaman\desktop\release\__uninstaller-nsis-peminjaman-pnp-desktop.exe"
+Processing config: C:\Users\FRXZERO\AppData\Local\electron-builder\Cache\nsis\nsis-3.0.4.1\nsisconf.nsh
+Processing script file: "<stdin>" (UTF8)
+
+Error output:
+Error while loading icon from "D:\coding\peminjaman-2\peminjaman\desktop\build\icon.ico": invalid icon file size
+Error in macro MUI_INTERFACE on macroline 87
+Error in macro MUI_UNPAGE_INIT on macroline 7
+Error in macro MUI_UNPAGE_WELCOME on macroline 5
+!include: error in script: "assistedInstaller.nsh" on line 70
+Error in script "<stdin>" on line 86 -- aborting creation process
+  failedTask=build stackTrace=Error: C:\Users\FRXZERO\AppData\Local\electron-builder\Cache\nsis\nsis-3.0.4.1\Bin\makensis.exe process failed ERR_ELECTRON_BUILDER_CANNOT_EXECUTE
+Exit code:
+1
+Output:
+Command line defined: "APP_ID=id.ac.pnp.peminjaman"
+Command line defined: "APP_GUID=b957d05d-7bfc-5506-9397-4f8f4380ffdd"
+Command line defined: "UNINSTALL_APP_KEY=b957d05d-7bfc-5506-9397-4f8f4380ffdd"
+Command line defined: "PRODUCT_NAME=Peminjaman Barang PNP"
+Command line defined: "PRODUCT_FILENAME=Peminjaman Barang PNP"
+Command line defined: "APP_FILENAME=Peminjaman Barang PNP"
+Command line defined: "APP_DESCRIPTION=Aplikasi Desktop Sistem Peminjaman Barang Politeknik Negeri Padang (offline, tanpa XAMPP/Laragon)"
+Command line defined: "VERSION=1.0.0"
+Command line defined: "PROJECT_DIR=D:\coding\peminjaman-2\peminjaman\desktop"
+Command line defined: "BUILD_RESOURCES_DIR=D:\coding\peminjaman-2\peminjaman\desktop\build"
+Command line defined: "APP_PACKAGE_NAME=peminjaman-pnp-desktop"
+Command line defined: "MUI_ICON=D:\coding\peminjaman-2\peminjaman\desktop\build\icon.ico"
+Command line defined: "MUI_UNICON=D:\coding\peminjaman-2\peminjaman\desktop\build\icon.ico"
+Command line defined: "APP_64=D:\coding\peminjaman-2\peminjaman\desktop\release\peminjaman-pnp-desktop-1.0.0-x64.nsis.7z"
+Command line defined: "APP_64_NAME=peminjaman-pnp-desktop-1.0.0-x64.nsis.7z"
+Command line defined: "APP_64_HASH=D4F20249D0C1D23FC0DB7D34247ACBBE3B8455AFC60C1A8FE8847211232550448A8C253817A7AAA86A5ED60293B0644CF1EA6A1327D09B72BE5790739C333A4C"
+Command line defined: "APP_64_UNPACKED_SIZE=450201"
+Command line defined: "COMPANY_NAME=Politeknik Negeri Padang"
+Command line defined: "APP_INSTALLER_STORE_FILE=peminjaman-pnp-desktop-updater\installer.exe"
+Command line defined: "COMPRESSION_METHOD=7z"
+Command line defined: "MULTIUSER_INSTALLMODE_ALLOW_ELEVATION"
+Command line defined: "INSTALL_MODE_PER_ALL_USERS_REQUIRED"
+Command line defined: "allowToChangeInstallationDirectory"
+Command line defined: "SHORTCUT_NAME=Peminjaman Barang PNP"
+Command line defined: "UNINSTALL_DISPLAY_NAME=Peminjaman Barang PNP 1.0.0"
+Command line defined: "MUI_WELCOMEFINISHPAGE_BITMAP=${NSISDIR}\Contrib\Graphics\Wizard\nsis3-metro.bmp"
+Command line defined: "MUI_UNWELCOMEFINISHPAGE_BITMAP=${NSISDIR}\Contrib\Graphics\Wizard\nsis3-metro.bmp"
+Command line defined: "ESTIMATED_SIZE=450200"
+Command line defined: "COMPRESS=auto"
+Command line defined: "BUILD_UNINSTALLER"
+Command line defined: "UNINSTALLER_OUT_FILE=D:\coding\peminjaman-2\peminjaman\desktop\release\__uninstaller-nsis-peminjaman-pnp-desktop.exe"
+Processing config: C:\Users\FRXZERO\AppData\Local\electron-builder\Cache\nsis\nsis-3.0.4.1\nsisconf.nsh
+Processing script file: "<stdin>" (UTF8)
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              Error output:
+Error while loading icon from "D:\coding\peminjaman-2\peminjaman\desktop\build\icon.ico": invalid icon file size
+Error in macro MUI_INTERFACE on macroline 87
+Error in macro MUI_UNPAGE_INIT on macroline 7
+Error in macro MUI_UNPAGE_WELCOME on macroline 5
+!include: error in script: "assistedInstaller.nsh" on line 70
+Error in script "<stdin>" on line 86 -- aborting creation process
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  at ChildProcess.<anonymous> (D:\coding\peminjaman-2\peminjaman\desktop\node_modules\builder-util\src\util.ts:255:14)
+    at ChildProcess.wrapper (node:events:639:12)
+    at ChildProcess.emit (node:events:514:28)
+    at ChildProcess.cp.emit (D:\coding\peminjaman-2\peminjaman\desktop\node_modules\cross-spawn\lib\enoent.js:34:29)
+    at maybeClose (node:internal/child_process:1141:16)
+    at Process.ChildProcess._handle.onexit (node:internal/child_process:306:5)

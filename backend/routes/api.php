@@ -1,5 +1,8 @@
 <?php
 
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ItemController;
 use App\Http\Controllers\Api\LoanController;
@@ -60,4 +63,43 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/technicians/{technician}', [TechnicianController::class, 'update']);
         Route::delete('/technicians/{technician}', [TechnicianController::class, 'destroy']);
     });
+});
+
+// ---------------------------------------------------------------------
+// Endpoint khusus aplikasi desktop (Electron).
+// Aman tanpa auth karena server hanya berjalan di 127.0.0.1 pada komputer
+// yang sama dan hanya diakses oleh jendela aplikasi sendiri.
+// ---------------------------------------------------------------------
+Route::post('/desktop/mail-test', function (Request $request) {
+    $data = $request->validate([
+        'to' => ['required', 'email'],
+    ]);
+
+    if (config('mail.default') !== 'smtp') {
+        return response()->json([
+            'ok' => false,
+            'message' => 'Mailer aktif bukan SMTP. Isi konfigurasi email pada wizard konfigurasi awal.',
+        ]);
+    }
+
+    try {
+        Mail::raw(
+            'Ini adalah email percobaan dari aplikasi desktop Peminjaman Barang PNP. Konfigurasi email Anda sudah benar.',
+            function ($message) use ($data) {
+                $message->to($data['to'])->subject('Email Percobaan — Peminjaman Barang PNP');
+            },
+        );
+
+        return response()->json([
+            'ok' => true,
+            'message' => 'Email percobaan berhasil dikirim ke '.$data['to'].'. Silakan cek inbox atau folder spam.',
+        ]);
+    } catch (Throwable $e) {
+        Log::warning('Desktop mail test gagal: '.$e->getMessage());
+
+        return response()->json([
+            'ok' => false,
+            'message' => 'Gagal mengirim email: '.$e->getMessage(),
+        ]);
+    }
 });
