@@ -2,7 +2,10 @@
 node_modules/
 
 # Hasil build
-release/
+# Installer release dilacak dengan Git LFS agar dapat dipublikasikan ke GitHub.
+release/win-unpacked/
+release/builder-*.yml
+release/builder-*.yaml
 resources/backend/
 resources/frontend-dist/
 resources/php/

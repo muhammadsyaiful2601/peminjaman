@@ -1,0 +1,2 @@
+desktop/release/*.exe filter=lfs diff=lfs merge=lfs -text
+desktop/release/*.blockmap filter=lfs diff=lfs merge=lfs -text
