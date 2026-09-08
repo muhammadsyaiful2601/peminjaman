@@ -18,11 +18,11 @@ class LoanDummySeeder extends Seeder
 
         if ($items->isEmpty()) {
             $itemData = [
-                ['code' => 'BRG-001', 'name' => 'Arduino Uno Kit', 'category' => 'Elektronik'],
-                ['code' => 'BRG-002', 'name' => 'Cooling Pad Laptop', 'category' => 'Aksesoris'],
-                ['code' => 'BRG-003', 'name' => 'Laptop ASUS ROG', 'category' => 'Komputer'],
-                ['code' => 'BRG-004', 'name' => 'Keyboard Mechanical RGB', 'category' => 'Aksesoris'],
-                ['code' => 'BRG-005', 'name' => 'Harddisk Kingston', 'category' => 'Penyimpanan'],
+                ['code' => 'ELE-001', 'name' => 'Arduino Uno Kit', 'category' => 'Elektronik'],
+                ['code' => 'AKS-001', 'name' => 'Cooling Pad Laptop', 'category' => 'Aksesoris'],
+                ['code' => 'KOM-001', 'name' => 'Laptop ASUS ROG', 'category' => 'Komputer'],
+                ['code' => 'AKS-002', 'name' => 'Keyboard Mechanical RGB', 'category' => 'Aksesoris'],
+                ['code' => 'PEN-001', 'name' => 'Harddisk Kingston', 'category' => 'Penyimpanan'],
             ];
 
             foreach ($itemData as $item) {

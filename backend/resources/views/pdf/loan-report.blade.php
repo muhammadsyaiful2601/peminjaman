@@ -69,7 +69,7 @@
     </table>
     <div class="signature">
         <p>Padang, {{ now()->format('d F Y') }}</p>
-        <p class="role">Peminjam / Penanggung Jawab</p>
+        <p class="role">Teknisi</p>
         <p class="space"></p>
         <p class="name">{{ $signatoryName ?: '____________________________' }}</p>
         <p>NIP. {{ $signatoryNip ?: '________________________' }}</p>

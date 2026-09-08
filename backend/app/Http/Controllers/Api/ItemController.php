@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Item;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 class ItemController extends Controller
 {
@@ -33,12 +34,13 @@ class ItemController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'item_code' => ['required', 'string', 'max:255', 'unique:items'],
             'name' => ['required', 'string', 'max:255'],
             'category' => ['required', 'string', 'max:255'],
             'stock' => ['required', 'integer', 'min:0'],
             'image' => ['nullable', 'image', 'max:5012'],
         ]);
+
+        $validated['item_code'] = $this->generateItemCode($validated['category']);
 
         if ($request->hasFile('image')) {
             $validated['image'] = $request->file('image')->store('items', 'public');
@@ -62,12 +64,15 @@ class ItemController extends Controller
     public function update(Request $request, Item $item)
     {
         $validated = $request->validate([
-            'item_code' => ['required', 'string', 'max:255', 'unique:items,item_code,'.$item->id],
             'name' => ['required', 'string', 'max:255'],
             'category' => ['required', 'string', 'max:255'],
             'stock' => ['required', 'integer', 'min:0'],
             'image' => ['nullable', 'image', 'max:2048'],
         ]);
+
+        if ($item->category !== $validated['category']) {
+            $validated['item_code'] = $this->generateItemCode($validated['category'], $item->id);
+        }
 
         if ($request->hasFile('image')) {
             $validated['image'] = $request->file('image')->store('items', 'public');
@@ -88,5 +93,30 @@ class ItemController extends Controller
         return response()->json([
             'message' => 'Barang berhasil dihapus',
         ]);
+    }
+
+    private function generateItemCode(string $category, ?int $ignoreItemId = null): string
+    {
+        $categoryPrefix = Str::upper(Str::substr(
+            preg_replace('/[^A-Za-z0-9]/', '', Str::ascii($category)),
+            0,
+            3
+        ));
+        $categoryPrefix = str_pad($categoryPrefix ?: 'BRG', 3, 'X');
+
+        $query = Item::where('item_code', 'like', $categoryPrefix . '-%');
+        if ($ignoreItemId !== null) {
+            $query->where('id', '!=', $ignoreItemId);
+        }
+
+        $nextNumber = (int) $query->pluck('item_code')
+            ->map(fn (string $itemCode) => (int) Str::afterLast($itemCode, '-'))
+            ->max() + 1;
+
+        do {
+            $itemCode = sprintf('%s-%03d', $categoryPrefix, $nextNumber++);
+        } while (Item::where('item_code', $itemCode)->exists());
+
+        return $itemCode;
     }
 }

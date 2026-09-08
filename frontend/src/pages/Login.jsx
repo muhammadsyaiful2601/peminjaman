@@ -2,8 +2,8 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { QrCode, UserRound, Lock, Eye, EyeOff } from 'lucide-react'
-import hero from '../assets/hero.png'
 import logoPnp from '../assets/Logo_Politeknik_Negeri_Padang_(2014).svg'
+import foto from '../assets/foto.png'
 
 function Login() {
   const { login } = useAuth()
@@ -70,20 +70,20 @@ function Login() {
               />
             )}
             <span className="text-xl font-bold text-slate-900">
-              Pinjam<span className="text-cyan-600">Barang</span>
+              Politeknik Negeri Padang
             </span>
           </div>
 
           <h1 className="text-4xl font-bold text-slate-900 leading-tight mb-4">
-            Kelola peminjaman barang kampus dengan mudah.
+            Sistem Peminjaman Barang.
           </h1>
           <p className="text-slate-500 leading-relaxed mb-8">
-            Sistem Informasi Peminjaman Barang Kampus — kelola peminjaman,
+            kelola peminjaman,
             verifikasi foto & QR, serta pantau stok barang dalam satu tempat.
           </p>
 
           <div className="rounded-2xl overflow-hidden border border-slate-200 shadow-sm">
-            <img src={hero} alt="Ilustrasi Sistem Peminjaman Barang" className="w-full h-64 object-cover" />
+            <img src={foto} alt="PSDKU Politeknik Negeri Padang Kampus Tanah Datar" className="w-full h-64 object-cover" />
           </div>
         </div>
       </div>
@@ -94,7 +94,7 @@ function Login() {
           <div className="lg:hidden mb-8 flex items-center gap-3">
             <img src={logoPnp} alt="Logo Politeknik Negeri Padang" className="w-12 h-12 object-contain" />
             <span className="text-xl font-bold text-slate-900">
-              Pinjam<span className="text-cyan-600">Barang</span>
+              Politeknik Negeri Padang
             </span>
           </div>
 

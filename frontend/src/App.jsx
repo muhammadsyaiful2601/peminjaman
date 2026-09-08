@@ -16,6 +16,7 @@ import Users from './pages/Users'
 import Profile from './pages/Profile'
 import Reports from './pages/Reports'
 import OfficialLoan from './pages/OfficialLoan'
+import Technicians from './pages/Technicians'
 
 // Sesi kerja berakhir setelah 30 menit tanpa aktivitas.
 const SESSION_IDLE_TIMEOUT_MS = 30 * 60 * 1000
@@ -107,6 +108,14 @@ function App() {
         />
         <Route path="loans/:id" element={<LoanDetail />} />
         <Route path="reports" element={<Reports />} />
+        <Route
+          path="technicians"
+          element={
+            <ProtectedRoute roles={['admin']}>
+              <Technicians />
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="scan"
           element={

@@ -1,4 +1,4 @@
-# Sistem Informasi Peminjaman Barang Kampus
+# Sistem Informasi Politeknik Negeri Padang
 
 Aplikasi web untuk inventaris, peminjaman multi-barang, pengembalian, verifikasi foto, dan bukti transaksi berbasis QR Code. Mahasiswa tidak membuat akun. Petugas memasukkan data peminjam dan menyerahkan barang melalui aplikasi.
 
@@ -185,7 +185,7 @@ Vite meneruskan `/api` dan `/storage` ke backend lokal. Dalam deployment product
 Salin `backend/.env.example` menjadi `backend/.env`, lalu sesuaikan minimal:
 
 ```dotenv
-APP_NAME="Sistem Peminjaman Barang"
+APP_NAME="Politeknik Negeri Padang"
 APP_URL=https://domain-anda.example
 APP_ENV=production
 APP_DEBUG=false
@@ -211,7 +211,7 @@ MAIL_USERNAME=...
 MAIL_PASSWORD=...
 MAIL_ENCRYPTION=tls
 MAIL_FROM_ADDRESS=admin@example.com
-MAIL_FROM_NAME="Sistem Peminjaman Barang"
+MAIL_FROM_NAME="Politeknik Negeri Padang"
 ```
 
 Pada konfigurasi contoh, mailer dapat menggunakan `log`; email hanya ditulis ke log Laravel dan tidak dikirim ke penerima.

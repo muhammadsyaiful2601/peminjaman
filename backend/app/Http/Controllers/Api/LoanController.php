@@ -7,6 +7,7 @@ use App\Mail\LoanQrCode;
 use App\Mail\ReturnConfirmation;
 use App\Models\Item;
 use App\Models\Loan;
+use App\Models\Technician;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -47,8 +48,7 @@ class LoanController extends Controller
             'status' => ['nullable', 'in:pending,borrowed,returned,rejected'],
             'start_date' => ['nullable', 'date'],
             'end_date' => ['nullable', 'date', 'after_or_equal:start_date'],
-            'signatory_name' => ['nullable', 'string', 'max:255'],
-            'signatory_nip' => ['nullable', 'string', 'max:100'],
+            'technician_id' => ['nullable', 'integer', 'exists:technicians,id'],
         ]);
 
         $query = Loan::with(['item', 'loanItems.item'])
@@ -67,10 +67,13 @@ class LoanController extends Controller
         }
 
         $loans = $query->get();
+        $technician = $request->filled('technician_id')
+            ? Technician::find($request->integer('technician_id'))
+            : null;
         $pdf = Pdf::loadView('pdf.loan-report', [
             'loans' => $loans,
-            'signatoryName' => $request->signatory_name,
-            'signatoryNip' => $request->signatory_nip,
+            'signatoryName' => $technician?->name,
+            'signatoryNip' => $technician?->nip,
             'startDate' => $request->start_date,
             'endDate' => $request->end_date,
         ]);
@@ -222,14 +225,19 @@ class LoanController extends Controller
         $loan->load(['item', 'loanItems.item', 'creator']);
 
         // Send QR Code via email to borrower
+        $emailSent = false;
         try {
             Mail::to($loan->borrower_email)->send(new LoanQrCode($loan));
+            $emailSent = true;
         } catch (\Exception $e) {
             \Log::error('Failed to send loan QR email: ' . $e->getMessage());
         }
 
         return response()->json([
-            'message' => 'Peminjaman berhasil dibuat. Barang telah diserahkan kepada peminjam dan QR Code telah dikirim ke email.',
+            'message' => $emailSent
+                ? 'Peminjaman berhasil dibuat. Barang telah diserahkan kepada peminjam dan QR Code telah dikirim ke email.'
+                : 'Peminjaman berhasil dibuat, tetapi QR Code gagal dikirim ke email. Silakan cek konfigurasi email atau kirim ulang.',
+            'email_sent' => $emailSent,
             'loan' => $loan,
             'qr_payload' => $loan->uuid,
         ], 201);
@@ -436,14 +444,19 @@ class LoanController extends Controller
         $loan->load(['item', 'loanItems.item', 'creator', 'verifier']);
 
         // Send return confirmation (bukti barang diterima) to borrower
+        $emailSent = false;
         try {
             Mail::to($loan->borrower_email)->send(new ReturnConfirmation($loan));
+            $emailSent = true;
         } catch (\Exception $e) {
             \Log::error('Failed to send return confirmation email: ' . $e->getMessage());
         }
 
         return response()->json([
-            'message' => 'Barang berhasil dikembalikan. Stok telah diperbarui. Bukti dikirim ke email peminjam.',
+            'message' => $emailSent
+                ? 'Barang berhasil dikembalikan. Stok telah diperbarui. Bukti dikirim ke email peminjam.'
+                : 'Barang berhasil dikembalikan dan stok telah diperbarui, tetapi bukti gagal dikirim ke email peminjam.',
+            'email_sent' => $emailSent,
             'loan' => $loan,
         ]);
     }

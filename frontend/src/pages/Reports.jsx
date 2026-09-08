@@ -17,13 +17,10 @@ function Reports() {
   const [status, setStatus] = useState('')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
-  const [signatoryName, setSignatoryName] = useState(() => localStorage.getItem('reportSignatoryName') || '')
-  const [signatoryNip, setSignatoryNip] = useState(() => localStorage.getItem('reportSignatoryNip') || '')
+  const [technicians, setTechnicians] = useState([])
+  const [technicianId, setTechnicianId] = useState('')
 
-  useEffect(() => {
-    localStorage.setItem('reportSignatoryName', signatoryName)
-    localStorage.setItem('reportSignatoryNip', signatoryNip)
-  }, [signatoryName, signatoryNip])
+  const selectedTechnician = technicians.find((technician) => String(technician.id) === String(technicianId))
 
   const fetchLoans = async () => {
     setLoading(true)
@@ -40,6 +37,11 @@ function Reports() {
 
   useEffect(() => {
     fetchLoans()
+    api.get('/technicians').then((response) => {
+      const data = response.data || []
+      setTechnicians(data)
+      if (data.length) setTechnicianId(String(data[0].id))
+    }).catch(() => setError('Daftar teknisi gagal dimuat.'))
   }, [])
 
   const filteredLoans = useMemo(() => loans.filter((loan) => {
@@ -88,8 +90,7 @@ function Reports() {
         status: status || undefined,
         start_date: startDate || undefined,
         end_date: endDate || undefined,
-        signatory_name: signatoryName || undefined,
-        signatory_nip: signatoryNip || undefined,
+        technician_id: technicianId || undefined,
       },
       responseType: 'blob',
     })
@@ -165,14 +166,13 @@ function Reports() {
         </label>
       </div>
 
-      <div className="report-signature-fields mb-6 grid grid-cols-1 gap-4 rounded-xl border border-slate-200 bg-white p-4 md:grid-cols-2">
+      <div className="report-signature-fields mb-6 rounded-xl border border-slate-200 bg-white p-4">
         <label className="text-sm font-medium text-slate-700">
-          Nama penandatangan
-          <input type="text" value={signatoryName} onChange={(event) => setSignatoryName(event.target.value)} placeholder="Masukkan nama lengkap" className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500" />
-        </label>
-        <label className="text-sm font-medium text-slate-700">
-          NIP
-          <input type="text" value={signatoryNip} onChange={(event) => setSignatoryNip(event.target.value)} placeholder="Masukkan NIP" className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500" />
+          Teknisi penandatangan
+          <select value={technicianId} onChange={(event) => setTechnicianId(event.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500">
+            <option value="">Pilih teknisi</option>
+            {technicians.map((technician) => <option key={technician.id} value={technician.id}>{technician.name} - NIP. {technician.nip}</option>)}
+          </select>
         </label>
       </div>
 
@@ -255,10 +255,10 @@ function Reports() {
         <div className="hidden print:block official-signature">
           <p>Padang, {formatDate(new Date())}</p>
           <p>Mengetahui,</p>
-          <p className="signature-role">Ketua Program Studi Sistem Informasi</p>
+          <p className="signature-role">Teknisi</p>
           <div className="signature-space" />
-          <p className="signature-name">{signatoryName || '____________________________'}</p>
-          <p>NIP. {signatoryNip || '________________________'}</p>
+          <p className="signature-name">{selectedTechnician?.name || '____________________________'}</p>
+          <p>NIP. {selectedTechnician?.nip || '________________________'}</p>
         </div>
       </div>
     </div>

@@ -12,6 +12,7 @@ import {
   PlusCircle,
   FileText,
   FileSignature,
+  Wrench,
   Menu,
   X,
 } from 'lucide-react'
@@ -51,6 +52,7 @@ function Layout() {
 
   if (user?.role === 'admin') {
     navItems.push({ to: '/users', label: 'Kelola User', icon: Users })
+    navItems.push({ to: '/technicians', label: 'Kelola Teknisi', icon: Wrench })
   }
 
   const roleLabels = {
@@ -65,9 +67,9 @@ function Layout() {
         <div className="px-6 py-6 border-b border-slate-100">
           <h1 className="text-lg font-bold text-slate-900 flex items-center gap-2">
             <img src={logoPnp} alt="Logo Politeknik Negeri Padang" className="h-10 w-10 object-contain" />
-            PinjamBarang
+            Politeknik Negeri Padang
           </h1>
-          <p className="text-xs text-slate-400 mt-2">Sistem Peminjaman Barang Kampus</p>
+          <p className="text-xs text-slate-400 mt-2">Sistem Peminjaman Barang PSDKU TANAH DATAR</p>
         </div>
 
         <nav className="flex-1 px-4 py-4 space-y-1">
@@ -131,7 +133,7 @@ function Layout() {
             </button>
             <h1 className="font-bold flex items-center gap-2">
               <img src={logoPnp} alt="Logo Politeknik Negeri Padang" className="h-9 w-9 object-contain" />
-              PinjamBarang
+              Politeknik Negeri Padang
             </h1>
           </div>
           <button onClick={handleLogout} className="text-red-500">
@@ -156,7 +158,7 @@ function Layout() {
           <div className="px-6 py-6 border-b border-slate-100 flex items-center justify-between">
             <h1 className="text-lg font-bold text-slate-900 flex items-center gap-2">
               <img src={logoPnp} alt="Logo Politeknik Negeri Padang" className="h-10 w-10 object-contain" />
-              PinjamBarang
+              Politeknik Negeri Padang
             </h1>
             <button
               onClick={() => setSidebarOpen(false)}

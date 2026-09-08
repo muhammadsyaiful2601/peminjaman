@@ -13,16 +13,20 @@
 
     <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
 
-        <!-- Header -->
-        <div style="background: linear-gradient(135deg, #0f172a 0%, #0e7490 100%); border-radius: 12px 12px 0 0; padding: 30px; text-align: center;">
-            <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 700;">📋 PinjamBarang</h1>
-            <p style="color: #cbd5e1; margin: 8px 0 0 0; font-size: 14px;">Sistem Peminjaman Barang Kampus</p>
+        <!-- Institutional header -->
+        <div style="background: #ffffff; border-radius: 12px 12px 0 0; padding: 24px 30px 18px; border-bottom: 4px solid #0e7490; text-align: center;">
+            <img src="cid:logo-kampus@pnp.local" alt="Logo Politeknik Negeri Padang" width="72" height="76" style="display: block; width: 72px; height: 76px; object-fit: contain; margin: 0 auto 10px;">
+            <h1 style="color: #0f172a; margin: 0; font-size: 20px; font-weight: 700; letter-spacing: 0.3px;">POLITEKNIK NEGERI PADANG</h1>
+            <p style="color: #334155; margin: 5px 0 0; font-size: 13px; font-weight: 700;">JURUSAN TEKNOLOGI INFORMASI</p>
+            <p style="color: #64748b; margin: 3px 0 0; font-size: 12px;">PROGRAM STUDI SISTEM INFORMASI</p>
+            <p style="color: #94a3b8; margin: 4px 0 0; font-size: 11px;">Kampus Politeknik Negeri Padang, Tanah Datar</p>
         </div>
 
         <!-- Content -->
         <div style="background: #ffffff; padding: 30px; border-radius: 0 0 12px 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
 
-            <h2 style="color: #0f172a; margin: 0 0 16px 0; font-size: 20px;">Bukti Peminjaman Barang</h2>
+            <p style="color: #0e7490; margin: 0 0 6px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px;">Notifikasi Peminjaman</p>
+            <h2 style="color: #0f172a; margin: 0 0 16px 0; font-size: 22px;">Bukti Peminjaman Barang</h2>
 
             <p style="color: #475569; line-height: 1.6; margin: 0 0 20px 0;">
                 Halo <strong>{{ $loan->borrower_name }}</strong>,<br><br>
@@ -79,10 +83,14 @@
                 </p>
             </div>
 
-            <p style="color: #94a3b8; font-size: 12px; text-align: center; margin: 24px 0 0 0; line-height: 1.5;">
-                Email ini dikirim otomatis oleh Sistem Peminjaman Barang Kampus.<br>
-                Mohon tidak membalas email ini.
-            </p>
+            <div style="border-top: 1px solid #e2e8f0; padding-top: 18px; margin-top: 24px; text-align: center;">
+                <p style="color: #64748b; font-size: 12px; margin: 0; line-height: 1.5;">
+                    Hormat kami,<br><strong style="color: #0f172a;">Politeknik Negeri Padang</strong>
+                </p>
+                <p style="color: #94a3b8; font-size: 11px; margin: 8px 0 0; line-height: 1.5;">
+                    Email ini dikirim otomatis. Mohon tidak membalas email ini.
+                </p>
+            </div>
         </div>
     </div>
 </body>

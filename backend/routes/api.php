@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ItemController;
 use App\Http\Controllers\Api\LoanController;
 use App\Http\Controllers\Api\UserController;
+use App\Http\Controllers\Api\TechnicianController;
 use Illuminate\Support\Facades\Route;
 
 // Public routes
@@ -36,6 +37,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/loans/report/download', [LoanController::class, 'downloadReport']);
     Route::get('/loans/{loan}', [LoanController::class, 'show']);
     Route::get('/loans/qr/{uuid}', [LoanController::class, 'showByUuid']);
+    Route::get('/technicians', [TechnicianController::class, 'index']);
 
     // Loan management - admin & assistant only (petugas creates & verifies)
     Route::middleware('role:admin,assistant')->group(function () {
@@ -54,5 +56,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/users', [UserController::class, 'store']);
         Route::put('/users/{user}', [UserController::class, 'update']);
         Route::delete('/users/{user}', [UserController::class, 'destroy']);
+        Route::post('/technicians', [TechnicianController::class, 'store']);
+        Route::put('/technicians/{technician}', [TechnicianController::class, 'update']);
+        Route::delete('/technicians/{technician}', [TechnicianController::class, 'destroy']);
     });
 });

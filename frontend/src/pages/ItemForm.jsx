@@ -72,7 +72,6 @@ function ItemForm() {
     setSubmitting(true)
 
     const formData = new FormData()
-    formData.append('item_code', form.item_code)
     formData.append('name', form.name)
     formData.append('category', form.category)
     formData.append('stock', form.stock)
@@ -132,18 +131,14 @@ function ItemForm() {
           </div>
         )}
 
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Kode Barang</label>
-          <input
-            type="text"
-            name="item_code"
-            value={form.item_code}
-            onChange={handleChange}
-            className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none"
-            placeholder="Contoh: ELE-001"
-            required
-          />
-        </div>
+        {isEdit && (
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Kode Barang</label>
+            <div className="w-full px-4 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-slate-600">
+              {form.item_code || 'Kode akan dibuat otomatis berdasarkan kategori'}
+            </div>
+          </div>
+        )}
 
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1">Nama Barang</label>
@@ -167,7 +162,7 @@ function ItemForm() {
               value={form.category}
               onChange={handleChange}
               className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none"
-              placeholder="Contoh: Elektronik, Olahraga"
+              placeholder="Contoh: Elektronik"
               required
             />
           </div>
