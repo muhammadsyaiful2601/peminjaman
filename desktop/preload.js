@@ -8,6 +8,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('desktop', {
   isDesktop: true,
+  previewReportPdf: (bytes) => ipcRenderer.invoke('report:preview-pdf', { bytes: Array.from(bytes) }),
   printReport: () => ipcRenderer.invoke('report:print'),
   openEmailSetup: () => ipcRenderer.invoke('setup:open'),
   getSetup: () => ipcRenderer.invoke('setup:get'),

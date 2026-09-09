@@ -605,6 +605,20 @@ function postJson(pathname, body) {
 }
 
 function registerIpc() {
+  ipcMain.handle('report:preview-pdf', async (_event, data) => {
+    try {
+      if (!data || !Array.isArray(data.bytes)) {
+        return { ok: false, message: 'Data PDF laporan tidak valid.' };
+      }
+      const filePath = path.join(app.getPath('temp'), `laporan-peminjaman-${Date.now()}.pdf`);
+      fs.writeFileSync(filePath, Buffer.from(data.bytes));
+      const openError = await shell.openPath(filePath);
+      return openError ? { ok: false, message: openError } : { ok: true };
+    } catch (error) {
+      return { ok: false, message: String(error && error.message ? error.message : error) };
+    }
+  });
+
   ipcMain.handle('report:print', (event) => new Promise((resolve) => {
     const window = BrowserWindow.fromWebContents(event.sender);
     if (!window || window.isDestroyed()) {

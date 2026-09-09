@@ -75,16 +75,29 @@ function Reports() {
 
   const handlePrint = async () => {
     setPrintError('')
+    if (window.desktop?.isDesktop) {
+      try {
+        const response = await api.get('/loans/report/download', {
+          params: {
+            status: status || undefined,
+            start_date: startDate || undefined,
+            end_date: endDate || undefined,
+            technician_id: technicianId || undefined,
+          },
+          responseType: 'blob',
+        })
+        const result = await window.desktop.previewReportPdf(new Uint8Array(await response.data.arrayBuffer()))
+        if (!result?.ok) setPrintError(result?.message || 'PDF laporan tidak dapat dibuka.')
+      } catch (requestError) {
+        setPrintError(requestError.response?.data?.message || requestError.message || 'PDF laporan gagal dibuat.')
+      }
+      return
+    }
+
     const originalTitle = document.title
     const restoreTitle = () => {
       document.title = originalTitle
       window.removeEventListener('afterprint', restoreTitle)
-    }
-
-    if (window.desktop?.isDesktop) {
-      const result = await window.desktop.printReport()
-      if (!result?.ok && result?.message) setPrintError(result.message)
-      return
     }
 
     document.title = ''
