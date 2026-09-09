@@ -1,15 +1,20 @@
-# Sistem Informasi Politeknik Negeri Padang
+# Sistem Peminjaman Barang — Jurusan Teknologi Informasi, Politeknik Negeri Padang
 
-Aplikasi web untuk inventaris, peminjaman multi-barang, pengembalian, verifikasi foto, dan bukti transaksi berbasis QR Code. Mahasiswa tidak membuat akun. Petugas memasukkan data peminjam dan menyerahkan barang melalui aplikasi.
+Aplikasi untuk **inventaris**, **peminjaman multi-barang**, **pengembalian dengan verifikasi foto & kondisi**,
+**peminjaman resmi (surat)**, **laporan resmi**, dan **bukti transaksi berbasis QR Code + email**.
+Mahasiswa/peminjam **tidak membuat akun** — petugas memasukkan data peminjam dan menyerahkan barang melalui aplikasi.
+
+> Versi installer desktop saat ini: **1.0.2** (lihat `desktop/release/`).
+> Build installer terbaru sudah memuat Cloudflare Tunnel + perbaikan email bukti.
 
 ## Pilih Mode Deployment
 
 Repository ini menyediakan dua mode penggunaan:
 
-| Mode | Cocok untuk | Database | Server eksternal |
-| :--- | :--- | :--- | :--- |
-| Website | Dipakai banyak komputer melalui jaringan/domain | MySQL production | PHP web server + database |
-| Desktop Windows | Dipakai offline pada satu komputer petugas | SQLite lokal | Tidak perlu Laragon/XAMPP/MySQL |
+| Mode | Cocok untuk | Database | Server eksternal | Unduh bukti dari email |
+| :--- | :--- | :--- | :--- | :--- |
+| Website | Dipakai banyak komputer melalui jaringan/domain | MySQL production | PHP web server + database | Tautan publik selalu (domain hosting) |
+| Desktop Windows | Dipakai offline pada satu komputer petugas | SQLite lokal | Tidak perlu Laragon/XAMPP/MySQL | PDF lampiran selalu; tautan publik otomatis saat komputer online (Cloudflare Quick Tunnel, tanpa VPS/hosting) |
 
 Website dan desktop memakai source frontend, API, migration, seeder, dan aturan bisnis yang sama. Perbedaannya hanya pada cara menjalankan backend dan database.
 
@@ -18,6 +23,10 @@ Website dan desktop memakai source frontend, API, migration, seeder, dan aturan 
 - [Prasyarat](#persyaratan)
 - [Menjalankan Lokal](#menjalankan-di-lokal)
 - [Deploy Website Production](#deploy-website-production)
+
+> **Catatan versi:** panduan ini mencakup seluruh fitur sampai build desktop 1.0.2 —
+> email bukti offline-proof (QR inline + lampiran PDF) dan tombol unduh publik otomatis
+> via Cloudflare Quick Tunnel saat komputer petugas online (tanpa VPS/hosting).
 - [Build dan Instalasi Desktop](#build-dan-instalasi-desktop-windows)
 - [Publikasi ke GitHub](#publikasi-ke-github)
 - [Keamanan Secret](#keamanan-secret)
@@ -26,13 +35,14 @@ Website dan desktop memakai source frontend, API, migration, seeder, dan aturan 
 ## Ringkasan Sistem
 
 - Frontend React SPA untuk dashboard petugas.
-- Backend Laravel REST API.
-- Autentikasi petugas menggunakan Laravel Sanctum bearer token.
-- Satu transaksi dapat berisi beberapa jenis barang dan jumlah unit yang berbeda.
-- Stok dikurangi ketika transaksi dibuat, bukan ketika disetujui.
-- Bukti peminjaman dan pengembalian dikirim melalui email.
+- Backend Laravel REST API (Laravel 13, PHP 8.3+) dengan autentikasi Sanctum.
+- Satu transaksi dapat berisi beberapa jenis barang dengan jumlah unit berbeda.
+- Stok dikurangi ketika transaksi dibuat, bukan ketika disetujui; dicek & dikunci atomik (gagal total bila satu barang kurang).
+- Bukti peminjaman dikirim via email berisi **QR Code inline (PNG)**, **kode peminjaman fallback**, dan **lampiran PDF bukti**.
+- Bila komputer petugas online, email juga berisi **tombol unduh PDF via URL publik sementara (Cloudflare Quick Tunnel)** — tanpa VPS/hosting.
 - PDF berisi data peminjam, foto verifikasi, seluruh barang, QR Code, logo kampus, dan logo SI.
-- Laporan peminjaman dapat difilter, dicetak sebagai dokumen resmi, dan diunduh sebagai PDF.
+- Unduh bukti publik via UUID (tanpa login; UUID bertindak sebagai token keamanan).
+- Laporan peminjaman dapat difilter (status, tanggal, teknisi), dicetak resmi, dan diunduh sebagai PDF.
 - Peminjaman resmi mendukung peminjaman skala besar dengan surat PDF dan banyak barang.
 - Waktu aplikasi menggunakan WIB (`Asia/Jakarta`).
 
@@ -52,13 +62,29 @@ Data peminjam:
 - Nomor telepon dan NIM/NIP opsional.
 - Foto peminjam wajib diambil melalui kamera browser.
 
-Pembuatan transaksi berjalan dalam database transaction. Semua stok dikunci dan dicek terlebih dahulu; jika salah satu barang tidak cukup, seluruh transaksi ditolak. Jika berhasil, status langsung menjadi `borrowed`, stok berkurang, QR Code dikirim melalui email, dan `borrowed_at` diisi.
+Pembuatan transaksi berjalan dalam database transaction. Semua stok dikunci dan dicek terlebih dahulu; jika salah satu barang tidak cukup, seluruh transaksi ditolak. Jika berhasil, status langsung menjadi `borrowed`, stok berkurang, email bukti dikirim (QR inline + lampiran PDF + tombol unduh bila online), dan `borrowed_at` diisi.
 
 ### Pengembalian
 
-Petugas mencari transaksi melalui scan QR, UUID, kode peminjaman, atau upload PDF. Pengembalian hanya dapat dilakukan untuk transaksi berstatus `borrowed`.
+Petugas mencari transaksi melalui scan QR (kamera), UUID, kode peminjaman, atau upload PDF bukti.
+Pengembalian hanya dapat dilakukan untuk transaksi berstatus `borrowed`.
 
-Petugas wajib memilih kondisi `bagus`, `rusak`, atau `hilang`. Catatan kondisi opsional. Frontend meminta foto bukti pengembalian, kemudian sistem mengubah status menjadi `returned`, mengembalikan stok seluruh item transaksi, dan mengirim email konfirmasi.
+Petugas wajib memilih kondisi `bagus`, `rusak`, atau `hilang`. Catatan kondisi opsional. Frontend meminta foto bukti pengembalian, kemudian sistem mengubah status menjadi `returned`, mengembalikan stok seluruh item transaksi, dan mengirim email konfirmasi pengembalian.
+
+### Email Bukti (Offline-Proof) + Unduh Publik saat Online
+
+Setiap peminjaman baru mengirim email ke peminjam berisi:
+
+1. **QR Code inline (PNG)** — tampil langsung di badan email (kompatibel Gmail/Outlook).
+2. **Kode peminjaman** (`PJM-YYYY-XXXX`) sebagai fallback bila QR tak terbaca.
+3. **Lampiran PDF bukti peminjaman** — berisi QR, foto verifikasi, dan detail barang; dapat dibuka
+   di perangkat mana pun tanpa perlu terhubung ke aplikasi.
+4. **Tombol unduh PDF kondisional** — hanya muncul bila aplikasi mendeteksi URL publik aktif
+   (mode desktop online via tunnel, atau mode website dengan `PUBLIC_APP_URL`/domain publik).
+   Tautan menunjuk ke unduhan publik tanpa login (`GET /api/loans/qr/{uuid}/download`).
+
+> Tombol unduh hanya valid selama komputer petugas online & aplikasi terbuka; bila tidak dapat
+> dibuka, gunakan lampiran PDF pada email yang sama.
 
 ### Akun dan Hak Akses
 
@@ -77,7 +103,8 @@ Token akun disimpan di browser dan dikirim sebagai `Authorization: Bearer`. Sesi
 
 ### Laporan Peminjaman
 
-Halaman `/reports` menyediakan laporan transaksi dengan filter tanggal dan status. Laporan menampilkan ringkasan jumlah transaksi serta tabel detail peminjaman. Nama penandatangan dan NIP dapat diisi, tersimpan otomatis di browser, dan dicantumkan pada dokumen.
+Halaman `/reports` menyediakan laporan transaksi dengan filter status, teknisi (sebagai penanggungjawab),
+dan rentang tanggal. Laporan menampilkan ringkasan jumlah transaksi serta tabel detail peminjaman. Nama penandatangan dan NIP dapat diisi, tersimpan otomatis di browser, dan dicantumkan pada dokumen.
 
 Laporan dapat:
 
@@ -91,7 +118,9 @@ Saat mencetak langsung dari browser, nonaktifkan opsi **Headers and footers** pa
 
 Halaman `/loans/official` digunakan petugas untuk membuat peminjaman resmi yang terdiri dari banyak jenis barang dan jumlah unit. Form menyediakan data peminjam, NIM mahasiswa opsional, tujuan kegiatan, periode peminjaman, serta nama dan NIP penandatangan. Setelah dikirim, sistem memeriksa stok secara atomik, membuat transaksi peminjaman, mengurangi stok, dan mengunduh surat resmi dalam format PDF.
 
-Data transaksi peminjam tersimpan pada daftar peminjaman. Setelah surat dibuat, tombol **Proses Barang Kembali** membuka detail transaksi. Petugas dapat mengambil foto bukti, memilih kondisi barang, dan sistem mengirim surat bukti pengembalian ke email peminjam.
+Data transaksi peminjam tersimpan pada daftar peminjaman. Setelah surat dibuat, tombol **Proses Barang Kembali**
+membuka detail transaksi. Petugas dapat mengambil foto bukti, memilih kondisi barang (`bagus`/`rusak`/`hilang`),
+dan sistem mengirim email konfirmasi pengembalian ke peminjam.
 
 ## Alur Operasional
 
@@ -101,7 +130,7 @@ Data transaksi peminjam tersimpan pada daftar peminjaman. Setelah surat dibuat, 
 4. Petugas mengambil foto peminjam melalui kamera.
 5. Sistem mengecek stok semua barang dalam satu transaksi.
 6. Sistem mengurangi stok, membuat transaksi berstatus `borrowed`, dan mengirim email QR.
-7. Mahasiswa menyimpan PDF/QR atau kode peminjaman.
+7. Mahasiswa menyimpan lampiran PDF bukti / QR / kode peminjaman dari email.
 8. Saat kembali, petugas mencari transaksi dan memeriksa barang.
 9. Petugas memasukkan kondisi serta foto bukti pengembalian.
 10. Sistem mengembalikan stok, mengubah status menjadi `returned`, dan mengirim konfirmasi email.
@@ -125,7 +154,8 @@ Tidak ada tahap `approve` atau `reject` pada implementasi saat ini. Route untuk 
 backend/
     app/Http/Controllers/Api/    Controller API
     app/Http/Middleware/          Middleware role
-    app/Mail/                     Email peminjaman/pengembalian
+    app/Mail/                     Email bukti peminjaman (QR inline + lampiran PDF + tombol unduh kondisional) & konfirmasi pengembalian
+   app/Support/                  Helper QR PNG (GD) & URL publik tunnel
     app/Models/                   User, Item, Loan, LoanItem
     config/                       Konfigurasi aplikasi dan Sanctum
     database/migrations/           Struktur tabel
@@ -140,7 +170,8 @@ frontend/
     src/components/                Layout, kamera, dan komponen UI
     src/context/                   AuthContext
     src/hooks/                     Idle session hook
-    src/pages/                     Dashboard, barang, peminjaman resmi, laporan, scan, user, profil
+    src/pages/                     Dashboard, barang, peminjaman, peminjaman resmi, laporan, scan QR (kamera/manual, multi-metode),
+                                    detail transaksi, pengembalian, user, teknisi, profil, lupa/reset password
 ```
 
 ## Persyaratan
@@ -302,6 +333,7 @@ Semua endpoint berada di bawah prefix `/api`. Kecuali login dan download PDF QR,
 | POST | `/api/loans` | Admin/Asisten | Membuat transaksi dan mengurangi stok |
 | POST | `/api/loans/{loan}/return` | Admin/Asisten | Memproses pengembalian |
 | POST | `/api/loans/upload-pdf` | Admin/Asisten | Membaca UUID/kode dari PDF |
+- `POST /api/desktop/mail-test` (khusus desktop, header `X-Desktop-Key`): mengirim email percobaan dari wizard.
 | GET | `/api/loans/qr/{uuid}/download` | Publik | Mengunduh PDF; UUID berfungsi sebagai token akses |
 
 ### User
@@ -584,6 +616,8 @@ git diff -- . ':!desktop/release'
 ```
 
 Untuk repository baru:
+- Email bukti peminjaman: QR inline PNG + kode `PJM-YYYY-XXXX` + lampiran PDF (selalu ada).
+- Tautan unduh di email (desktop online / website publik): `GET /api/loans/qr/{uuid}/download`.
 
 ```powershell
 git init
@@ -623,6 +657,30 @@ Tidak ada Dockerfile, konfigurasi Nginx/Apache, atau pipeline CI/CD di repositor
 
 ## Aplikasi Desktop (Electron)
 
+
+### Unduh bukti publik saat komputer petugas online (tanpa VPS/hosting)
+
+Sejak build terbaru, aplikasi desktop otomatis membuka **Cloudflare Quick Tunnel**
+(`cloudflared`, gratis, tanpa akun) setiap kali komputer petugas terhubung internet:
+
+1. Tunnel memberi URL publik sementara, mis. `https://xxxx.trycloudflare.com`.
+2. URL tersebut ditulis ke `storage/app/desktop-public-url.txt` dan env `PUBLIC_APP_URL`.
+3. Email bukti memakai URL itu untuk tombol **Unduh Bukti Peminjaman (PDF)**
+   (`GET /api/loans/qr/{uuid}/download` — publik, tanpa login; UUID sebagai token).
+4. Bila komputer offline, tombol tidak disertakan — lampiran PDF pada email yang sama
+   tetap menjadi bukti yang sah.
+
+Catatan:
+
+- Tautan tunnel hanya valid selama aplikasi terbuka & komputer online
+  (URL berubah tiap aplikasi di-restart).
+- Endpoint sensitif desktop (`POST /api/desktop/mail-test`) dilindungi header
+  `X-Desktop-Key` agar tidak disalahgunakan saat server terekspos via tunnel.
+- Konfigurasi terkait: `PUBLIC_APP_URL` dan `DESKTOP_API_KEY` (dibangkitkan otomatis
+  oleh aplikasi desktop dan disimpan di `desktop-config.json`).
+- File pendukung: `backend/app/Support/PublicUrl.php`, `backend/app/Support/QrPng.php`,
+  `backend/app/Mail/LoanQrCode.php`, `desktop/main.js` (tunnel manager),
+  `desktop/scripts/prepare-cloudflared.ps1`, dan test `LoanQrCodeMailTest.php`.
 Aplikasi ini juga tersedia sebagai **aplikasi desktop Windows offline** di folder `desktop/`:
 PHP runtime + SQLite dibundel, jadi tidak perlu XAMPP/Laragon atau server. Fitur email
 tetap dapat dipakai saat komputer terhubung internet (dikonfigurasi lewat wizard saat
