@@ -8,6 +8,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('desktop', {
   isDesktop: true,
+  printReport: () => ipcRenderer.invoke('report:print'),
   openEmailSetup: () => ipcRenderer.invoke('setup:open'),
   getSetup: () => ipcRenderer.invoke('setup:get'),
   saveSetup: (payload) => ipcRenderer.invoke('setup:save', payload),

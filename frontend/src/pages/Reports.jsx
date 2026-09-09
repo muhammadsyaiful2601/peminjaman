@@ -19,6 +19,7 @@ function Reports() {
   const [endDate, setEndDate] = useState('')
   const [technicians, setTechnicians] = useState([])
   const [technicianId, setTechnicianId] = useState('')
+  const [printError, setPrintError] = useState('')
 
   const selectedTechnician = technicians.find((technician) => String(technician.id) === String(technicianId))
 
@@ -72,11 +73,18 @@ function Reports() {
     ? `${startDate ? formatDate(`${startDate}T00:00:00`) : 'Awal'} - ${endDate ? formatDate(`${endDate}T00:00:00`) : 'Sekarang'}`
     : 'Seluruh periode'
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
+    setPrintError('')
     const originalTitle = document.title
     const restoreTitle = () => {
       document.title = originalTitle
       window.removeEventListener('afterprint', restoreTitle)
+    }
+
+    if (window.desktop?.isDesktop) {
+      const result = await window.desktop.printReport()
+      if (!result?.ok && result?.message) setPrintError(result.message)
+      return
     }
 
     document.title = ''
@@ -138,6 +146,7 @@ function Reports() {
           </button>
         </div>
       </div>
+      {printError && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{printError}</div>}
 
       <div className="report-filters mb-6 grid grid-cols-1 gap-4 rounded-xl border border-slate-200 bg-white p-4 md:grid-cols-3">
         <label className="text-sm font-medium text-slate-700">

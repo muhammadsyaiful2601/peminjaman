@@ -605,6 +605,22 @@ function postJson(pathname, body) {
 }
 
 function registerIpc() {
+  ipcMain.handle('report:print', (event) => new Promise((resolve) => {
+    const window = BrowserWindow.fromWebContents(event.sender);
+    if (!window || window.isDestroyed()) {
+      resolve({ ok: false, message: 'Jendela aplikasi tidak tersedia.' });
+      return;
+    }
+
+    window.webContents.print(
+      { silent: false, printBackground: true, margins: { marginType: 'default' } },
+      (success, failureReason) => resolve({
+        ok: success,
+        message: success ? '' : failureReason || 'Dialog cetak tidak dapat dibuka.',
+      }),
+    );
+  }));
+
   ipcMain.handle('setup:open', () => {
     if (setupWindow && !setupWindow.isDestroyed()) {
       setupWindow.focus();
