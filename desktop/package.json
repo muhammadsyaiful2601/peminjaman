@@ -1,7 +1,7 @@
 {
   "name": "peminjaman-pnp-desktop",
   "productName": "Peminjaman Barang PNP",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Aplikasi Desktop Sistem Peminjaman Barang Politeknik Negeri Padang (offline, tanpa XAMPP/Laragon)",
   "main": "main.js",
   "author": "Politeknik Negeri Padang",

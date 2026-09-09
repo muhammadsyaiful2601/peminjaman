@@ -481,7 +481,7 @@ node desktop/scripts/smoke-test.mjs
 
 Instalasi komputer kampus:
 
-1. Jalankan `Peminjaman Barang PNP Setup 1.0.1.exe`.
+1. Jalankan `Peminjaman Barang PNP Setup 1.0.2.exe`.
 2. Pilih lokasi instalasi, termasuk drive `C:` atau `E:`.
 3. Buka aplikasi dan tunggu migration SQLite serta seed selesai.
 4. Isi SMTP melalui wizard atau **Aplikasi → Pengaturan Email**.

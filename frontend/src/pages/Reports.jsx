@@ -274,13 +274,15 @@ function Reports() {
             </table>
           </div>
         )}
-        <div className="hidden print:block official-signature">
-          <p>Padang, {formatDate(new Date())}</p>
-          <p>Mengetahui,</p>
-          <p className="signature-role">Teknisi</p>
-          <div className="signature-space" />
-          <p className="signature-name">{selectedTechnician?.name || '____________________________'}</p>
-          <p>NIP. {selectedTechnician?.nip || '________________________'}</p>
+        <div className="hidden print:block official-signature-page">
+          <div className="official-signature">
+            <p>Tanah Datar, {formatDate(new Date())}</p>
+            <p>Mengetahui,</p>
+            <p className="signature-role">Teknisi</p>
+            <div className="signature-space" />
+            <p className="signature-name">{selectedTechnician?.name || '____________________________'}</p>
+            <p>NIP. {selectedTechnician?.nip || '________________________'}</p>
+          </div>
         </div>
       </div>
     </div>

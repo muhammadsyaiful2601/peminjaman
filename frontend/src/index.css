@@ -177,10 +177,14 @@
 		margin-bottom: 8px;
 	}
 
+	.official-signature-page {
+		break-inside: avoid;
+		page-break-inside: avoid;
+		margin-top: 42px;
+	}
+
 	.official-signature {
-		position: fixed;
-		right: 0;
-		bottom: 18mm;
+		margin-left: 68%;
 		width: 32%;
 		font-size: 11px;
 		line-height: 1.45;

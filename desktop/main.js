@@ -21,7 +21,7 @@ const http = require('http');
 
 const APP_TITLE = 'Peminjaman Barang — Politeknik Negeri Padang';
 const PREFERRED_PORT = 8642;
-const TEMPLATE_VERSION = '1.0.5';
+const TEMPLATE_VERSION = '1.0.7';
 const isDev = !app.isPackaged;
 
 /* ------------------------------------------------------------------ paths */

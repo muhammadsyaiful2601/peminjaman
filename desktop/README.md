@@ -63,7 +63,7 @@ npm run icons
 npm run dist
 ```
 
-Hasil: `desktop/release/Peminjaman Barang PNP Setup 1.0.1.exe`
+Hasil: `desktop/release/Peminjaman Barang PNP Setup 1.0.2.exe`
 
 Perilaku instalasi/first-run di komputer pengguna:
 
