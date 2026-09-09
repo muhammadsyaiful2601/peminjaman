@@ -178,8 +178,10 @@
 	}
 
 	.official-signature {
-		margin-left: 68%;
-		margin-top: 42px;
+		position: fixed;
+		right: 0;
+		bottom: 18mm;
+		width: 32%;
 		font-size: 11px;
 		line-height: 1.45;
 	}

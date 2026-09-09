@@ -201,6 +201,15 @@ try {
   if (token) {
     const items = await request('GET', '/api/items', null, { Authorization: `Bearer ${token}` });
     record('GET /api/items (Bearer token)', items.status === 200, `status=${items.status}`);
+
+    const report = await request('GET', '/api/loans/report/download', null, {
+      Authorization: `Bearer ${token}`,
+    });
+    record(
+      'GET /api/loans/report/download (PDF laporan)',
+      report.status === 200 && String(report.headers['content-type']).includes('application/pdf'),
+      `status=${report.status} type=${report.headers['content-type'] || ''}`,
+    );
   }
 } catch (e) {
   record('alur request', false, String(e.message) + (serverErr ? ' | server: ' + serverErr.slice(-300) : ''));

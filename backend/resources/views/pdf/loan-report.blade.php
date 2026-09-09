@@ -26,7 +26,7 @@
         .report th:nth-child(1) { width: 5%; } .report th:nth-child(2) { width: 14%; }
         .report th:nth-child(3) { width: 19%; } .report th:nth-child(4) { width: 24%; }
         .report th:nth-child(5) { width: 7%; } .report th:nth-child(6) { width: 12%; } .report th:nth-child(7) { width: 19%; }
-        .signature { width: 32%; margin-left: 68%; margin-top: 38px; line-height: 1.5; }
+        .signature { position: fixed; right: 34px; bottom: 34px; width: 32%; line-height: 1.5; }
         .signature p { margin: 0; }
         .signature .role { margin-top: 28px; }
         .signature .space { height: 48px; }
