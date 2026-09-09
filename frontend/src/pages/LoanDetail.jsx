@@ -14,7 +14,9 @@ import {
   Mail,
   Camera,
   RefreshCw,
+  Download,
 } from 'lucide-react'
+import { downloadBlob } from '../utils/downloadBlob'
 
 function LoanDetail() {
   const { id } = useParams()
@@ -69,6 +71,16 @@ function LoanDetail() {
     }
   }
 
+  const handleDownloadProof = async () => {
+    try {
+      const response = await api.get(`/loans/qr/${loan.uuid}/download`, { responseType: 'blob' })
+      const result = await downloadBlob(response.data, `bukti-peminjaman-${loan.loan_code || loan.uuid}.pdf`)
+      if (result && !result.ok && !result.canceled) alert(result.message || 'File gagal disimpan.')
+    } catch (err) {
+      alert(err.response?.data?.message || 'Bukti peminjaman gagal diunduh.')
+    }
+  }
+
   if (loading) {
     return <div className="text-center py-12 text-slate-500">Memuat data...</div>
   }
@@ -117,10 +129,16 @@ function LoanDetail() {
             </span>
           </div>
         </div>
-        <Link to="/loans" className="inline-flex items-center gap-2 text-slate-500 hover:text-slate-700">
-          <ArrowLeft className="w-4 h-4" />
-          Kembali
-        </Link>
+        <div className="flex items-center gap-3">
+          <button type="button" onClick={handleDownloadProof} className="inline-flex items-center gap-2 rounded-lg bg-cyan-600 px-3 py-2 text-sm font-medium text-white hover:bg-cyan-700">
+            <Download className="w-4 h-4" />
+            Unduh Bukti
+          </button>
+          <Link to="/loans" className="inline-flex items-center gap-2 text-slate-500 hover:text-slate-700">
+            <ArrowLeft className="w-4 h-4" />
+            Kembali
+          </Link>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

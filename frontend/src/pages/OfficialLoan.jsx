@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import api from '../api/axios'
 import { ArrowLeft, Download, FileSignature, Plus, Trash2, Undo2 } from 'lucide-react'
+import { downloadBlob } from '../utils/downloadBlob'
 import { Link } from 'react-router-dom'
 
 function OfficialLoan() {
@@ -29,12 +30,8 @@ function OfficialLoan() {
     setSubmitting(true)
     try {
       const response = await api.post('/loans/official/download', { ...form, items: loanItems }, { responseType: 'blob' })
-      const url = URL.createObjectURL(response.data)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `surat-peminjaman-resmi-${new Date().toISOString().slice(0, 10)}.pdf`
-      link.click()
-      URL.revokeObjectURL(url)
+      const result = await downloadBlob(response.data, `surat-peminjaman-resmi-${new Date().toISOString().slice(0, 10)}.pdf`)
+      if (result && !result.ok && !result.canceled) throw new Error(result.message || 'File gagal disimpan.')
       setSuccessLoanId(response.headers['x-loan-id'])
       setSuccess('Transaksi resmi berhasil dibuat dan surat PDF berhasil diunduh.')
     } catch (requestError) {

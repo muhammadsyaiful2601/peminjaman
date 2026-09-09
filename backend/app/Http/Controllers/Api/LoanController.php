@@ -394,7 +394,8 @@ class LoanController extends Controller
             'photoDataUri' => $photoDataUri,
         ]);
 
-        $filename = 'bukti-peminjaman-' . $loan->borrower_name . '.pdf';
+        $safeName = preg_replace('/[^A-Za-z0-9_-]+/', '-', (string) $loan->borrower_name);
+        $filename = 'bukti-peminjaman-' . trim($safeName, '-') . '.pdf';
 
         return $pdf->download($filename);
     }

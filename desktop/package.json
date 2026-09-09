@@ -11,7 +11,8 @@
     "start": "electron .",
     "icons": "node scripts/generate-icons.mjs",
     "prepare-build": "node scripts/prepare-build.mjs",
-    "dist": "npm run icons && npm run prepare-build && electron-builder"
+    "prepare-cloudflared": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-cloudflared.ps1",
+    "dist": "npm run icons && npm run prepare-cloudflared && npm run prepare-build && electron-builder"
   },
   "devDependencies": {
     "electron": "^33.2.0",
@@ -47,6 +48,10 @@
       {
         "from": "resources/php",
         "to": "php"
+      },
+      {
+        "from": "resources/cloudflared",
+        "to": "cloudflared"
       }
     ],
     "asar": true,

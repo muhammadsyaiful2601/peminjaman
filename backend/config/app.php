@@ -57,6 +57,33 @@ return [
     'frontend_url' => env('FRONTEND_URL', env('APP_URL', 'http://localhost:5173')),
 
     /*
+    |----------------------------------------------------------------------
+    | URL Publik (Tunnel)
+    |----------------------------------------------------------------------
+    |
+    | Diisi oleh aplikasi desktop saat tunnel internet aktif (mis.
+    | https://xxxx.trycloudflare.com). Dipakai untuk membuat tautan unduh
+    | bukti peminjaman yang dapat dibuka dari perangkat lain. Bila kosong,
+    | aplikasi dapat membaca fallback dari storage/app/desktop-public-url.txt.
+    |
+    */
+
+    'public_url' => env('PUBLIC_APP_URL'),
+
+    /*
+    |----------------------------------------------------------------------
+    | Kunci Endpoint Desktop
+    |----------------------------------------------------------------------
+    |
+    | Secret yang dikirim jendela Electron pada header X-Desktop-Key untuk
+    | endpoint khusus desktop (mis. /api/desktop/mail-test). Penting saat
+    | server lokal terekspos ke internet melalui tunnel.
+    |
+    */
+
+    'desktop_key' => env('DESKTOP_API_KEY'),
+
+    /*
     |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------

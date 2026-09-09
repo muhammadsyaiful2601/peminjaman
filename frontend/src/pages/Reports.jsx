@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import api from '../api/axios'
 import { CalendarDays, Download, Printer, RefreshCw } from 'lucide-react'
 import logoPnp from '../assets/Logo_Politeknik_Negeri_Padang_(2014).svg'
+import { downloadBlob } from '../utils/downloadBlob'
 
 const statusLabels = {
   borrowed: 'Dipinjam',
@@ -115,12 +116,8 @@ function Reports() {
       },
       responseType: 'blob',
     })
-    const url = URL.createObjectURL(response.data)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `laporan-peminjaman-${new Date().toISOString().slice(0, 10)}.pdf`
-    link.click()
-    URL.revokeObjectURL(url)
+    const result = await downloadBlob(response.data, `laporan-peminjaman-${new Date().toISOString().slice(0, 10)}.pdf`)
+    if (result && !result.ok && !result.canceled) throw new Error(result.message || 'File gagal disimpan.')
   }
 
   return (

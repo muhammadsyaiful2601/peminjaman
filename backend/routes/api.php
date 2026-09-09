@@ -67,10 +67,17 @@ Route::middleware('auth:sanctum')->group(function () {
 
 // ---------------------------------------------------------------------
 // Endpoint khusus aplikasi desktop (Electron).
-// Aman tanpa auth karena server hanya berjalan di 127.0.0.1 pada komputer
-// yang sama dan hanya diakses oleh jendela aplikasi sendiri.
+// Dilindungi secret key (X-Desktop-Key) karena bila server lokal diekspos
+// ke internet melalui tunnel, endpoint ini tidak boleh dipakai orang lain.
 // ---------------------------------------------------------------------
 Route::post('/desktop/mail-test', function (Request $request) {
+    $expectedKey = (string) config('app.desktop_key');
+    $providedKey = (string) $request->headers->get('X-Desktop-Key');
+
+    if ($expectedKey === '' || ! hash_equals($expectedKey, $providedKey)) {
+        abort(404);
+    }
+
     $data = $request->validate([
         'to' => ['required', 'email'],
     ]);

@@ -31,9 +31,10 @@
             <p style="color: #475569; line-height: 1.6; margin: 0 0 20px 0;">
                 Halo <strong>{{ $loan->borrower_name }}</strong>,<br><br>
                 Peminjaman barang Anda telah dibuat dan barang telah diserahkan kepada Anda
-                (status: <strong>Dipinjam</strong>). Unduh bukti peminjaman beserta QR Code menggunakan
-                tombol di bawah. Simpan QR Code tersebut dan tunjukkan kepada petugas saat Anda
-                mengembalikan barang.
+                (status: <strong>Dipinjam</strong>). Bukti peminjaman berupa file PDF terlampir
+                pada email ini — file tersebut dapat dibuka di perangkat mana pun (HP maupun
+                laptop) tanpa perlu terhubung ke aplikasi. QR Code juga ditampilkan di bawah
+                untuk memudahkan Anda saat pengembalian barang.
             </p>
 
             <!-- Loan Details -->
@@ -63,23 +64,42 @@
                 </table>
             </div>
 
-            <!-- Download Button -->
-            <div style="text-align: center; margin: 30px 0;">
+            <!-- QR Code Inline + Kode Peminjaman -->
+            <div style="text-align: center; margin: 26px 0;">
+                <img src="cid:qr-peminjaman@pnp.local" alt="QR Code Peminjaman" width="220" height="220" style="display: block; width: 220px; height: 220px; margin: 0 auto 12px; border: 1px solid #e2e8f0; border-radius: 8px;">
+                <p style="color: #64748b; font-size: 12px; margin: 0;">Kode Peminjaman</p>
+                <p style="color: #0f172a; font-size: 18px; font-weight: 700; font-family: Consolas, 'Courier New', monospace; letter-spacing: 1px; margin: 4px 0 0;">{{ $loan->loan_code }}</p>
+            </div>
+
+            <!-- Attachment Note -->
+            <div style="background: #f8fafc; border: 1px dashed #94a3b8; border-radius: 8px; padding: 16px; margin: 20px 0;">
+                <p style="margin: 0; color: #334155; font-size: 14px; line-height: 1.5;">
+                    📎 <strong>Lampiran: {{ $attachmentName }}</strong><br>
+                    <span style="color: #64748b; font-size: 13px;">Berisi QR Code, foto verifikasi, dan detail barang yang dipinjam. Unduh/simpan lampiran tersebut sebagai bukti peminjaman Anda.</span>
+                </p>
+            </div>
+
+            @if($downloadUrl)
+            <!-- Download Button (aktif saat komputer petugas online / tunnel berjalan) -->
+            <div style="text-align: center; margin: 26px 0;">
                 <a href="{{ $downloadUrl }}" style="display: inline-block; background: #06b6d4; color: #ffffff; text-decoration: none; padding: 16px 36px; border-radius: 8px; font-size: 16px; font-weight: 600; letter-spacing: 0.3px;">
                     ⬇️ Unduh Bukti Peminjaman (PDF)
                 </a>
                 <p style="color: #94a3b8; font-size: 12px; margin: 12px 0 0 0;">
-                    Klik tombol di atas untuk mengunduh PDF berisi QR Code, data diri, dan detail barang.
+                    Tautan aktif selama komputer petugas terhubung ke internet.<br>
+                    Jika tautan tidak dapat dibuka, gunakan lampiran PDF pada email ini.
                 </p>
             </div>
+            @endif
 
             <!-- Instructions -->
             <div style="background: #ecfeff; border-left: 4px solid #06b6d4; border-radius: 4px; padding: 16px; margin: 20px 0;">
                 <p style="margin: 0; color: #0e7490; font-size: 14px; line-height: 1.5;">
                     <strong>📌 Petunjuk:</strong><br>
-                    1. Unduh bukti peminjaman (PDF) menggunakan tombol di atas.<br>
+                    1. Simpan/unduh lampiran PDF pada email ini sebagai bukti peminjaman.@if($downloadUrl) Anda juga dapat mengunduhnya melalui tombol di atas.@endif<br>
                     2. Barang telah diserahkan kepada Anda (status: Dipinjam).<br>
-                    3. Saat mengembalikan barang, tunjukkan QR Code dari PDF ini kepada petugas untuk verifikasi pengembalian.
+                    3. Saat mengembalikan barang, tunjukkan QR Code di atas (atau dari lampiran PDF) kepada petugas untuk verifikasi pengembalian.<br>
+                    4. Jika QR Code tidak terbaca, sebutkan Kode Peminjaman <strong>{{ $loan->loan_code }}</strong> kepada petugas.
                 </p>
             </div>
 

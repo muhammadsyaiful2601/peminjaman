@@ -21,7 +21,9 @@ const http = require('http');
 
 const APP_TITLE = 'Peminjaman Barang — Politeknik Negeri Padang';
 const PREFERRED_PORT = 8642;
-const TEMPLATE_VERSION = '1.0.7';
+// Naikkan versi template agar instalasi lama menyalin ulang runtime backend
+// (termasuk perbaikan email bukti peminjaman yang dilampirkan langsung).
+const TEMPLATE_VERSION = '1.0.9';
 const isDev = !app.isPackaged;
 
 /* ------------------------------------------------------------------ paths */
@@ -31,15 +33,18 @@ const repoRoot = path.join(__dirname, '..');
 let phpBin;
 let backendTemplate;
 let frontendDist;
+let cloudflaredBin;
 
 if (isDev) {
   phpBin = process.env.DESKTOP_PHP || 'php';
   backendTemplate = path.join(repoRoot, 'backend');
   frontendDist = path.join(repoRoot, 'frontend', 'dist');
+  cloudflaredBin = process.env.DESKTOP_CLOUDFLARED || path.join(__dirname, 'resources', 'cloudflared', 'cloudflared.exe');
 } else {
   phpBin = path.join(process.resourcesPath, 'php', 'php.exe');
   backendTemplate = path.join(process.resourcesPath, 'backend');
   frontendDist = path.join(process.resourcesPath, 'frontend-dist');
+  cloudflaredBin = path.join(process.resourcesPath, 'cloudflared', 'cloudflared.exe');
 }
 
 const userDataDir = app.getPath('userData');
@@ -49,9 +54,12 @@ const configPath = path.join(userDataDir, 'desktop-config.json');
 
 /* ------------------------------------------------------------------ state */
 
-let config = { setupDone: false, preferredPort: null, mail: null, appKey: null };
+let config = { setupDone: false, preferredPort: null, mail: null, appKey: null, desktopKey: null };
 let phpServer = null;
 let queueWorker = null;
+let tunnelProcess = null;
+let tunnelUrl = null;
+let tunnelRetryTimer = null;
 let mainWindow = null;
 let setupWindow = null;
 let splashWindow = null;
@@ -66,6 +74,12 @@ function loadConfig() {
     config = { ...config, ...JSON.parse(fs.readFileSync(configPath, 'utf8')) };
   } catch {
     /* file belum ada -> pakai default */
+  }
+  if (!config.desktopKey) {
+    // Secret untuk endpoint khusus desktop (X-Desktop-Key). Penting saat
+    // server lokal diekspos ke internet melalui tunnel.
+    config.desktopKey = crypto.randomBytes(24).toString('hex');
+    saveConfig();
   }
 }
 
@@ -286,11 +300,15 @@ function phpEnv(extra = {}) {
     DB_CONNECTION: 'sqlite',
     DB_DATABASE: databaseFile,
     DESKTOP_FRONTEND_DIST: frontendDist,
+    DESKTOP_API_KEY: config.desktopKey || '',
     ...mailEnv(config.mail),
   };
   if (backendPort) {
     base.APP_URL = `http://127.0.0.1:${backendPort}`;
     base.FRONTEND_URL = base.APP_URL;
+  }
+  if (tunnelUrl) {
+    base.PUBLIC_APP_URL = tunnelUrl;
   }
   return { ...base, ...extra };
 }
@@ -447,6 +465,90 @@ function killChild(child) {
   }
 }
 
+/* ------------------------------------------------- tunnel internet publik */
+
+/**
+ * Saat kompetur petugas terhubung ke internet, jalankan Cloudflare Quick
+ * Tunnel (cloudflared) sehingga server lokal mendapat URL publik sementara
+ * (https://xxxx.trycloudflare.com). URL ini dipakai sebagai tautan unduh
+ * bukti peminjaman pada email. Tidak perlu akun, VPS, maupun hosting.
+ */
+
+function publicUrlFile() {
+  return path.join(runtimeBackend, 'storage', 'app', 'desktop-public-url.txt');
+}
+
+function persistPublicUrl(url) {
+  try {
+    if (url) {
+      fs.mkdirSync(path.dirname(publicUrlFile()), { recursive: true });
+      fs.writeFileSync(publicUrlFile(), url + '\n', 'utf8');
+    } else {
+      fs.rmSync(publicUrlFile(), { force: true });
+    }
+  } catch {
+    /* abaikan */
+  }
+}
+
+function captureTunnelUrl(chunk) {
+  const match = /https:\/\/[a-z0-9][a-z0-9-]*\.trycloudflare\.com/i.exec(String(chunk));
+  if (!match || match[0] === tunnelUrl) return;
+  tunnelUrl = match[0];
+  persistPublicUrl(tunnelUrl);
+}
+
+function startTunnel() {
+  if (quitting || tunnelProcess || tunnelUrl) return;
+  if (!fs.existsSync(cloudflaredBin)) return;
+  try {
+    tunnelProcess = spawn(
+      cloudflaredBin,
+      ['tunnel', '--no-autoupdate', '--url', `http://127.0.0.1:${backendPort}`],
+      { windowsHide: true },
+    );
+  } catch {
+    tunnelProcess = null;
+    return;
+  }
+  tunnelProcess.stdout.on('data', (d) => captureTunnelUrl(d));
+  tunnelProcess.stderr.on('data', (d) => captureTunnelUrl(d));
+  tunnelProcess.on('error', () => {
+    tunnelProcess = null;
+  });
+  tunnelProcess.on('exit', () => {
+    tunnelProcess = null;
+    if (tunnelUrl) {
+      tunnelUrl = null;
+      persistPublicUrl(null);
+    }
+  });
+}
+
+/** Mulai tunnel + ulangi otomatis bila offline/terputus. */
+function startTunnelSupervisor() {
+  if (!fs.existsSync(cloudflaredBin)) return;
+  startTunnel();
+  if (tunnelRetryTimer) return;
+  tunnelRetryTimer = setInterval(() => {
+    if (quitting) return;
+    if (!tunnelUrl) startTunnel();
+  }, 30000);
+}
+
+function stopTunnel() {
+  if (tunnelRetryTimer) {
+    clearInterval(tunnelRetryTimer);
+    tunnelRetryTimer = null;
+  }
+  if (tunnelProcess) {
+    killChild(tunnelProcess);
+    tunnelProcess = null;
+  }
+  tunnelUrl = null;
+  persistPublicUrl(null);
+}
+
 /* --------------------------------------------------------------- jendela */
 
 function iconPath() {
@@ -578,6 +680,7 @@ function postJson(pathname, body) {
           'Content-Type': 'application/json',
           'Content-Length': data.length,
           Accept: 'application/json',
+          'X-Desktop-Key': config.desktopKey || '',
         },
         timeout: 45000,
       },
@@ -605,6 +708,25 @@ function postJson(pathname, body) {
 }
 
 function registerIpc() {
+  ipcMain.handle('file:save-pdf', async (_event, data) => {
+    try {
+      if (!data || !Array.isArray(data.bytes) || !data.filename) {
+        return { ok: false, message: 'Data file tidak valid.' };
+      }
+      const safeName = String(data.filename).replace(/[<>:"/\\|?*]/g, '-');
+      const result = await dialog.showSaveDialog({
+        title: 'Simpan dokumen PDF',
+        defaultPath: path.join(app.getPath('downloads'), safeName),
+        filters: [{ name: 'Dokumen PDF', extensions: ['pdf'] }],
+      });
+      if (result.canceled || !result.filePath) return { ok: false, canceled: true };
+      fs.writeFileSync(result.filePath, Buffer.from(data.bytes));
+      return { ok: true, filePath: result.filePath };
+    } catch (error) {
+      return { ok: false, message: String(error && error.message ? error.message : error) };
+    }
+  });
+
   ipcMain.handle('report:preview-pdf', async (_event, data) => {
     try {
       if (!data || !Array.isArray(data.bytes)) {
@@ -767,6 +889,7 @@ async function boot() {
 
     bootSucceeded = true;
     startQueueWorker();
+    startTunnelSupervisor();
 
     if (!config.setupDone) createSetupWindow();
     else openMainWindow();
@@ -807,6 +930,7 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   quitting = true;
+  stopTunnel();
   killChild(queueWorker);
   killChild(phpServer);
 });
