@@ -31,8 +31,8 @@ try {
 const APP_TITLE = 'Peminjaman Barang — Politeknik Negeri Padang';
 const PREFERRED_PORT = 8642;
 // Naikkan versi template agar instalasi lama menyalin ulang runtime backend
-// (termasuk perbaikan email bukti peminjaman yang dilampirkan langsung).
-const TEMPLATE_VERSION = '1.0.9';
+// (fitur mode hybrid: popup gear + sinkronisasi MySQL hosting + pdo_mysql).
+const TEMPLATE_VERSION = '1.0.10';
 const isDev = !app.isPackaged;
 
 /* ------------------------------------------------------------------ paths */
@@ -81,6 +81,7 @@ let updateState = { state: 'idle', version: null, percent: 0, message: '' };
 let updatePromptOpen = false;
 let updateCheckInProgress = false;
 let updateCheckTimer = null;
+let syncTimer = null;
 
 function loadConfig() {
   try {
@@ -741,6 +742,54 @@ function stopUpdateSupervisor() {
   }
 }
 
+/* -------------------------------------------------- mode hybrid (sinkron) */
+
+function logSync(message) {
+  try {
+    fs.appendFileSync(
+      path.join(userDataDir, 'hybrid-sync.log'),
+      `[${new Date().toISOString()}] ${message}\n`,
+      'utf8',
+    );
+  } catch {
+    /* abaikan */
+  }
+}
+
+/**
+ * Pemicu sinkronisasi mingguan mode hybrid (SQLite lokal <-> MySQL hosting).
+ * Electron hanya memanggil `php artisan hybrid:sync --due` berkala; logika
+ * "apakah sudah jatuh tempo 7 hari" ditentukan oleh backend sendiri, sehingga
+ * aman dipanggil lebih sering tanpa beban (no-op bila belum waktunya).
+ */
+function startSyncScheduler() {
+  if (isDev) return; // mode dev: jalankan manual lewat `php artisan hybrid:sync`
+
+  const runSyncIfDue = async () => {
+    if (quitting || !bootSucceeded) return;
+    try {
+      const result = await runArtisan(['hybrid:sync', '--due'], { allowFailure: true });
+      const output = `${result.out || ''}${result.err || ''}`.trim();
+      if (output && !output.includes('tidak jatuh tempo')) {
+        logSync(output.slice(-500));
+      }
+    } catch (error) {
+      logSync(`Gagal menjalankan hybrid:sync: ${error && error.message ? error.message : error}`);
+    }
+  };
+
+  // Cek pertama 5 menit setelah aplikasi siap, lalu tiap 6 jam.
+  setTimeout(runSyncIfDue, 5 * 60 * 1000);
+  syncTimer = setInterval(runSyncIfDue, 6 * 60 * 60 * 1000);
+}
+
+function stopSyncScheduler() {
+  if (syncTimer) {
+    clearInterval(syncTimer);
+    syncTimer = null;
+  }
+}
+
 /* --------------------------------------------------------------- jendela */
 
 function iconPath() {
@@ -1010,6 +1059,9 @@ function registerIpc() {
     checkForUpdates({ manual: true });
     return { ok: true };
   });
+
+  // Mode hybrid: kunci X-Desktop-Key untuk request /api/hybrid/* dari SPA.
+  ipcMain.handle('desktop:get-key', () => config.desktopKey || '');
 }
 
 /* ------------------------------------------------------------------ menu */
@@ -1102,6 +1154,7 @@ async function boot() {
     startQueueWorker();
     startTunnelSupervisor();
     startUpdateSupervisor();
+    startSyncScheduler();
 
     if (!config.setupDone) createSetupWindow();
     else openMainWindow();
@@ -1143,6 +1196,7 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   quitting = true;
   stopUpdateSupervisor();
+  stopSyncScheduler();
   stopTunnel();
   killChild(queueWorker);
   killChild(phpServer);

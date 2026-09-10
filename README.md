@@ -87,6 +87,45 @@ Setiap peminjaman baru mengirim email ke peminjam berisi:
 > Tombol unduh hanya valid selama komputer petugas online & aplikasi terbuka; bila tidak dapat
 > dibuka, gunakan lampiran PDF pada email yang sama.
 
+### Mode Hybrid — Cermin Data ke MySQL Hosting
+
+Aplikasi desktop dapat dijalankan dalam **mode hybrid**: SQLite lokal tetap menjadi database
+utama (agar aplikasi tetap jalan offline), sementara salinannya dicerminkan ke database
+**MySQL di hosting** dan disinkronkan dua arah secara berkala.
+
+Pengaturan berada di **tombol gear ⚙ di sudut kiri bawah** aplikasi desktop (khusus desktop),
+yang membuka popup "Hosting & Sinkronisasi" berisi:
+
+- Form koneksi hosting: **Host/Link, Port, Nama Database, Username, Password** MySQL.
+- **Simpan & Tes Koneksi** — menyimpan konfigurasi lalu menguji koneksi ke MySQL hosting.
+- **Migrasi Data ke Hosting** — membuat skema di MySQL (menjalankan migrasi Laravel pada
+  koneksi hosting) lalu menyalin seluruh data lokal sebagai sinkronisasi awal.
+- **Sinkron Sekarang** — sinkronisasi dua arah manual kapan saja.
+- **Aktifkan/Matikan Otomatis** — mengaktifkan sinkronisasi otomatis **setiap minggu** (7 hari);
+  aplikasi desktop memicu pemeriksaan berkala (tiap 6 jam) dan backend menentukan sendiri
+  apakah sudah jatuh tempo, sehingga aman bila komputer sempat mati.
+
+Aturan sinkronisasi (`php artisan hybrid:sync`):
+
+1. Tabel diproses sesuai urutan dependensi: `users` → `items` → `loans` → `loan_items` → `technicians`.
+2. Baris yang hanya ada di satu sisi disalin ke sisi lainnya.
+3. Baris yang ada di kedua sisi dibandingkan lewat kolom `updated_at` — **yang lebih baru menang**;
+   bila waktu tidak tersedia, lokal dianggap sumber utama.
+4. Duplikat kunci alami (`email`, `item_code`, `uuid`) dari sisi berbeda id dicatat sebagai konflik
+   dan dilewati agar tidak merusak relasi.
+
+Endpoint pendukung (dilindungi header `X-Desktop-Key`, tidak publik):
+`GET /api/hybrid/status`, `POST /api/hybrid/config`, `POST /api/hybrid/test`,
+`POST /api/hybrid/migrate`, `POST /api/hybrid/sync`, `POST /api/hybrid/sync-due`,
+`POST /api/hybrid/toggle`. Konfigurasi tersimpan di `storage/app/hybrid.json` (desktop)
+dan runtime PHP bawaan sudah mengaktifkan ekstensi `pdo_mysql`.
+
+> Tombol gear hanya muncul pada aplikasi desktop versi **1.0.4** ke atas.
+
+> Catatan: foto peminjaman/barang tetap tersimpan sebagai file di komputer lokal; yang
+> tersinkron adalah data (termasuk path fotonya). Untuk backup file, gunakan folder
+> `storage/app/public` pada rutinitas backup komputer.
+
 ### Akun dan Hak Akses
 
 | Fitur | Admin | Asisten |

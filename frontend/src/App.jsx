@@ -2,6 +2,7 @@ import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-
 import { useAuth } from './context/AuthContext'
 import useIdleTimeout from './hooks/useIdleTimeout'
 import Layout from './components/Layout'
+import HybridSettings from './components/HybridSettings'
 import Login from './pages/Login'
 import ForgotPassword from './pages/ForgotPassword'
 import ResetPassword from './pages/ResetPassword'
@@ -62,6 +63,7 @@ function App() {
   return (
     <>
       <IdleTimeoutHandler />
+      <HybridSettings />
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />

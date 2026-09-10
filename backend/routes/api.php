@@ -4,6 +4,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\HybridController;
 use App\Http\Controllers\Api\ItemController;
 use App\Http\Controllers\Api\LoanController;
 use App\Http\Controllers\Api\UserController;
@@ -63,6 +64,21 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/technicians/{technician}', [TechnicianController::class, 'update']);
         Route::delete('/technicians/{technician}', [TechnicianController::class, 'destroy']);
     });
+});
+
+// ---------------------------------------------------------------------
+// Mode Hybrid: cermin data SQLite lokal ke MySQL hosting (popup gear
+// di sudut kanan bawah aplikasi desktop). Dilindungi X-Desktop-Key
+// karena server lokal bisa terekspos internet melalui tunnel.
+// ---------------------------------------------------------------------
+Route::middleware('desktop.key')->prefix('hybrid')->group(function () {
+    Route::get('/status', [HybridController::class, 'status']);
+    Route::post('/config', [HybridController::class, 'saveConfig']);
+    Route::post('/test', [HybridController::class, 'testConfig']);
+    Route::post('/migrate', [HybridController::class, 'migrate']);
+    Route::post('/sync', [HybridController::class, 'syncNow']);
+    Route::post('/sync-due', [HybridController::class, 'syncDue']);
+    Route::post('/toggle', [HybridController::class, 'toggle']);
 });
 
 // ---------------------------------------------------------------------

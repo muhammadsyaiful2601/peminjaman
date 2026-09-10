@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('desktop', {
   saveSetup: (payload) => ipcRenderer.invoke('setup:save', payload),
   testMail: (payload) => ipcRenderer.invoke('setup:test', payload),
   skipSetup: () => ipcRenderer.invoke('setup:skip'),
+  getDesktopKey: () => ipcRenderer.invoke('desktop:get-key'),
   getUpdateState: () => ipcRenderer.invoke('update:get-state'),
   checkForUpdates: () => ipcRenderer.invoke('update:check'),
   onUpdateState: (callback) => {

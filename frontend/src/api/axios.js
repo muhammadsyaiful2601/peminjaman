@@ -7,11 +7,23 @@ const api = axios.create({
   },
 })
 
-// Add token to requests
-api.interceptors.request.use((config) => {
+// Add token + desktop key to requests
+api.interceptors.request.use(async (config) => {
   const token = localStorage.getItem('token')
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
+  }
+  // Mode hybrid: endpoint /api/hybrid/* dilindungi X-Desktop-Key yang
+  // hanya diketahui aplikasi desktop (dijembatani lewat preload).
+  try {
+    if (window.desktop?.getDesktopKey) {
+      const key = await window.desktop.getDesktopKey()
+      if (key) {
+        config.headers['X-Desktop-Key'] = key
+      }
+    }
+  } catch {
+    /* di luar desktop: abaikan */
   }
   return config
 })
