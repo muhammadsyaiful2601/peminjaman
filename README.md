@@ -45,6 +45,7 @@ Website dan desktop memakai source frontend, API, migration, seeder, dan aturan 
 - Laporan peminjaman dapat difilter (status, tanggal, teknisi), dicetak resmi, dan diunduh sebagai PDF.
 - Peminjaman resmi mendukung peminjaman skala besar dengan surat PDF dan banyak barang.
 - Waktu aplikasi menggunakan WIB (`Asia/Jakarta`).
+- Versi desktop **1.0.3+** dapat memperbarui otomatis dari GitHub Releases di latar belakang (popup restart bila siap).
 
 ## Fitur
 
@@ -616,8 +617,6 @@ git diff -- . ':!desktop/release'
 ```
 
 Untuk repository baru:
-- Email bukti peminjaman: QR inline PNG + kode `PJM-YYYY-XXXX` + lampiran PDF (selalu ada).
-- Tautan unduh di email (desktop online / website publik): `GET /api/loans/qr/{uuid}/download`.
 
 ```powershell
 git init
@@ -630,7 +629,10 @@ git push -u origin main
 
 Ganti URL remote dengan repository Anda. Gunakan Personal Access Token atau Git Credential Manager, bukan password GitHub biasa.
 
-Installer `.exe` sebaiknya dibagikan melalui GitHub Release, bukan di-commit ke source. Setelah `npm run dist`, buat tag seperti `v1.0.1`, buat Release, lalu upload installer dari `desktop/release/` sebagai Release Asset.
+Installer `.exe` dibagikan melalui **GitHub Release** (bukan di-commit ke source). Setelah
+`npm run dist`, buat tag seperti `v1.0.4`, buat Release, lalu upload **tiga file** dari
+`desktop/release/` sebagai Release Asset: installer `.exe`, `latest.yml`, dan `.exe.blockmap`
+(yang dua terakhir dibutuhkan untuk fitur auto-update — lihat [Pembaruan Otomatis](#aplikasi-desktop-electron)).
 
 ## Keamanan Secret
 
@@ -657,6 +659,10 @@ Tidak ada Dockerfile, konfigurasi Nginx/Apache, atau pipeline CI/CD di repositor
 
 ## Aplikasi Desktop (Electron)
 
+Aplikasi ini juga tersedia sebagai **aplikasi desktop Windows offline** di folder `desktop/`:
+PHP runtime + SQLite dibundel, jadi tidak perlu XAMPP/Laragon atau server. Fitur email
+tetap dapat dipakai saat komputer terhubung internet (dikonfigurasi lewat wizard saat
+pertama kali dibuka, dapat dibuka ulang via menu **Aplikasi → Pengaturan Email**).
 
 ### Unduh bukti publik saat komputer petugas online (tanpa VPS/hosting)
 
@@ -681,10 +687,40 @@ Catatan:
 - File pendukung: `backend/app/Support/PublicUrl.php`, `backend/app/Support/QrPng.php`,
   `backend/app/Mail/LoanQrCode.php`, `desktop/main.js` (tunnel manager),
   `desktop/scripts/prepare-cloudflared.ps1`, dan test `LoanQrCodeMailTest.php`.
-Aplikasi ini juga tersedia sebagai **aplikasi desktop Windows offline** di folder `desktop/`:
-PHP runtime + SQLite dibundel, jadi tidak perlu XAMPP/Laragon atau server. Fitur email
-tetap dapat dipakai saat komputer terhubung internet (dikonfigurasi lewat wizard saat
-pertama kali dibuka, dapat dibuka ulang via menu **Aplikasi → Pengaturan Email**).
+
+### Pembaruan Otomatis (Auto-Update)
+
+Sejak versi **1.0.3**, aplikasi desktop yang terinstal dapat memperbarui **otomatis**
+dari GitHub Releases — tidak perlu install ulang manual setiap kali ada perbaikan:
+
+1. Saat aplikasi dibuka, di latar belakang aplikasi periksa versi baru di GitHub
+   (ulangi periodik setiap 4 jam; juga bisa di-trigger via **Aplikasi → Periksa Pembaruan**).
+2. Bila versi baru tersedia → installer diunduh **di latar belakang** tanpa berhenti
+   kerja petugas; status tersedia via menu **Aplikasi → Instal Pembaruan**.
+3. Bila download selesai → aplikasi menampilkan **popup "Pembaruan Siap"** dengan dua pilihan:
+   **Restart Sekarang** (instal otomatis via `quitAndInstall`) atau **Nanti**
+   (instal terjadi otomatis saat aplikasi ditutup). Data
+   (`%APPDATA%\Peminjaman Barang PNP`) tetap bertahan tanpa hilang.
+4. Log pembaruan ditulis ke `%APPDATA%\Peminjaman Barang PNP\update.log`.
+
+> **Instal pertama:** versi ≤1.0.2 yang sudah terinstal belum berisi modul pembaruan,
+> jadi perlu diinstal ulang **manual** ke 1.0.3 sebanyak satu kali. Setelah itu semua
+> versi berikutnya dapat diinstal otomatis dari GitHub.
+
+Publikasi versi baru (untuk developer):
+
+```powershell
+cd frontend
+npm run build
+cd ../desktop
+npm install
+npm run dist:publish      # memerlukan GH_TOKEN di lingkungan (Personal Access Token)
+```
+
+> `npm run dist:publish` mengunduh `cloudflared`, build installer, lalu **upload otomatis**
+> `Setup*.exe`, `latest.yml`, dan `*.exe.blockmap` sebagai GitHub Release (bila `GH_TOKEN`
+> diset). Upload manual juga boleh: buat Release/tag `v1.0.4` dan upload ketiga file dari
+> `desktop/release/`. File `latest.yml` wajib hadir agar versi lama bisa deteksi pembaruan.
 
 ```powershell
 cd desktop

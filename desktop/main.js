@@ -19,6 +19,15 @@ const crypto = require('crypto');
 const net = require('net');
 const http = require('http');
 
+// Pembaruan otomatis dari GitHub Releases (electron-updater). Kosong saat
+// paket tidak bisa dilaya (mode dev) — fitur tetap aktif pada versi terinstal.
+let autoUpdater = null;
+try {
+  autoUpdater = require('electron-updater').autoUpdater;
+} catch {
+  autoUpdater = null;
+}
+
 const APP_TITLE = 'Peminjaman Barang — Politeknik Negeri Padang';
 const PREFERRED_PORT = 8642;
 // Naikkan versi template agar instalasi lama menyalin ulang runtime backend
@@ -68,6 +77,10 @@ let bootSucceeded = false;
 let quitting = false;
 let restartingBackend = false;
 let phpServerError = '';
+let updateState = { state: 'idle', version: null, percent: 0, message: '' };
+let updatePromptOpen = false;
+let updateCheckInProgress = false;
+let updateCheckTimer = null;
 
 function loadConfig() {
   try {
@@ -549,6 +562,185 @@ function stopTunnel() {
   persistPublicUrl(null);
 }
 
+/* ------------------------------------------------------------- auto update */
+
+/**
+ * Pembaruan otomatis dari GitHub Releases (electron-updater).
+ *
+ * Alur:
+ *   1. Saat app dibuka, periksa pembaruan di latar belakang (ulangi setiap 4 jam).
+ *   2. Bila versi baru tersedia -> diunduh otomatis di latar belakang.
+ *   3. Bila download selesai -> popup: "Restart Sekarang / Nanti".
+ *   4. Restart -> quitAndInstall(); Nanti -> instal terjadi otomatis saat app ditutup
+ *      (autoInstallOnAppQuit). Data dan setup aplikasi tetap bertahan.
+ *
+ * Versi baru harus publikasi sebagai GitHub Release (file .exe + latest.yml +
+ * .blockmap) agar bisa dideteksi oleh versi lama yang sudah terinstal.
+ */
+
+function sendUpdateState() {
+  try {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('update:state-push', updateState);
+    }
+  } catch {
+    /* jendela belum siap */
+  }
+}
+
+function setUpdateState(patch) {
+  const wasReady = updateState.state === 'ready';
+  updateState = { ...updateState, ...patch };
+  sendUpdateState();
+  const isReady = updateState.state === 'ready';
+  if (wasReady !== isReady && !isDev) {
+    // Menu "Instal Pembaruan" berubah disabled <-> enabled bila state siap.
+    try {
+      buildMenu();
+    } catch {
+      /* menu belum dibangun */
+    }
+  }
+}
+
+function logUpdate(message) {
+  try {
+    fs.appendFileSync(path.join(userDataDir, 'update.log'), `[${new Date().toISOString()}] ${message}\n`, 'utf8');
+  } catch {
+    /* abaikan */
+  }
+}
+
+function installUpdate() {
+  if (quitting || !autoUpdater) return;
+  try {
+    autoUpdater.quitAndInstall();
+  } catch (error) {
+    dialog.showErrorBox('Gagal Menginstal Pembaruan', String(error && error.message ? error.message : error));
+  }
+}
+
+function promptUpdateReady(version) {
+  if (updatePromptOpen || quitting) return;
+  updatePromptOpen = true;
+  dialog
+    .showMessageBox({
+      type: 'question',
+      title: 'Pembaruan Siap — Peminjaman Barang PNP',
+      message: `Versi baru ${version || ''} sudah diunduh di latar belakang.`,
+      detail:
+        'Restart aplikasi sekarang untuk menginstal pembaruan? Instalasi berjalan ' +
+        'otomatis; setelah selesai aplikasi buka kembali. Bila memilih Nanti, ' +
+        'pembaruan diinstal saat aplikasi ditutup.',
+      buttons: ['Restart Sekarang', 'Nanti'],
+      defaultButton: 1,
+      cancelId: 1,
+      noLink: true,
+    })
+    .then((choice) => {
+      updatePromptOpen = false;
+      if (choice === 0) installUpdate();
+    })
+    .catch(() => {
+      updatePromptOpen = false;
+    });
+}
+
+function configureAutoUpdater() {
+  if (isDev || !autoUpdater) return;
+  autoUpdater.autoDownload = true; // pengunduh di latar belakang
+  autoUpdater.autoInstallOnAppQuit = true; // instal otomatis bila app ditutup & sudah unduh
+
+  autoUpdater.on('checking-for-update', () => {
+    setUpdateState({ state: 'checking', version: null, percent: 0, message: '' });
+  });
+  autoUpdater.on('update-available', (info) => {
+    const version = info && info.version ? info.version : '';
+    setUpdateState({ state: 'downloading', version, percent: 0, message: '' });
+    logUpdate(`Pembaruan ${version} tersedia — pengunduh di latar belakang.`);
+  });
+  autoUpdater.on('update-not-available', () => {
+    setUpdateState({ state: 'up-to-date', version: null, percent: 0, message: '' });
+  });
+  autoUpdater.on('download-progress', (progress) => {
+    const percent = progress && typeof progress.percent === 'number' ? Math.round(progress.percent) : updateState.percent;
+    setUpdateState({ state: 'downloading', percent });
+  });
+  autoUpdater.on('update-downloaded', (info) => {
+    const version = info && info.version ? info.version : '';
+    setUpdateState({ state: 'ready', version, percent: 100, message: '' });
+    logUpdate(`Pembaruan ${version} siap diinstal.`);
+    promptUpdateReady(version);
+  });
+  autoUpdater.on('error', (error) => {
+    const message = String(error && error.message ? error.message : error);
+    setUpdateState({ state: 'error', message });
+    logUpdate(`Periksa pembaruan gagal: ${message}`);
+  });
+}
+
+async function checkForUpdates({ manual = false } = {}) {
+  if (isDev || !autoUpdater) {
+    if (manual) {
+      await dialog.showMessageBox({
+        type: 'info',
+        title: 'Periksa Pembaruan',
+        message: 'Periksa pembaruan otomatis hanya aktif pada versi aplikasi yang terinstal.',
+        detail: 'Mode pengembangan/portable tidak mendukung fitur pembaruan otomatis.',
+        buttons: ['OK'],
+      });
+    }
+    return;
+  }
+  if (updateCheckInProgress) return;
+  updateCheckInProgress = true;
+  setUpdateState({ state: 'checking' });
+  try {
+    const result = await autoUpdater.checkForUpdates();
+    // result null = sudah terbaru; truthy = pembaruan tersedia (bila autoDownload
+    // aktif, event update-downloaded sudah membuka prompt restart sendiri).
+    if (manual && !result) {
+      await dialog.showMessageBox({
+        type: 'info',
+        title: 'Periksa Pembaruan',
+        message: `Aplikasi sudah versi terbaru (${app.getVersion()}).`,
+        buttons: ['OK'],
+      });
+    }
+  } catch (error) {
+    const message = String(error && error.message ? error.message : error);
+    setUpdateState({ state: 'error', message });
+    logUpdate(`Periksa pembaruan gagal: ${message}`);
+    if (manual) {
+      await dialog.showMessageBox({
+        type: 'warning',
+        title: 'Periksa Pembaruan',
+        message: 'Gagal periksa pembaruan.',
+        detail: message,
+        buttons: ['OK'],
+      });
+    }
+  } finally {
+    updateCheckInProgress = false;
+  }
+}
+
+function startUpdateSupervisor() {
+  if (isDev || !autoUpdater) return;
+  // Periksa pertama beberapa saat setelah aplikasi siap (server lokal + email
+  // dulu), lalu secara periodik setiap 4 jam di latar belakang. Saat komputer
+  // offline, error didengono silent dan periksa berikutnya tetap dijalankan.
+  setTimeout(() => checkForUpdates(), 20000);
+  updateCheckTimer = setInterval(() => checkForUpdates(), 4 * 60 * 60 * 1000);
+}
+
+function stopUpdateSupervisor() {
+  if (updateCheckTimer) {
+    clearInterval(updateCheckTimer);
+    updateCheckTimer = null;
+  }
+}
+
 /* --------------------------------------------------------------- jendela */
 
 function iconPath() {
@@ -812,6 +1004,12 @@ function registerIpc() {
     saveConfig();
     return { ok: true };
   });
+
+  ipcMain.handle('update:get-state', () => ({ ...updateState }));
+  ipcMain.handle('update:check', () => {
+    checkForUpdates({ manual: true });
+    return { ok: true };
+  });
 }
 
 /* ------------------------------------------------------------------ menu */
@@ -830,6 +1028,18 @@ function buildMenu() {
               return;
             }
             createSetupWindow();
+          },
+        },
+        { type: 'separator' },
+        {
+          label: 'Periksa Pembaruan…',
+          click: () => checkForUpdates({ manual: true }),
+        },
+        {
+          label: updateState.state === 'ready' ? 'Instal Pembaruan Siap…' : 'Instal Pembaruan…',
+          enabled: updateState.state === 'ready',
+          click: () => {
+            if (updateState.state === 'ready') installUpdate();
           },
         },
         { type: 'separator' },
@@ -866,6 +1076,7 @@ function buildMenu() {
 
 async function boot() {
   loadConfig();
+  configureAutoUpdater();
   createSplash();
 
   try {
@@ -890,6 +1101,7 @@ async function boot() {
     bootSucceeded = true;
     startQueueWorker();
     startTunnelSupervisor();
+    startUpdateSupervisor();
 
     if (!config.setupDone) createSetupWindow();
     else openMainWindow();
@@ -930,6 +1142,7 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   quitting = true;
+  stopUpdateSupervisor();
   stopTunnel();
   killChild(queueWorker);
   killChild(phpServer);

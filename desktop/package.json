@@ -1,18 +1,26 @@
 {
   "name": "peminjaman-pnp-desktop",
   "productName": "Peminjaman Barang PNP",
-  "version": "1.0.2",
-  "description": "Aplikasi Desktop Sistem Peminjaman Barang Politeknik Negeri Padang (offline, tanpa XAMPP/Laragon)",
+  "version": "1.0.3",
+  "description": "Aplikasi Desktop Sistem Peminjaman Barang Politeknik Negeri Padang (offline, tanpa XAMPP/Laragon) — dengan pembaruan otomatis dari GitHub Releases",
   "main": "main.js",
   "author": "Politeknik Negeri Padang",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/muhammadsyaiful2601/peminjaman.git"
+  },
   "private": true,
   "scripts": {
     "start": "electron .",
     "icons": "node scripts/generate-icons.mjs",
     "prepare-build": "node scripts/prepare-build.mjs",
     "prepare-cloudflared": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-cloudflared.ps1",
-    "dist": "npm run icons && npm run prepare-cloudflared && npm run prepare-build && electron-builder"
+    "dist": "npm run icons && npm run prepare-cloudflared && npm run prepare-build && electron-builder",
+    "dist:publish": "npm run icons && npm run prepare-cloudflared && npm run prepare-build && electron-builder --publish always"
+  },
+  "dependencies": {
+    "electron-updater": "6.3.9"
   },
   "devDependencies": {
     "electron": "^33.2.0",
@@ -59,7 +67,9 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "build/icon.ico"
@@ -71,7 +81,17 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Peminjaman Barang PNP",
-      "installerLanguages": ["id_ID", "en_US"]
+      "installerLanguages": [
+        "id_ID",
+        "en_US"
+      ]
     }
-  }
+  },
+  "publish": [
+    {
+      "provider": "github",
+      "owner": "muhammadsyaiful2601",
+      "repo": "peminjaman"
+    }
+  ]
 }

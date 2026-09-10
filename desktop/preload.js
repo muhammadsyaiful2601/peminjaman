@@ -16,4 +16,12 @@ contextBridge.exposeInMainWorld('desktop', {
   saveSetup: (payload) => ipcRenderer.invoke('setup:save', payload),
   testMail: (payload) => ipcRenderer.invoke('setup:test', payload),
   skipSetup: () => ipcRenderer.invoke('setup:skip'),
+  getUpdateState: () => ipcRenderer.invoke('update:get-state'),
+  checkForUpdates: () => ipcRenderer.invoke('update:check'),
+  onUpdateState: (callback) => {
+    const channel = 'update:state-push';
+    ipcRenderer.removeAllListeners(channel);
+    ipcRenderer.on(channel, (_event, state) => callback(state));
+    return () => ipcRenderer.removeAllListeners(channel);
+  },
 });
