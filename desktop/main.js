@@ -649,12 +649,14 @@ function stopTunnel() {
 /**
  * Pembaruan otomatis dari GitHub Releases (electron-updater).
  *
- * Alur:
- *   1. Saat app dibuka, periksa pembaruan di latar belakang (ulangi setiap 4 jam).
- *   2. Bila versi baru tersedia -> diunduh otomatis di latar belakang.
- *   3. Bila download selesai -> popup: "Restart Sekarang / Nanti".
- *   4. Restart -> quitAndInstall(); Nanti -> instal terjadi otomatis saat app ditutup
- *      (autoInstallOnAppQuit). Data dan setup aplikasi tetap bertahan.
+ * Alur (manual, stil Play Store):
+ *   1. Saat app dibuka, periksa versi baru di latar belakang (ulangi setiap 4 jam).
+ *   2. Bila versi baru tersedia -> muncul di menu gear ("Pembaruan Aplikasi").
+ *   3. Pengunduh HANYA berjalan setelah user klik "Pengunduh & Instal"
+ *      (progress bar ditampilkan).
+ *   4. Download selesai -> tunggu 6 detik -> quitAndInstall(true, true):
+ *      instal SENYAP (tanpa wizard NSIS) lalu aplikasi dibuka otomatis
+ *      dengan versi baru. Data dan setup aplikasi tetap bertahan.
  *
  * Versi baru harus publikasi sebagai GitHub Release (file .exe + latest.yml +
  * .blockmap) agar bisa dideteksi oleh versi lama yang sudah terinstal.
@@ -753,7 +755,11 @@ function configureAutoUpdater() {
   //  - Pengunduh hanya setelah user klik "Pengunduh & Instal" di menu gear.
   updateState.currentVersion = String(app.getVersion() || '');
   autoUpdater.autoDownload = false;
-  autoUpdater.autoInstallOnAppQuit = true; // bila sudah diunduh & app ditutup, instal
+  // Instal HANYA lewat tombol "Pengunduh & Instal" (yang selalu senyap via
+  // quitAndInstall(true, true)). autoInstallOnAppQuit dimatikan supaya tidak
+  // ada jalur instalasi lain yang bisa memunculkan wizard NSIS saat app
+  // ditutup — pembaruan murni manual stil Play Store.
+  autoUpdater.autoInstallOnAppQuit = false;
 
   autoUpdater.on('checking-for-update', () => {
     setUpdateState({ state: 'checking', version: null, percent: 0, message: '' });
