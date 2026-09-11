@@ -1,6 +1,12 @@
 # Skrip: unduh & siapkan PHP portable Windows untuk dibundel ke installer.
 # Jalankan SEKALI sebelum build:  powershell -ExecutionPolicy Bypass -File scripts\prepare-php.ps1
 $ErrorActionPreference = 'Stop'
+# PowerShell 5.1 default belum mengaktifkan TLS 1.2
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+# WAJIB: tanpa ini, Invoke-WebRequest menggambar progress bar per-byte
+# dan unduhan ~30MB bisa memakan 20-40 menit di runner CI.
+$ProgressPreference = 'SilentlyContinue'
 
 # PowerShell 5.1 default belum mengaktifkan TLS 1.2
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
