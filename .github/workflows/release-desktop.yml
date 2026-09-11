@@ -1,0 +1,93 @@
+name: Release Desktop
+
+# Tujuan: setiap kali versi di desktop/package.json dinaikkan lalu di-push,
+# workflow ini otomatis membangun installer dan mempublikasikannya sebagai
+# GitHub Release (v{versi}). Aplikasi yang sudah terinstall (versi lebih lama)
+# akan mendeteksi release baru secara otomatis (saat dibuka / tiap 4 jam) dan
+# menampilkan tombol "Unduh & Instal" di menu gear (stil Play Store).
+#
+# Push biasa tanpa perubahan versi akan dilewati cepat (gate release sudah ada).
+
+on:
+  push:
+    branches:
+      - Syaiful
+      - main
+      - master
+  workflow_dispatch:
+
+concurrency:
+  group: release-desktop-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup PHP + Composer (backend Laravel)
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, xml, ctype, curl, dom, fileinfo, gd, openssl, pdo_mysql, pdo_sqlite, sqlite3, zip, intl, exif, iconv
+          tools: composer:v2
+
+      - name: Baca versi aplikasi (desktop/package.json)
+        id: ver
+        shell: bash
+        run: echo "version=$(node -p "require('./desktop/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Lewati bila release untuk versi ini sudah ada
+        id: gate
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "v${{ steps.ver.outputs.version }}" --repo "${{ github.repository }}" > /dev/null 2>&1; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "[gate] Release v${{ steps.ver.outputs.version }} sudah ada -> build/publish dilewati."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "[gate] Release v${{ steps.ver.outputs.version }} belum ada -> build dijalankan."
+          fi
+
+      - name: Composer install backend (tanpa dev)
+        if: steps.gate.outputs.skip != 'true'
+        working-directory: backend
+        run: composer install --no-dev --prefer-dist --no-interaction --no-progress
+
+      - name: Build frontend
+        if: steps.gate.outputs.skip != 'true'
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Siapkan runtime PHP portable untuk installer
+        if: steps.gate.outputs.skip != 'true'
+        working-directory: desktop
+        shell: pwsh
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-php.ps1
+
+      - name: Build installer & publish ke GitHub Releases
+        if: steps.gate.outputs.skip != 'true'
+        working-directory: desktop
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: npm run dist:publish
+
+      - name: Ringkasan
+        if: steps.gate.outputs.skip != 'true'
+        shell: bash
+        run: echo "Release v${{ steps.ver.outputs.version }} dipublikasikan. Komputer yang terinstall versi lama akan mendeteksinya dalam <= 4 jam atau saat aplikasi dibuka, lalu menampilkan tombol Unduh & Instal di menu gear."
