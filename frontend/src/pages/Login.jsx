@@ -76,7 +76,7 @@ function Login() {
           </div>
 
           <h1 className="text-4xl font-bold text-slate-900 leading-tight mb-4">
-            Sistem Peminjaman Barang.
+            Sistem Peminjaman Barang
           </h1>
           <p className="text-slate-500 leading-relaxed mb-8">
             kelola peminjaman,
