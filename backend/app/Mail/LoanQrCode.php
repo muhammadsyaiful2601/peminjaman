@@ -11,6 +11,7 @@ use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Storage;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
 use Symfony\Component\Mime\Email;
 use Symfony\Component\Mime\Part\DataPart;
@@ -95,7 +96,9 @@ class LoanQrCode extends Mailable
         $qrDataUri = 'data:image/svg+xml;base64,' . base64_encode($qrSvg);
 
         $photoDataUri = null;
-        $photoPath = storage_path('app/public/' . $this->loan->borrow_photo);
+        $photoPath = $this->loan->borrow_photo
+            ? Storage::disk('public')->path($this->loan->borrow_photo)
+            : null;
         if ($this->loan->borrow_photo && file_exists($photoPath)) {
             $photoData = file_get_contents($photoPath);
             $photoDataUri = 'data:image/jpeg;base64,' . base64_encode($photoData);

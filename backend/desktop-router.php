@@ -19,7 +19,14 @@
 $uri = urldecode((string) (parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/'));
 
 $publicDir = __DIR__ . DIRECTORY_SEPARATOR . 'public';
-$storagePublicDir = __DIR__ . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'app' . DIRECTORY_SEPARATOR . 'public';
+// Lokasi file unggahan: aplikasi desktop mengirim DESKTOP_UPLOAD_PATH (folder
+// uploads persisten yang selamat dari update/reinstall); tanpa env, pakai
+// lokasi klasik storage/app/public.
+$uploadDirFromEnv = getenv('DESKTOP_UPLOAD_PATH');
+$storageClassicDir = __DIR__ . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'app' . DIRECTORY_SEPARATOR . 'public';
+$storagePublicDir = ($uploadDirFromEnv !== false && trim($uploadDirFromEnv) !== '')
+    ? rtrim(trim($uploadDirFromEnv), '/\\')
+    : $storageClassicDir;
 $distDir = rtrim((string) getenv('DESKTOP_FRONTEND_DIST'), DIRECTORY_SEPARATOR);
 
 /** Pastikan path hasil realpath tetap di dalam direktori dasar (anti path-traversal). */
@@ -78,12 +85,16 @@ if ($uri !== '/' && is_file($publicDir . $uri) && desktopRouterInside($publicDir
     return false;
 }
 
-// Laravel storage:link menunjuk ke storage/app/public, yang berada di luar public/.
-// Sajikan file upload secara eksplisit agar foto tetap tampil di aplikasi desktop.
+// File upload dilayani eksplisit agar foto tetap tampil di aplikasi desktop,
+// sekalipun junction/symlink `public/storage` belum terpasang. Cari di folder
+// unggahan utama (env desktop) lalu di lokasi klasik sebagai cadangan.
 if (str_starts_with($uri, '/storage/')) {
-    $storageFile = $storagePublicDir . DIRECTORY_SEPARATOR . ltrim(substr($uri, strlen('/storage/')), '/\\');
-    if (is_file($storageFile) && desktopRouterInside($storagePublicDir, $storageFile)) {
-        return desktopRouterServe($storageFile);
+    $relative = ltrim(substr($uri, strlen('/storage/')), '/\\');
+    foreach (array_unique([$storagePublicDir, $storageClassicDir]) as $candidateDir) {
+        $storageFile = $candidateDir . DIRECTORY_SEPARATOR . $relative;
+        if (is_file($storageFile) && desktopRouterInside($candidateDir, $storageFile)) {
+            return desktopRouterServe($storageFile);
+        }
     }
 }
 

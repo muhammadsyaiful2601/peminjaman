@@ -40,7 +40,10 @@ return [
 
         'public' => [
             'driver' => 'local',
-            'root' => storage_path('app/public'),
+            // Aplikasi desktop mengarahkan folder unggahan ke lokasi yang
+            // persisten lintas update/reinstall (env diisi Electron main.js).
+            // Tanpa env (web/dev), perilaku klasik dipertahankan.
+            'root' => env('DESKTOP_UPLOAD_PATH', storage_path('app/public')),
             'url' => rtrim(env('APP_URL', 'http://localhost'), '/').'/storage',
             'visibility' => 'public',
             'throw' => false,

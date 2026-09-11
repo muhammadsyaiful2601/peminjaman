@@ -32,8 +32,10 @@ const APP_TITLE = 'Peminjaman Barang — Politeknik Negeri Padang';
 const PREFERRED_PORT = 8642;
 // Naikkan versi template agar instalasi lama menyalin ulang runtime backend
 // (fitur mode hybrid: popup gear + sinkronisasi MySQL hosting + pdo_mysql;
-//  berikutnya: penegakan storage:link via junction saat boot).
-const TEMPLATE_VERSION = '1.0.12';
+//  penegakan storage:link via junction saat boot; 1.0.13: disk "public"
+//  diarahkan ke folder uploads persisten — perbaikan bug "gambar hilang
+//  setelah install ulang").
+const TEMPLATE_VERSION = '1.0.13';
 const isDev = !app.isPackaged;
 
 /* ------------------------------------------------------------------ paths */
@@ -61,6 +63,14 @@ const userDataDir = app.getPath('userData');
 const runtimeBackend = isDev ? backendTemplate : path.join(userDataDir, 'app', 'backend');
 const databaseFile = path.join(userDataDir, 'peminjaman.sqlite');
 const configPath = path.join(userDataDir, 'desktop-config.json');
+// Folder file unggahan (foto barang, foto peminjam, foto pengembalian).
+// Sengaja di LUAR folder runtime backend: folder itu dihapus & disalin ulang
+// dari template setiap kali versi template naik / aplikasi diinstal ulang,
+// sehingga foto ikut hilang (bug "gambar hilang setelah install ulang").
+// Di mode dev tetap memakai lokasi klasik repo backend.
+const uploadsDir = isDev
+  ? path.join(backendTemplate, 'storage', 'app', 'public')
+  : path.join(userDataDir, 'uploads');
 
 /* ------------------------------------------------------------------ state */
 
@@ -267,17 +277,16 @@ function ensureRuntimeBackend() {
   if (current === TEMPLATE_VERSION && fs.existsSync(path.join(runtimeBackend, 'artisan'))) return;
 
   // Simpan data milik pengguna sebelum template disalin ulang:
-  //   - .env                : APP_KEY & kredensial mail (dipulihkan agar setup
-  //                           tidak diminta ulang setelah update)
-  //   - storage/app/public  : file unggahan (foto barang/peminjaman)
+  //   - .env : APP_KEY & kredensial mail (dipulihkan agar setup tidak
+  //            diminta ulang setelah update).
+  // File unggahan TIDAK diselamatkan di sini karena sudah dipindahkan ke
+  // folder uploads persisten oleh migrateLegacyUploads() (dipanggil di boot()
+  // sebelum fungsi ini), sehingga aman dari rm -rf folder runtime.
   const oldEnvPath = path.join(runtimeBackend, '.env');
-  const oldPublicPath = path.join(runtimeBackend, 'storage', 'app', 'public');
   const keepDir = path.join(userDataDir, '.template-keep');
   fs.rmSync(keepDir, { recursive: true, force: true });
   const hadEnv = fs.existsSync(oldEnvPath);
-  const hadPublic = fs.existsSync(oldPublicPath);
   if (hadEnv) fs.cpSync(oldEnvPath, path.join(keepDir, '.env'));
-  if (hadPublic) fs.cpSync(oldPublicPath, path.join(keepDir, 'storage-app-public'), { recursive: true });
 
   fs.rmSync(path.join(userDataDir, 'app'), { recursive: true, force: true });
   fs.mkdirSync(path.dirname(runtimeBackend), { recursive: true });
@@ -288,12 +297,31 @@ function ensureRuntimeBackend() {
 
   // Pulihkan data pengguna di atas template yang baru.
   if (hadEnv) fs.cpSync(path.join(keepDir, '.env'), oldEnvPath);
-  if (hadPublic) {
-    fs.rmSync(oldPublicPath, { recursive: true, force: true });
-    fs.cpSync(path.join(keepDir, 'storage-app-public'), oldPublicPath, { recursive: true });
-  }
   fs.rmSync(keepDir, { recursive: true, force: true });
   fs.writeFileSync(marker, TEMPLATE_VERSION, 'utf8');
+}
+
+/**
+ * Pindahkan file unggahan dari lokasi lama (di dalam runtime backend yang
+ * ikut terhapus saat template disalin ulang) ke folder uploads persisten.
+ * Aman dijalankan di setiap boot: entri yang sudah ada di tujuan dilewati,
+ * dan kegagalan migrasi tidak menghentikan boot aplikasi.
+ */
+function migrateLegacyUploads() {
+  if (isDev) return;
+  const legacy = path.join(runtimeBackend, 'storage', 'app', 'public');
+  try {
+    if (!fs.existsSync(legacy)) return;
+    fs.mkdirSync(uploadsDir, { recursive: true });
+    for (const entry of fs.readdirSync(legacy, { withFileTypes: true })) {
+      const src = path.join(legacy, entry.name);
+      const dst = path.join(uploadsDir, entry.name);
+      if (fs.existsSync(dst)) continue;
+      fs.cpSync(src, dst, { recursive: true, force: false });
+    }
+  } catch (e) {
+    console.warn('[boot] migrasi file unggahan dilewati:', e && e.message);
+  }
 }
 
 function validateInstalledResources() {
@@ -326,6 +354,8 @@ function ensureWritableDirectories() {
   ]) {
     fs.mkdirSync(path.join(runtimeBackend, relative), { recursive: true });
   }
+  // Folder unggahan persisten (foto barang/peminjaman/pengembalian).
+  fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
 /**
@@ -340,7 +370,7 @@ function ensureWritableDirectories() {
  */
 function storageLinkIsValid() {
   const linkPath = path.join(runtimeBackend, 'public', 'storage');
-  const targetDir = path.join(runtimeBackend, 'storage', 'app', 'public');
+  const targetDir = uploadsDir;
   try {
     const st = fs.lstatSync(linkPath);
     // Junction/symlink : resolve ke target kanonik dan bandingkan keduanya.
@@ -358,7 +388,7 @@ function storageLinkIsValid() {
 
 function ensureStorageLink() {
   const linkPath = path.join(runtimeBackend, 'public', 'storage');
-  const targetDir = path.join(runtimeBackend, 'storage', 'app', 'public');
+  const targetDir = uploadsDir;
   fs.mkdirSync(targetDir, { recursive: true });
 
   if (storageLinkIsValid()) return;
@@ -398,6 +428,8 @@ function phpEnv(extra = {}) {
     DB_DATABASE: databaseFile,
     DESKTOP_FRONTEND_DIST: frontendDist,
     DESKTOP_API_KEY: config.desktopKey || '',
+    // Root disk "public" Laravel: folder unggahan persisten (lihat uploadsDir).
+    DESKTOP_UPLOAD_PATH: uploadsDir,
     ...mailEnv(config.mail),
   };
   if (backendPort) {
@@ -1335,10 +1367,13 @@ async function boot() {
 
   try {
     validateInstalledResources();
+    // Selamatkan file unggahan lama SEBELUM runtime backend disalin ulang.
+    migrateLegacyUploads();
     await ensureRuntimeBackend();
     ensureWritableDirectories();
     // Jalankan `storage:link` secara otomatis pada tiap boot — meliputi
-    // instalasi pertama maupun update — dengan fallback junction (tanpa admin).
+    // instalasi pertama maupun update — dengan fallback junction (tanpa admin);
+    // junction diarahkan ke folder uploads persisten.
     ensureStorageLink();
 
     backendPort = await pickPort(config.preferredPort);

@@ -12,6 +12,7 @@ use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
 use Smalot\PdfParser\Parser as PdfParser;
@@ -382,7 +383,9 @@ class LoanController extends Controller
 
         // Get borrower photo as base64 for PDF embedding
         $photoDataUri = null;
-        $photoPath = storage_path('app/public/' . $loan->borrow_photo);
+        $photoPath = $loan->borrow_photo
+            ? Storage::disk('public')->path($loan->borrow_photo)
+            : null;
         if ($loan->borrow_photo && file_exists($photoPath)) {
             $photoData = file_get_contents($photoPath);
             $photoDataUri = 'data:image/jpeg;base64,' . base64_encode($photoData);
