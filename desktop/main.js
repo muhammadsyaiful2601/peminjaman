@@ -33,7 +33,7 @@ const PREFERRED_PORT = 8642;
 // Naikkan versi template agar instalasi lama menyalin ulang runtime backend
 // (fitur mode hybrid: popup gear + sinkronisasi MySQL hosting + pdo_mysql;
 //  berikutnya: penegakan storage:link via junction saat boot).
-const TEMPLATE_VERSION = '1.0.11';
+const TEMPLATE_VERSION = '1.0.12';
 const isDev = !app.isPackaged;
 
 /* ------------------------------------------------------------------ paths */
@@ -78,8 +78,7 @@ let bootSucceeded = false;
 let quitting = false;
 let restartingBackend = false;
 let phpServerError = '';
-let updateState = { state: 'idle', version: null, percent: 0, message: '' };
-let updatePromptOpen = false;
+let updateState = { state: 'idle', version: null, percent: 0, message: '', currentVersion: '' };
 let updateCheckInProgress = false;
 let updateCheckTimer = null;
 let syncTimer = null;
@@ -650,12 +649,10 @@ function sendUpdateState() {
 }
 
 function setUpdateState(patch) {
-  const wasReady = updateState.state === 'ready';
   updateState = { ...updateState, ...patch };
   sendUpdateState();
-  const isReady = updateState.state === 'ready';
-  if (wasReady !== isReady && !isDev) {
-    // Menu "Instal Pembaruan" berubah disabled <-> enabled bila state siap.
+  if (!isDev) {
+    // Menu "Pengunduh/Instal Pembaruan" berubah enabled/disabled menurut state.
     try {
       buildMenu();
     } catch {
@@ -681,44 +678,57 @@ function installUpdate() {
   }
 }
 
-function promptUpdateReady(version) {
-  if (updatePromptOpen || quitting) return;
-  updatePromptOpen = true;
-  dialog
-    .showMessageBox({
-      type: 'question',
-      title: 'Pembaruan Siap — Peminjaman Barang PNP',
-      message: `Versi baru ${version || ''} sudah diunduh di latar belakang.`,
-      detail:
-        'Restart aplikasi sekarang untuk menginstal pembaruan? Instalasi berjalan ' +
-        'otomatis; setelah selesai aplikasi buka kembali. Bila memilih Nanti, ' +
-        'pembaruan diinstal saat aplikasi ditutup.',
-      buttons: ['Restart Sekarang', 'Nanti'],
-      defaultButton: 1,
-      cancelId: 1,
-      noLink: true,
-    })
-    .then((choice) => {
-      updatePromptOpen = false;
-      if (choice === 0) installUpdate();
-    })
-    .catch(() => {
-      updatePromptOpen = false;
-    });
+/**
+ * Pengunduh pembaruan MANUAL dari menu gear/menu aplikasi.
+ * Tidak ada pengunduh otomatis — versi baru hanya dideteksi dan diunduh
+ * setelah user klik "Pengunduh & Instal" (stil Play Store).
+ */
+async function downloadUpdate({ manual = false } = {}) {
+  if (isDev || !autoUpdater) {
+    if (manual) {
+      await dialog.showMessageBox({
+        type: 'info',
+        title: 'Pengunduh Pembaruan',
+        message: 'Pengunduh pembaruan hanya aktif pada versi aplikasi yang terinstal.',
+        detail: 'Mode pengembangan/portable tidak mendukung fitur pembaruan.',
+        buttons: ['OK'],
+      });
+    }
+    return;
+  }
+  if (updateState.state === 'downloading' || updateState.state === 'ready') return;
+  if (updateState.state !== 'available') {
+    // Belum ada versi yang dideteksi -> periksa terlebih dahulu di latar belakang.
+    await checkForUpdates({ manual });
+    if (updateState.state !== 'available' && updateState.state !== 'downloading') return;
+  }
+  try {
+    setUpdateState({ state: 'downloading', percent: 0 });
+    logUpdate(`Pengunduh pembaruan ${updateState.version || ''} dimulai (manual).`);
+    await autoUpdater.downloadUpdate();
+  } catch (error) {
+    const message = String(error && error.message ? error.message : error);
+    setUpdateState({ state: 'error', message });
+    logUpdate(`Pengunduh pembaruan gagal: ${message}`);
+  }
 }
 
 function configureAutoUpdater() {
   if (isDev || !autoUpdater) return;
-  autoUpdater.autoDownload = true; // pengunduh di latar belakang
-  autoUpdater.autoInstallOnAppQuit = true; // instal otomatis bila app ditutup & sudah unduh
+  // Pembaruan MANUAL (stil Play Store):
+  //  - Periksa versi tetap berjalan di latar belakang (menu gear diisi).
+  //  - Pengunduh hanya setelah user klik "Pengunduh & Instal" di menu gear.
+  updateState.currentVersion = String(app.getVersion() || '');
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = true; // bila sudah diunduh & app ditutup, instal
 
   autoUpdater.on('checking-for-update', () => {
     setUpdateState({ state: 'checking', version: null, percent: 0, message: '' });
   });
   autoUpdater.on('update-available', (info) => {
     const version = info && info.version ? info.version : '';
-    setUpdateState({ state: 'downloading', version, percent: 0, message: '' });
-    logUpdate(`Pembaruan ${version} tersedia — pengunduh di latar belakang.`);
+    setUpdateState({ state: 'available', version, percent: 0, message: '' });
+    logUpdate(`Pembaruan ${version} tersedia (pengunduh manual).`);
   });
   autoUpdater.on('update-not-available', () => {
     setUpdateState({ state: 'up-to-date', version: null, percent: 0, message: '' });
@@ -731,12 +741,11 @@ function configureAutoUpdater() {
     const version = info && info.version ? info.version : '';
     setUpdateState({ state: 'ready', version, percent: 100, message: '' });
     logUpdate(`Pembaruan ${version} siap diinstal.`);
-    promptUpdateReady(version);
   });
   autoUpdater.on('error', (error) => {
     const message = String(error && error.message ? error.message : error);
     setUpdateState({ state: 'error', message });
-    logUpdate(`Periksa pembaruan gagal: ${message}`);
+    logUpdate(`Pembaruan gagal: ${message}`);
   });
 }
 
@@ -758,13 +767,21 @@ async function checkForUpdates({ manual = false } = {}) {
   setUpdateState({ state: 'checking' });
   try {
     const result = await autoUpdater.checkForUpdates();
-    // result null = sudah terbaru; truthy = pembaruan tersedia (bila autoDownload
-    // aktif, event update-downloaded sudah membuka prompt restart sendiri).
+    // result null = sudah terbaru; truthy = pembaruan tersedia. Saat mode
+    // manual, pengunduh tidak dimulai — user diunduh sendiri dari menu gear.
     if (manual && !result) {
       await dialog.showMessageBox({
         type: 'info',
         title: 'Periksa Pembaruan',
         message: `Aplikasi sudah versi terbaru (${app.getVersion()}).`,
+        buttons: ['OK'],
+      });
+    } else if (manual && result) {
+      await dialog.showMessageBox({
+        type: 'info',
+        title: 'Pembaruan Tersedia',
+        message: `Versi baru ${result.version} tersedia.`,
+        detail: 'Pergi ke menu Pengaturan (tombol gear di sudut kiri bawah) lalu klik "Pengunduh & Instal".',
         buttons: ['OK'],
       });
     }
@@ -788,9 +805,11 @@ async function checkForUpdates({ manual = false } = {}) {
 
 function startUpdateSupervisor() {
   if (isDev || !autoUpdater) return;
-  // Periksa pertama beberapa saat setelah aplikasi siap (server lokal + email
-  // dulu), lalu secara periodik setiap 4 jam di latar belakang. Saat komputer
-  // offline, error didengono silent dan periksa berikutnya tetap dijalankan.
+  // Periksa versi pertama beberapa saat setelah aplikasi siap (server lokal +
+  // email dulu), lalu secara periodik setiap 4 jam di latar belakang. Periksa
+  // hanya DETEKSI versi — tidak ada pengunduh otomatis; result ditampilkan
+  // di menu gear dan user memilih sendiri kapan diunduh. Saat komputer offline,
+  // error didengono silent dan periksa berikutnya tetap dijalankan.
   setTimeout(() => checkForUpdates(), 20000);
   updateCheckTimer = setInterval(() => checkForUpdates(), 4 * 60 * 60 * 1000);
 }
@@ -1120,6 +1139,16 @@ function registerIpc() {
     return { ok: true };
   });
 
+  // Pembaruan manual (menu gear): diunduh & instal hanya saat user klik.
+  ipcMain.handle('update:download', () => {
+    downloadUpdate({ manual: true });
+    return { ok: true };
+  });
+  ipcMain.handle('update:install', () => {
+    installUpdate();
+    return { ok: true };
+  });
+
   // Mode hybrid: kunci X-Desktop-Key untuk request /api/hybrid/* dari SPA.
   ipcMain.handle('desktop:get-key', () => config.desktopKey || '');
 }
@@ -1146,6 +1175,11 @@ function buildMenu() {
         {
           label: 'Periksa Pembaruan…',
           click: () => checkForUpdates({ manual: true }),
+        },
+        {
+          label: updateState.state === 'available' ? `Pengunduh Pembaruan ${updateState.version}…` : 'Pengunduh Pembaruan…',
+          enabled: updateState.state === 'available',
+          click: () => downloadUpdate({ manual: true }),
         },
         {
           label: updateState.state === 'ready' ? 'Instal Pembaruan Siap…' : 'Instal Pembaruan…',

@@ -1,8 +1,8 @@
 {
   "name": "peminjaman-pnp-desktop",
   "productName": "Peminjaman Barang PNP",
-  "version": "1.0.5",
-  "description": "Aplikasi Desktop Sistem Peminjaman Barang Politeknik Negeri Padang (offline, tanpa XAMPP/Laragon) — dengan pembaruan otomatis dari GitHub Releases",
+  "version": "1.0.6",
+  "description": "Aplikasi Desktop Sistem Peminjaman Barang Politeknik Negeri Padang (offline, tanpa XAMPP/Laragon) — pembaruan manual dari GitHub Releases (menu gear).",
   "main": "main.js",
   "author": "Muhammad Syaiful (24)",
   "license": "MIT",

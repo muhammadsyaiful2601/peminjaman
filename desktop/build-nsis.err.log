@@ -1,0 +1,11 @@
+
+D:\coding\peminjaman-2\peminjaman\desktop\node_modules\builder-util\src\log.ts:93
+        fieldValue = fieldValue.replace(/\n\s*\n/g, `\n${valuePadding}`)
+                                ^
+RangeError: Invalid string length
+    at String.replace (<anonymous>)
+    at Logger.createMessage (D:\coding\peminjaman-2\peminjaman\desktop\node_modules\builder-util\src\log.ts:93:33)
+    at Logger._doLog (D:\coding\peminjaman-2\peminjaman\desktop\node_modules\builder-util\src\log.ts:74:30)
+    at Logger.doLog (D:\coding\peminjaman-2\peminjaman\desktop\node_modules\builder-util\src\log.ts:59:12)
+    at Logger.error (D:\coding\peminjaman-2\peminjaman\desktop\node_modules\builder-util\src\log.ts:42:10)
+    at D:\coding\peminjaman-2\peminjaman\desktop\node_modules\electron-builder\src\cli\cli.ts:60:15

@@ -19,6 +19,8 @@ contextBridge.exposeInMainWorld('desktop', {
   getDesktopKey: () => ipcRenderer.invoke('desktop:get-key'),
   getUpdateState: () => ipcRenderer.invoke('update:get-state'),
   checkForUpdates: () => ipcRenderer.invoke('update:check'),
+  downloadUpdate: () => ipcRenderer.invoke('update:download'),
+  installUpdate: () => ipcRenderer.invoke('update:install'),
   onUpdateState: (callback) => {
     const channel = 'update:state-push';
     ipcRenderer.removeAllListeners(channel);
