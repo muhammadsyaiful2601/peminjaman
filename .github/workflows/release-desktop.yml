@@ -47,18 +47,24 @@ jobs:
         shell: bash
         run: echo "version=$(node -p "require('./desktop/package.json').version")" >> "$GITHUB_OUTPUT"
 
-      - name: Lewati bila release untuk versi ini sudah ada
+      - name: Lewati bila release untuk versi ini sudah ada (termasuk draft)
         id: gate
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view "v${{ steps.ver.outputs.version }}" --repo "${{ github.repository }}" > /dev/null 2>&1; then
+          TAG="v${{ steps.ver.outputs.version }}"
+          # gh release view TIDAK menemukan draft (endpoint /releases/tags/ tidak
+          # mengenali draft), makanya dicek lewat REST API yang mencakup draft.
+          N=$(curl -s -H "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/repos/${{ github.repository }}/releases" \
+            | jq -r --arg t "$TAG" '[.[] | select(.tag_name == $t)] | length')
+          if [ "$N" != "0" ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "[gate] Release v${{ steps.ver.outputs.version }} sudah ada -> build/publish dilewati."
+            echo "[gate] Release $TAG sudah ada (draft/rilis final) -> build/publish dilewati."
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
-            echo "[gate] Release v${{ steps.ver.outputs.version }} belum ada -> build dijalankan."
+            echo "[gate] Release $TAG belum ada -> build dijalankan."
           fi
 
       - name: Composer install backend (tanpa dev)
@@ -91,6 +97,35 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: npm run dist:publish
+
+      # electron-builder kerap meninggalkan release sebagai DRAFT (finalize
+      # un-draft tidak selalu tereksekusi). Draft tidak terlihat oleh
+      # electron-updater, jadi step ini memastikan rilis benar-benar tayang.
+      - name: Publikasikan release (ubah draft menjadi rilis final)
+        if: steps.gate.outputs.skip != 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="v${{ steps.ver.outputs.version }}"
+          for i in 1 2 3 4 5 6 7 8; do
+            ID=$(curl -s -H "Authorization: Bearer $GH_TOKEN" \
+              "https://api.github.com/repos/${{ github.repository }}/releases" \
+              | jq -r --arg t "$TAG" '[.[] | select(.tag_name == $t and .draft == true)][0].id // empty')
+            if [ -z "$ID" ]; then
+              echo "[publish] Tidak ada draft $TAG (kemungkinan sudah rilis final)."
+              break
+            fi
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" -X PATCH \
+              -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+              -d '{"draft": false}' "https://api.github.com/repos/${{ github.repository }}/releases/$ID")
+            if [ "$CODE" = "200" ]; then
+              echo "[publish] Release $TAG dipublikasikan (draft -> rilis final)."
+              break
+            fi
+            echo "[publish] Percobaan $i gagal (HTTP $CODE), diulang 10 detik lagi..."
+            sleep 10
+          done
 
       - name: Ringkasan
         if: steps.gate.outputs.skip != 'true'
