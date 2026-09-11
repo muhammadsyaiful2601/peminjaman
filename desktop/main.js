@@ -82,6 +82,8 @@ let updateState = { state: 'idle', version: null, percent: 0, message: '', curre
 let updateCheckInProgress = false;
 let updateCheckTimer = null;
 let updateInstallTimer = null;
+let updatePopupShown = false;   // popup "versi baru tersedia" sedang tampil
+let manualCheckInProgress = false; // periksa manual lewat gear (punya dialog sendiri)
 let syncTimer = null;
 
 function loadConfig() {
@@ -651,7 +653,9 @@ function stopTunnel() {
  *
  * Alur (manual, stil Play Store):
  *   1. Saat app dibuka, periksa versi baru di latar belakang (ulangi setiap 4 jam).
- *   2. Bila versi baru tersedia -> muncul di menu gear ("Pembaruan Aplikasi").
+ *   2. Bila versi baru tersedia -> POPUP otomatis muncul + tampil di menu
+ *      gear ("Pembaruan Aplikasi"). Bila tidak ada versi baru, popup tidak
+ *      muncul sama sekali (senyap).
  *   3. Pengunduh HANYA berjalan setelah user klik "Pengunduh & Instal"
  *      (progress bar ditampilkan).
  *   4. Download selesai -> tunggu 6 detik -> quitAndInstall(true, true):
@@ -714,6 +718,43 @@ function installUpdate() {
 }
 
 /**
+ * Popup otomatis "versi baru tersedia".
+ * Muncul pada pemeriksaan otomatis — saat aplikasi dibuka (±20 detik setelah
+ * tampil) dan setiap kali pemindaian 4 jam menemukan versi baru. Bila tidak
+ * ada versi baru, popup tidak muncul sama sekali (senyap).
+ *
+ * Popup TIDAK muncul saat: periksa manual lewat gear (punya dialog sendiri),
+ * sedang mengunduh / menunggu instal, atau jendela utama belum siap
+ * (mis. wizard konfigurasi awal sedang tampil).
+ */
+async function announceUpdateAvailable(version) {
+  if (manualCheckInProgress || updatePopupShown) return;
+  if (updateState.state !== 'available') return;
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  updatePopupShown = true;
+  try {
+    const choice = await dialog.showMessageBox(mainWindow, {
+      type: 'info',
+      title: 'Pembaruan Tersedia — Peminjaman Barang PNP',
+      message: `Versi baru ${version} tersedia.`,
+      detail:
+        'Aplikasi akan mengunduh pembaruan di latar belakang, lalu dimulai ulang\n' +
+        'otomatis untuk memasangnya. Data Anda tetap aman.\n\n' +
+        'Bila memilih "Nanti", unduh kapan saja lewat tombol gear (menu Pengaturan).',
+      buttons: ['Unduh & Instal', 'Nanti'],
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true,
+    });
+    if (choice.response === 0 && updateState.state === 'available') {
+      await downloadUpdate({ manual: false });
+    }
+  } finally {
+    updatePopupShown = false;
+  }
+}
+
+/**
  * Pengunduh pembaruan MANUAL dari menu gear/menu aplikasi.
  * Tidak ada pengunduh otomatis — versi baru hanya dideteksi dan diunduh
  * setelah user klik "Pengunduh & Instal" (stil Play Store).
@@ -768,6 +809,9 @@ function configureAutoUpdater() {
     const version = info && info.version ? info.version : '';
     setUpdateState({ state: 'available', version, percent: 0, message: '' });
     logUpdate(`Pembaruan ${version} tersedia (pengunduh manual).`);
+    // Popup otomatis: hanya muncul bila benar-benar ada versi baru; tetap
+    // senyap bila aplikasi sudah versi terbaru.
+    announceUpdateAvailable(version);
   });
   autoUpdater.on('update-not-available', () => {
     setUpdateState({ state: 'up-to-date', version: null, percent: 0, message: '' });
@@ -816,6 +860,7 @@ async function checkForUpdates({ manual = false } = {}) {
   }
   if (updateCheckInProgress) return;
   updateCheckInProgress = true;
+  if (manual) manualCheckInProgress = true;
   setUpdateState({ state: 'checking' });
   try {
     const result = await autoUpdater.checkForUpdates();
@@ -829,13 +874,22 @@ async function checkForUpdates({ manual = false } = {}) {
         buttons: ['OK'],
       });
     } else if (manual && result) {
-      await dialog.showMessageBox({
+      const choice = await dialog.showMessageBox({
         type: 'info',
         title: 'Pembaruan Tersedia',
         message: `Versi baru ${result.version} tersedia.`,
-        detail: 'Pergi ke menu Pengaturan (tombol gear di sudut kiri bawah) lalu klik "Pengunduh & Instal".',
-        buttons: ['OK'],
+        detail:
+          'Aplikasi akan mengunduh pembaruan di latar belakang, lalu dimulai ulang\n' +
+          'otomatis untuk memasangnya. Data Anda tetap aman.\n\n' +
+          'Bila memilih "Nanti", unduh kapan saja lewat tombol gear (menu Pengaturan).',
+        buttons: ['Unduh & Instal', 'Nanti'],
+        defaultId: 0,
+        cancelId: 1,
+        noLink: true,
       });
+      if (choice.response === 0 && updateState.state === 'available') {
+        await downloadUpdate({ manual: true });
+      }
     }
   } catch (error) {
     const message = String(error && error.message ? error.message : error);
@@ -852,6 +906,7 @@ async function checkForUpdates({ manual = false } = {}) {
     }
   } finally {
     updateCheckInProgress = false;
+    manualCheckInProgress = false;
   }
 }
 
@@ -859,9 +914,10 @@ function startUpdateSupervisor() {
   if (isDev || !autoUpdater) return;
   // Periksa versi pertama beberapa saat setelah aplikasi siap (server lokal +
   // email dulu), lalu secara periodik setiap 4 jam di latar belakang. Periksa
-  // hanya DETEKSI versi — tidak ada pengunduh otomatis; result ditampilkan
-  // di menu gear dan user memilih sendiri kapan diunduh. Saat komputer offline,
-  // error didengono silent dan periksa berikutnya tetap dijalankan.
+  // hanya DETEKSI versi: bila ada versi baru -> popup otomatis muncul; bila
+  // tidak ada -> tetap senyap (tidak ada popup). Pengunduh tetap manual lewat
+  // popup/tombol gear. Saat komputer offline, error didengono silent dan
+  // periksa berikutnya tetap dijalankan.
   setTimeout(() => checkForUpdates(), 20000);
   updateCheckTimer = setInterval(() => checkForUpdates(), 4 * 60 * 60 * 1000);
 }
