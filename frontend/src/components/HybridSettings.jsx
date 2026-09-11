@@ -248,7 +248,10 @@ function HybridSettings() {
                     {updateState.state === 'ready' && (
                       <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-2">
                         <p className="text-emerald-700 font-medium">
-                          Pengunduh selesai — versi {updateState.version || ''}. Siap diinstal.
+                          Pengunduhan selesai — versi {updateState.version || ''}.
+                        </p>
+                        <p className="text-emerald-600 mt-1">
+                          Aplikasi akan dimulai ulang otomatis beberapa detik lagi untuk memasang pembaruan. Data Anda tetap aman.
                         </p>
                         <button
                           type="button"
@@ -256,7 +259,7 @@ function HybridSettings() {
                           className="mt-1.5 inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700"
                         >
                           <Settings className="h-3.5 w-3.5" />
-                          Restart &amp; Instal
+                          Restart &amp; Instal Sekarang
                         </button>
                       </div>
                     )}

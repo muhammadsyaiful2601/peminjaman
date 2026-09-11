@@ -81,6 +81,7 @@ let phpServerError = '';
 let updateState = { state: 'idle', version: null, percent: 0, message: '', currentVersion: '' };
 let updateCheckInProgress = false;
 let updateCheckTimer = null;
+let updateInstallTimer = null;
 let syncTimer = null;
 
 function loadConfig() {
@@ -263,12 +264,33 @@ function ensureRuntimeBackend() {
   }
   if (current === TEMPLATE_VERSION && fs.existsSync(path.join(runtimeBackend, 'artisan'))) return;
 
+  // Simpan data milik pengguna sebelum template disalin ulang:
+  //   - .env                : APP_KEY & kredensial mail (dipulihkan agar setup
+  //                           tidak diminta ulang setelah update)
+  //   - storage/app/public  : file unggahan (foto barang/peminjaman)
+  const oldEnvPath = path.join(runtimeBackend, '.env');
+  const oldPublicPath = path.join(runtimeBackend, 'storage', 'app', 'public');
+  const keepDir = path.join(userDataDir, '.template-keep');
+  fs.rmSync(keepDir, { recursive: true, force: true });
+  const hadEnv = fs.existsSync(oldEnvPath);
+  const hadPublic = fs.existsSync(oldPublicPath);
+  if (hadEnv) fs.cpSync(oldEnvPath, path.join(keepDir, '.env'));
+  if (hadPublic) fs.cpSync(oldPublicPath, path.join(keepDir, 'storage-app-public'), { recursive: true });
+
   fs.rmSync(path.join(userDataDir, 'app'), { recursive: true, force: true });
   fs.mkdirSync(path.dirname(runtimeBackend), { recursive: true });
   fs.cpSync(backendTemplate, runtimeBackend, {
     recursive: true,
     filter: (src) => envFilter(path.relative(backendTemplate, src).replace(/\\/g, '/')),
   });
+
+  // Pulihkan data pengguna di atas template yang baru.
+  if (hadEnv) fs.cpSync(path.join(keepDir, '.env'), oldEnvPath);
+  if (hadPublic) {
+    fs.rmSync(oldPublicPath, { recursive: true, force: true });
+    fs.cpSync(path.join(keepDir, 'storage-app-public'), oldPublicPath, { recursive: true });
+  }
+  fs.rmSync(keepDir, { recursive: true, force: true });
   fs.writeFileSync(marker, TEMPLATE_VERSION, 'utf8');
 }
 
@@ -669,10 +691,21 @@ function logUpdate(message) {
   }
 }
 
+function cancelScheduledInstall() {
+  if (updateInstallTimer) {
+    clearTimeout(updateInstallTimer);
+    updateInstallTimer = null;
+  }
+}
+
 function installUpdate() {
   if (quitting || !autoUpdater) return;
+  cancelScheduledInstall();
   try {
-    autoUpdater.quitAndInstall();
+    logUpdate('Menginstal pembaruan secara senyap lalu memulai ulang aplikasi...');
+    // isSilent=true      : tanpa wizard NSIS (tidak terasa seperti instal ulang)
+    // isForceRunAfter=true : aplikasi dibuka otomatis begitu instal selesai
+    autoUpdater.quitAndInstall(true, true);
   } catch (error) {
     dialog.showErrorBox('Gagal Menginstal Pembaruan', String(error && error.message ? error.message : error));
   }
@@ -739,8 +772,21 @@ function configureAutoUpdater() {
   });
   autoUpdater.on('update-downloaded', (info) => {
     const version = info && info.version ? info.version : '';
-    setUpdateState({ state: 'ready', version, percent: 100, message: '' });
-    logUpdate(`Pembaruan ${version} siap diinstal.`);
+    setUpdateState({
+      state: 'ready',
+      version,
+      percent: 100,
+      message: 'Aplikasi akan dimulai ulang otomatis beberapa detik lagi. Data Anda tetap aman.',
+    });
+    logUpdate(`Pembaruan ${version} siap diinstal. Memulai ulang otomatis dalam 6 detik...`);
+    // Alur stil Play Store: setelah unduhan selesai, aplikasi menutup dirinya
+    // lalu terbuka kembali dengan versi baru — instal senyap tanpa wizard dan
+    // tanpa setup ulang (data di AppData tidak disentuh installer).
+    cancelScheduledInstall();
+    updateInstallTimer = setTimeout(() => {
+      updateInstallTimer = null;
+      installUpdate();
+    }, 6000);
   });
   autoUpdater.on('error', (error) => {
     const message = String(error && error.message ? error.message : error);
@@ -1292,6 +1338,7 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   quitting = true;
+  cancelScheduledInstall();
   stopUpdateSupervisor();
   stopSyncScheduler();
   stopTunnel();
