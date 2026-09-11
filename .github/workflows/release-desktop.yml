@@ -73,6 +73,11 @@ jobs:
           npm ci
           npm run build
 
+      - name: Install dependensi desktop
+        if: steps.gate.outputs.skip != 'true'
+        working-directory: desktop
+        run: npm ci
+
       - name: Siapkan runtime PHP portable untuk installer
         if: steps.gate.outputs.skip != 'true'
         working-directory: desktop
