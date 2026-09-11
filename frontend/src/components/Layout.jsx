@@ -221,6 +221,14 @@ function Layout() {
         <main className="flex-1 p-4 md:p-8">
           <Outlet />
         </main>
+
+        {/* Footer */}
+        <footer className="border-t border-slate-200 bg-white px-4 md:px-8 py-3">
+          <p className="text-xs text-slate-400 text-center md:text-right">
+            © {new Date().getFullYear()} Sistem Peminjaman Barang — Politeknik Negeri Padang.
+            Dikembangkan oleh <span className="font-medium text-slate-500">Muhammad Syaiful (24)</span>
+          </p>
+        </footer>
       </div>
     </div>
   )

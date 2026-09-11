@@ -31,8 +31,9 @@ try {
 const APP_TITLE = 'Peminjaman Barang — Politeknik Negeri Padang';
 const PREFERRED_PORT = 8642;
 // Naikkan versi template agar instalasi lama menyalin ulang runtime backend
-// (fitur mode hybrid: popup gear + sinkronisasi MySQL hosting + pdo_mysql).
-const TEMPLATE_VERSION = '1.0.10';
+// (fitur mode hybrid: popup gear + sinkronisasi MySQL hosting + pdo_mysql;
+//  berikutnya: penegakan storage:link via junction saat boot).
+const TEMPLATE_VERSION = '1.0.11';
 const isDev = !app.isPackaged;
 
 /* ------------------------------------------------------------------ paths */
@@ -301,6 +302,65 @@ function ensureWritableDirectories() {
     'bootstrap/cache',
   ]) {
     fs.mkdirSync(path.join(runtimeBackend, relative), { recursive: true });
+  }
+}
+
+/**
+ * Pastikan `public/storage` tersedia sejak instalasi/update pertama, tanpa
+ * bergantung pada privilege symlink Windows (Developer Mode / admin).
+ *
+ * Strategi:
+ *   1. `php artisan storage:link` tetap dicoba terlebih dahulu (tautan klasik).
+ *   2. Jika tautan tidak valid/putus, buat *junction* Windows via
+ *      `fs.symlinkSync(type: 'junction')` — tidak membutuhkan admin.
+ *   3. Fallback terakhir: salin isi folder sebagai direktori biasa.
+ */
+function storageLinkIsValid() {
+  const linkPath = path.join(runtimeBackend, 'public', 'storage');
+  const targetDir = path.join(runtimeBackend, 'storage', 'app', 'public');
+  try {
+    const st = fs.lstatSync(linkPath);
+    // Junction/symlink : resolve ke target kanonik dan bandingkan keduanya.
+    if (st.isSymbolicLink()) {
+      return (
+        fs.realpathSync(linkPath).toLowerCase() ===
+        fs.realpathSync(targetDir).toLowerCase()
+      );
+    }
+    return st.isDirectory(); // direktori biasa (hasil salinan cadangan)
+  } catch {
+    return false;
+  }
+}
+
+function ensureStorageLink() {
+  const linkPath = path.join(runtimeBackend, 'public', 'storage');
+  const targetDir = path.join(runtimeBackend, 'storage', 'app', 'public');
+  fs.mkdirSync(targetDir, { recursive: true });
+
+  if (storageLinkIsValid()) return;
+
+  // Bersihkan entri lama yang rusak (symlink putus / file biasa).
+  try {
+    const st = fs.lstatSync(linkPath);
+    if (st.isSymbolicLink() || !st.isDirectory()) {
+      fs.rmSync(linkPath, { force: true });
+    }
+  } catch {
+    /* belum ada — aman */
+  }
+
+  fs.mkdirSync(path.dirname(linkPath), { recursive: true });
+
+  try {
+    // Junction Windows tidak butuh admin (berbeda dengan symlink). Node
+    // menandai junction sebagai symbolic-link sehingga isDirectory() tetap
+    // benar dan realpathSync menunjuk ke folder target.
+    fs.symlinkSync(targetDir, linkPath, 'junction');
+  } catch (_e) {
+    // Perangkat tak mendukung junction -> salin isi sebagai cadangan.
+    fs.mkdirSync(linkPath, { recursive: true });
+    fs.cpSync(targetDir, linkPath, { recursive: true });
   }
 }
 
@@ -1135,6 +1195,9 @@ async function boot() {
     validateInstalledResources();
     await ensureRuntimeBackend();
     ensureWritableDirectories();
+    // Jalankan `storage:link` secara otomatis pada tiap boot — meliputi
+    // instalasi pertama maupun update — dengan fallback junction (tanpa admin).
+    ensureStorageLink();
 
     backendPort = await pickPort(config.preferredPort);
     config.preferredPort = backendPort;
