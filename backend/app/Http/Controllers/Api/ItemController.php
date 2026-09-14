@@ -11,7 +11,7 @@ class ItemController extends Controller
 {
     public function index(Request $request)
     {
-        $query = Item::query();
+        $query = Item::with('images');
 
         if ($request->has('search')) {
             $search = $request->search;
@@ -38,6 +38,7 @@ class ItemController extends Controller
             'category' => ['required', 'string', 'max:255'],
             'stock' => ['required', 'integer', 'min:0'],
             'image' => ['nullable', 'image', 'max:5012'],
+            'images.*' => ['nullable', 'image', 'max:5012'],
         ]);
 
         $validated['item_code'] = $this->generateItemCode($validated['category']);
@@ -47,6 +48,8 @@ class ItemController extends Controller
         }
 
         $item = Item::create($validated);
+        $this->storeAdditionalImages($request, $item);
+        $item->load('images');
 
         return response()->json([
             'message' => 'Barang berhasil ditambahkan',
@@ -56,6 +59,8 @@ class ItemController extends Controller
 
     public function show(Item $item)
     {
+        $item->load('images');
+
         return response()->json([
             'item' => $item,
         ]);
@@ -67,7 +72,8 @@ class ItemController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'category' => ['required', 'string', 'max:255'],
             'stock' => ['required', 'integer', 'min:0'],
-            'image' => ['nullable', 'image', 'max:2048'],
+            'image' => ['nullable', 'image', 'max:5012'],
+            'images.*' => ['nullable', 'image', 'max:5012'],
         ]);
 
         if ($item->category !== $validated['category']) {
@@ -79,6 +85,8 @@ class ItemController extends Controller
         }
 
         $item->update($validated);
+        $this->storeAdditionalImages($request, $item);
+        $item->load('images');
 
         return response()->json([
             'message' => 'Barang berhasil diperbarui',
@@ -118,5 +126,14 @@ class ItemController extends Controller
         } while (Item::where('item_code', $itemCode)->exists());
 
         return $itemCode;
+    }
+
+    private function storeAdditionalImages(Request $request, Item $item): void
+    {
+        foreach ($request->file('images', []) as $image) {
+            $item->images()->create([
+                'path' => $image->store('items', 'public'),
+            ]);
+        }
     }
 }

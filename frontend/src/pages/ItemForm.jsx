@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import api from '../api/axios'
-import { ArrowLeft, Save, Upload, Image as ImageIcon, X } from 'lucide-react'
+import { ArrowLeft, Save, Upload, X } from 'lucide-react'
 
 function ItemForm() {
   const navigate = useNavigate()
@@ -15,8 +15,9 @@ function ItemForm() {
     category: '',
     stock: '',
     image: null,
+    images: [],
   })
-  const [imagePreview, setImagePreview] = useState(null)
+  const [imagePreviews, setImagePreviews] = useState([])
   const [loading, setLoading] = useState(isEdit)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -33,10 +34,13 @@ function ItemForm() {
             category: item.category,
             stock: item.stock,
             image: null,
+            images: [],
           })
-          if (item.image) {
-            setImagePreview(`/storage/${item.image}`)
-          }
+          const existingImages = [
+            ...(item.image ? [`/storage/${item.image}`] : []),
+            ...(item.images || []).map((image) => `/storage/${image.path}`),
+          ]
+          setImagePreviews(existingImages.map((src) => ({ src, existing: true })))
         } catch (err) {
           setError('Gagal memuat data barang')
         } finally {
@@ -49,18 +53,21 @@ function ItemForm() {
 
   const handleChange = (e) => {
     const { name, value, files } = e.target
-    if (name === 'image' && files && files[0]) {
-      const file = files[0]
-      setForm({ ...form, image: file })
-      setImagePreview(URL.createObjectURL(file))
+    if (name === 'images' && files?.length) {
+      const selectedFiles = Array.from(files)
+      setForm({ ...form, images: [...form.images, ...selectedFiles] })
+      setImagePreviews([...imagePreviews, ...selectedFiles.map((file) => ({
+        src: URL.createObjectURL(file),
+        existing: false,
+      }))])
     } else if (name !== 'image') {
       setForm({ ...form, [name]: value })
     }
   }
 
   const handleRemoveImage = () => {
-    setForm({ ...form, image: null })
-    setImagePreview(null)
+    setForm({ ...form, images: [] })
+    setImagePreviews((current) => current.filter((image) => image.existing))
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
     }
@@ -75,9 +82,9 @@ function ItemForm() {
     formData.append('name', form.name)
     formData.append('category', form.category)
     formData.append('stock', form.stock)
-    if (form.image) {
-      formData.append('image', form.image)
-    }
+    form.images.forEach((image) => {
+      formData.append('images[]', image)
+    })
 
     try {
       if (isEdit) {
@@ -185,20 +192,33 @@ function ItemForm() {
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-2">Gambar Barang</label>
 
-          {imagePreview ? (
-            <div className="relative inline-block">
-              <img
-                src={imagePreview}
-                alt="Preview"
-                className="w-full max-w-xs h-48 object-cover rounded-lg border border-slate-200"
-              />
-              <button
-                type="button"
-                onClick={handleRemoveImage}
-                className="absolute top-2 right-2 bg-red-600 text-white rounded-full p-1.5 hover:bg-red-700 transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
+          {imagePreviews.length ? (
+            <div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {imagePreviews.map((image, index) => (
+                  <div key={`${image.src}-${index}`} className="relative aspect-square">
+                    <img src={image.src} alt={`Preview ${index + 1}`} className="w-full h-full object-cover rounded-lg border border-slate-200" />
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="inline-flex items-center gap-2 rounded-lg border border-cyan-200 px-3 py-2 text-sm font-medium text-cyan-700 hover:bg-cyan-50"
+                >
+                  <Upload className="w-4 h-4" />
+                  Tambah foto baru
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRemoveImage}
+                  className="inline-flex items-center gap-2 text-sm text-red-600 hover:text-red-700 font-medium"
+                >
+                  <X className="w-4 h-4" />
+                  Hapus pilihan foto baru
+                </button>
+              </div>
             </div>
           ) : (
             <div
@@ -216,9 +236,10 @@ function ItemForm() {
           <input
             ref={fileInputRef}
             type="file"
-            name="image"
+            name="images"
             onChange={handleChange}
             accept="image/png,image/jpeg,image/jpg"
+            multiple
             className="hidden"
           />
         </div>

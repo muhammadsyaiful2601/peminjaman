@@ -15,6 +15,11 @@ class Item extends Model
         return $this->hasMany(Loan::class);
     }
 
+    public function images(): HasMany
+    {
+        return $this->hasMany(ItemImage::class);
+    }
+
     public function loanItems(): HasMany
     {
         return $this->hasMany(LoanItem::class);

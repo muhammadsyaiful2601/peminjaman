@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import api from '../api/axios'
-import { Plus, Package, Search, Pencil, Trash2, PackageX } from 'lucide-react'
+import { Plus, Package, Search, Pencil, Trash2, PackageX, ChevronLeft, ChevronRight, Expand, X } from 'lucide-react'
 
 function Items() {
   const { user } = useAuth()
@@ -12,6 +12,8 @@ function Items() {
   const [page, setPage] = useState(1)
   const [lastPage, setLastPage] = useState(1)
   const [total, setTotal] = useState(0)
+  const [activeImages, setActiveImages] = useState({})
+  const [expandedImage, setExpandedImage] = useState(null)
 
   const isStaff = user?.role === 'admin' || user?.role === 'assistant'
 
@@ -51,6 +53,25 @@ function Items() {
     } catch (error) {
       alert(error.response?.data?.message || 'Gagal menghapus barang')
     }
+  }
+
+  const getItemImages = (item) => [
+    ...(item.image ? [`/storage/${item.image}`] : []),
+    ...(item.images || []).map((image) => `/storage/${image.path}`),
+  ]
+
+  const showPreviousImage = (itemId, imageCount) => {
+    setActiveImages((current) => ({
+      ...current,
+      [itemId]: ((current[itemId] || 0) - 1 + imageCount) % imageCount,
+    }))
+  }
+
+  const showNextImage = (itemId, imageCount) => {
+    setActiveImages((current) => ({
+      ...current,
+      [itemId]: ((current[itemId] || 0) + 1) % imageCount,
+    }))
   }
 
   return (
@@ -94,24 +115,47 @@ function Items() {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {items.map((item) => (
-              <div key={item.id} className="bg-white rounded-xl border border-slate-200 overflow-hidden hover:shadow-lg transition-shadow">
-                <div className="h-40 bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center">
-                  {item.image ? (
-                    <img
-                      src={`/storage/${item.image}`}
-                      alt={item.name}
-                      className="w-full h-full object-cover"
-                    />
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+            {items.map((item) => {
+              const itemImages = getItemImages(item)
+              const imageIndex = Math.min(activeImages[item.id] || 0, Math.max(itemImages.length - 1, 0))
+
+              return (
+              <div key={item.id} className="bg-white rounded-lg border border-slate-200 overflow-hidden hover:shadow-lg transition-shadow">
+                <div className="relative aspect-square bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center">
+                  {itemImages.length ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setExpandedImage({ item, images: itemImages, index: imageIndex })}
+                        className="w-full h-full cursor-zoom-in"
+                        title="Perbesar foto"
+                      >
+                        <img src={itemImages[imageIndex]} alt={`${item.name} ${imageIndex + 1}`} className="w-full h-full object-cover" />
+                      </button>
+                      {itemImages.length > 1 && (
+                        <>
+                          <button type="button" onClick={() => showPreviousImage(item.id, itemImages.length)} className="absolute left-1 top-1/2 -translate-y-1/2 rounded-full bg-slate-900/65 p-1 text-white hover:bg-slate-900" aria-label="Foto sebelumnya">
+                            <ChevronLeft className="w-4 h-4" />
+                          </button>
+                          <button type="button" onClick={() => showNextImage(item.id, itemImages.length)} className="absolute right-1 top-1/2 -translate-y-1/2 rounded-full bg-slate-900/65 p-1 text-white hover:bg-slate-900" aria-label="Foto berikutnya">
+                            <ChevronRight className="w-4 h-4" />
+                          </button>
+                          <span className="absolute bottom-1 right-1 rounded bg-slate-900/65 px-1.5 py-0.5 text-[10px] text-white">
+                            {imageIndex + 1}/{itemImages.length}
+                          </span>
+                        </>
+                      )}
+                      <Expand className="pointer-events-none absolute right-2 top-2 h-4 w-4 text-white drop-shadow" />
+                    </>
                   ) : (
-                    <Package className="w-16 h-16 text-slate-400" />
+                    <Package className="w-10 h-10 text-slate-400" />
                   )}
                 </div>
-                <div className="p-4">
-                  <p className="text-xs font-medium text-cyan-600 mb-1">{item.item_code}</p>
-                  <h3 className="font-semibold text-slate-900 mb-1">{item.name}</h3>
-                  <p className="text-sm text-slate-500 mb-3">{item.category}</p>
+                <div className="p-3">
+                  <p className="text-[11px] font-medium text-cyan-600 mb-1">{item.item_code}</p>
+                  <h3 className="text-sm font-semibold text-slate-900 mb-1 truncate" title={item.name}>{item.name}</h3>
+                  <p className="text-xs text-slate-500 mb-2 truncate" title={item.category}>{item.category}</p>
                   <div className="flex items-center justify-between">
                     <span
                       className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
@@ -141,7 +185,8 @@ function Items() {
                   </div>
                 </div>
               </div>
-            ))}
+              )
+            })}
           </div>
 
           {/* Pagination */}
@@ -167,6 +212,27 @@ function Items() {
             </div>
           )}
         </>
+      )}
+
+      {expandedImage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 p-4" onClick={() => setExpandedImage(null)}>
+          <div className="relative max-h-full max-w-5xl" onClick={(event) => event.stopPropagation()}>
+            <img src={expandedImage.images[expandedImage.index]} alt={expandedImage.item.name} className="max-h-[85vh] max-w-full object-contain rounded-lg" />
+            <button type="button" onClick={() => setExpandedImage(null)} className="absolute right-2 top-2 rounded-full bg-slate-900/70 p-2 text-white hover:bg-slate-900" aria-label="Tutup foto">
+              <X className="w-5 h-5" />
+            </button>
+            {expandedImage.images.length > 1 && (
+              <>
+                <button type="button" onClick={() => setExpandedImage((current) => ({ ...current, index: (current.index - 1 + current.images.length) % current.images.length }))} className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-slate-900/70 p-2 text-white hover:bg-slate-900" aria-label="Foto sebelumnya">
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+                <button type="button" onClick={() => setExpandedImage((current) => ({ ...current, index: (current.index + 1) % current.images.length }))} className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-slate-900/70 p-2 text-white hover:bg-slate-900" aria-label="Foto berikutnya">
+                  <ChevronRight className="w-5 h-5" />
+                </button>
+              </>
+            )}
+          </div>
+        </div>
       )}
     </div>
   )
