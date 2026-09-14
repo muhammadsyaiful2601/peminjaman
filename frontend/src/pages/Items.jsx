@@ -74,6 +74,30 @@ function Items() {
     }))
   }
 
+  const handleGalleryPointerDown = (event) => {
+    event.currentTarget.setPointerCapture?.(event.pointerId)
+    event.currentTarget.dataset.dragStartX = String(event.clientX)
+  }
+
+  const handleGalleryPointerUp = (event, onSwipe) => {
+    const startX = Number(event.currentTarget.dataset.dragStartX)
+    const distance = startX - event.clientX
+    delete event.currentTarget.dataset.dragStartX
+
+    if (Math.abs(distance) < 30) return
+
+    event.currentTarget.dataset.dragged = 'true'
+    onSwipe(distance > 0 ? 'next' : 'previous')
+  }
+
+  const openExpandedImage = (event, item, images, index) => {
+    if (event.currentTarget.dataset.dragged === 'true') {
+      delete event.currentTarget.dataset.dragged
+      return
+    }
+    setExpandedImage({ item, images, index })
+  }
+
   return (
     <div>
       <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -125,20 +149,29 @@ function Items() {
                 <div className="relative aspect-square bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center">
                   {itemImages.length ? (
                     <>
-                      <button
-                        type="button"
-                        onClick={() => setExpandedImage({ item, images: itemImages, index: imageIndex })}
-                        className="w-full h-full cursor-zoom-in"
-                        title="Perbesar foto"
-                      >
-                        <img src={itemImages[imageIndex]} alt={`${item.name} ${imageIndex + 1}`} className="w-full h-full object-cover" />
-                      </button>
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      onClick={(event) => openExpandedImage(event, item, itemImages, imageIndex)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') openExpandedImage(event, item, itemImages, imageIndex)
+                      }}
+                      onPointerDown={handleGalleryPointerDown}
+                      onPointerUp={(event) => handleGalleryPointerUp(event, (direction) => {
+                        if (direction === 'next') showNextImage(item.id, itemImages.length)
+                        else showPreviousImage(item.id, itemImages.length)
+                      })}
+                      className="w-full h-full cursor-zoom-in touch-pan-y"
+                      title="Perbesar atau geser foto"
+                    >
+                      <img src={itemImages[imageIndex]} alt={`${item.name} ${imageIndex + 1}`} className="w-full h-full object-cover" draggable="false" />
+                    </div>
                       {itemImages.length > 1 && (
                         <>
-                          <button type="button" onClick={() => showPreviousImage(item.id, itemImages.length)} className="absolute left-1 top-1/2 -translate-y-1/2 rounded-full bg-slate-900/65 p-1 text-white hover:bg-slate-900" aria-label="Foto sebelumnya">
+                          <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); showPreviousImage(item.id, itemImages.length) }} className="absolute left-1 top-1/2 -translate-y-1/2 rounded-full bg-slate-900/65 p-1 text-white hover:bg-slate-900" aria-label="Foto sebelumnya">
                             <ChevronLeft className="w-4 h-4" />
                           </button>
-                          <button type="button" onClick={() => showNextImage(item.id, itemImages.length)} className="absolute right-1 top-1/2 -translate-y-1/2 rounded-full bg-slate-900/65 p-1 text-white hover:bg-slate-900" aria-label="Foto berikutnya">
+                          <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); showNextImage(item.id, itemImages.length) }} className="absolute right-1 top-1/2 -translate-y-1/2 rounded-full bg-slate-900/65 p-1 text-white hover:bg-slate-900" aria-label="Foto berikutnya">
                             <ChevronRight className="w-4 h-4" />
                           </button>
                           <span className="absolute bottom-1 right-1 rounded bg-slate-900/65 px-1.5 py-0.5 text-[10px] text-white">
@@ -147,7 +180,7 @@ function Items() {
                         </>
                       )}
                       <Expand className="pointer-events-none absolute right-2 top-2 h-4 w-4 text-white drop-shadow" />
-                    </>
+                        </>
                   ) : (
                     <Package className="w-10 h-10 text-slate-400" />
                   )}
@@ -216,17 +249,29 @@ function Items() {
 
       {expandedImage && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 p-4" onClick={() => setExpandedImage(null)}>
-          <div className="relative max-h-full max-w-5xl" onClick={(event) => event.stopPropagation()}>
-            <img src={expandedImage.images[expandedImage.index]} alt={expandedImage.item.name} className="max-h-[85vh] max-w-full object-contain rounded-lg" />
+          <div
+            className="relative max-h-full max-w-5xl touch-pan-y"
+            onClick={(event) => event.stopPropagation()}
+            onPointerDown={handleGalleryPointerDown}
+            onPointerUp={(event) => handleGalleryPointerUp(event, (direction) => {
+              setExpandedImage((current) => ({
+                ...current,
+                index: direction === 'next'
+                  ? (current.index + 1) % current.images.length
+                  : (current.index - 1 + current.images.length) % current.images.length,
+              }))
+            })}
+          >
+            <img src={expandedImage.images[expandedImage.index]} alt={expandedImage.item.name} className="max-h-[85vh] max-w-full object-contain rounded-lg" draggable="false" />
             <button type="button" onClick={() => setExpandedImage(null)} className="absolute right-2 top-2 rounded-full bg-slate-900/70 p-2 text-white hover:bg-slate-900" aria-label="Tutup foto">
               <X className="w-5 h-5" />
             </button>
             {expandedImage.images.length > 1 && (
               <>
-                <button type="button" onClick={() => setExpandedImage((current) => ({ ...current, index: (current.index - 1 + current.images.length) % current.images.length }))} className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-slate-900/70 p-2 text-white hover:bg-slate-900" aria-label="Foto sebelumnya">
+                <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); setExpandedImage((current) => ({ ...current, index: (current.index - 1 + current.images.length) % current.images.length })) }} className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-slate-900/70 p-2 text-white hover:bg-slate-900" aria-label="Foto sebelumnya">
                   <ChevronLeft className="w-5 h-5" />
                 </button>
-                <button type="button" onClick={() => setExpandedImage((current) => ({ ...current, index: (current.index + 1) % current.images.length }))} className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-slate-900/70 p-2 text-white hover:bg-slate-900" aria-label="Foto berikutnya">
+                <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); setExpandedImage((current) => ({ ...current, index: (current.index + 1) % current.images.length })) }} className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-slate-900/70 p-2 text-white hover:bg-slate-900" aria-label="Foto berikutnya">
                   <ChevronRight className="w-5 h-5" />
                 </button>
               </>
