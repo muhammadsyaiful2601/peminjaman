@@ -99,18 +99,19 @@
 	}
 
 	.official-letterhead {
-		display: flex;
+		display: grid;
+		grid-template-columns: 78px 1fr;
 		align-items: center;
-		justify-content: center;
-		min-height: 92px;
+		min-height: 72px;
 		text-align: center;
 	}
 
 	.official-logo {
-		width: 76px;
-		height: 82px;
+		width: 66px;
+		height: 70px;
 		object-fit: contain;
-		margin-right: 18px;
+		margin: 0;
+		justify-self: start;
 	}
 
 	.official-identity {
@@ -140,13 +141,13 @@
 	}
 
 	.official-identity p {
-		font-size: 11px;
+		font-size: 10px;
 		font-weight: 700;
 		text-transform: uppercase;
 	}
 
 	.official-identity .official-address {
-		font-size: 9px;
+		font-size: 8px;
 		font-weight: 400;
 		margin-top: 3px;
 		text-transform: none;

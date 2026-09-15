@@ -231,7 +231,7 @@ function Layout() {
         <footer className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white px-4 py-3 md:left-64 md:px-8">
           <p className="flex items-center justify-center gap-1.5 text-xs text-slate-400">
             <CopyrightIcon className="h-3.5 w-3.5" aria-hidden="true" />
-            <span>by Muhammad Syaiful</span>
+            <span>developed by Muhammad Syaiful</span>
           </p>
         </footer>
       </div>
