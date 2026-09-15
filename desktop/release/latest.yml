@@ -1,8 +1,8 @@
-version: 1.0.6
+version: 1.1.1
 files:
-  - url: Peminjaman-Barang-PNP-Setup-1.0.6.exe
-    sha512: suCm/8BDB0o15wXBKk10rQ5M/gDqkye4QK3VYU5MOb3rpEzm0KmUeK7kii/kAEE0mX18cgBSmW6tcuPcKwJ8Gw==
-    size: 159492554
-path: Peminjaman-Barang-PNP-Setup-1.0.6.exe
-sha512: suCm/8BDB0o15wXBKk10rQ5M/gDqkye4QK3VYU5MOb3rpEzm0KmUeK7kii/kAEE0mX18cgBSmW6tcuPcKwJ8Gw==
-releaseDate: '2026-09-11T04:13:01.554Z'
+  - url: Peminjaman-Barang-PNP-Setup-1.1.1.exe
+    sha512: tuQKllPOXHsVs0JapoOr63E10jl5gjK5o9IJgX/+/nCb6HAj4Vss71DRRtnRFOGxe+8VmltTqw7V2cRQ43PfrQ==
+    size: 159500146
+path: Peminjaman-Barang-PNP-Setup-1.1.1.exe
+sha512: tuQKllPOXHsVs0JapoOr63E10jl5gjK5o9IJgX/+/nCb6HAj4Vss71DRRtnRFOGxe+8VmltTqw7V2cRQ43PfrQ==
+releaseDate: '2026-09-15T11:36:50.670Z'

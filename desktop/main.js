@@ -35,7 +35,7 @@ const PREFERRED_PORT = 8642;
 //  penegakan storage:link via junction saat boot; 1.0.13: disk "public"
 //  diarahkan ke folder uploads persisten — perbaikan bug "gambar hilang
 //  setelah install ulang").
-const TEMPLATE_VERSION = '1.0.13';
+const TEMPLATE_VERSION = '1.0.14';
 const isDev = !app.isPackaged;
 
 /* ------------------------------------------------------------------ paths */
@@ -906,22 +906,8 @@ async function checkForUpdates({ manual = false } = {}) {
         buttons: ['OK'],
       });
     } else if (manual && result) {
-      const choice = await dialog.showMessageBox({
-        type: 'info',
-        title: 'Pembaruan Tersedia',
-        message: `Versi baru ${result.version} tersedia.`,
-        detail:
-          'Aplikasi akan mengunduh pembaruan di latar belakang, lalu dimulai ulang\n' +
-          'otomatis untuk memasangnya. Data Anda tetap aman.\n\n' +
-          'Bila memilih "Nanti", unduh kapan saja lewat tombol gear (menu Pengaturan).',
-        buttons: ['Unduh & Instal', 'Nanti'],
-        defaultId: 0,
-        cancelId: 1,
-        noLink: true,
-      });
-      if (choice.response === 0 && updateState.state === 'available') {
-        await downloadUpdate({ manual: true });
-      }
+      setUpdateState({ state: 'available', version: result.version, percent: 0, message: '' });
+      await downloadUpdate({ manual: true });
     }
   } catch (error) {
     const message = String(error && error.message ? error.message : error);
@@ -1313,7 +1299,7 @@ function buildMenu() {
         },
         { type: 'separator' },
         {
-          label: 'Periksa Pembaruan…',
+          label: 'Perbarui Aplikasi…',
           click: () => checkForUpdates({ manual: true }),
         },
         {

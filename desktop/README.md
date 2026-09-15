@@ -65,6 +65,28 @@ npm run dist
 
 Hasil: `desktop/release/Peminjaman Barang PNP Setup 1.0.2.exe`
 
+### Menerbitkan pembaruan otomatis
+
+Pengguna yang sudah memasang aplikasi tidak perlu mengunduh installer secara
+manual untuk rilis berikutnya. Setiap rilis baru cukup:
+
+1. Naikkan `version` pada `desktop/package.json` (contoh `1.1.0` menjadi `1.1.1`).
+2. Pastikan `GH_TOKEN` memiliki izin membuat GitHub Release.
+3. Jalankan dari folder `desktop`:
+
+```powershell
+npm run dist:publish
+```
+
+Perintah tersebut membuat installer dan mengunggah release beserta `latest.yml`
+dan blockmap ke repository GitHub. Pada aplikasi terpasang, pengguna cukup
+memilih **Aplikasi → Perbarui Aplikasi…**. Aplikasi akan mengunduh, memasang,
+dan membuka kembali versi baru secara otomatis tanpa menghapus database,
+konfigurasi email, atau data branding.
+
+Versi `1.1.1` adalah rilis pertama yang harus dipublikasikan agar instalasi
+`1.1.0` yang sudah ada dapat memperbarui dirinya.
+
 Perilaku instalasi/first-run di komputer pengguna:
 
 1. Installer memasang aplikasi (shortcut desktop + start menu, ikon logo PNP).
