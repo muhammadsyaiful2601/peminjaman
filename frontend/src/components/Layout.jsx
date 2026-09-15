@@ -13,13 +13,17 @@ import {
   FileText,
   FileSignature,
   Wrench,
+  Settings,
+  Copyright as CopyrightIcon,
   Menu,
   X,
 } from 'lucide-react'
 import logoPnp from '../assets/Logo_Politeknik_Negeri_Padang_(2014).svg'
+import { useBranding } from '../context/BrandingContext'
 
 function Layout() {
   const { user, logout } = useAuth()
+  const branding = useBranding()
   const navigate = useNavigate()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
@@ -53,6 +57,7 @@ function Layout() {
   if (user?.role === 'admin') {
     navItems.push({ to: '/users', label: 'Kelola User', icon: Users })
     navItems.push({ to: '/technicians', label: 'Kelola Teknisi', icon: Wrench })
+    navItems.push({ to: '/settings', label: 'Pengaturan Sistem', icon: Settings })
   }
 
   const roleLabels = {
@@ -66,13 +71,13 @@ function Layout() {
       <aside className="fixed inset-y-0 left-0 w-64 bg-white border-r border-slate-200 text-slate-800 hidden md:flex flex-col">
         <div className="px-6 py-6 border-b border-slate-100">
           <h1 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-            <img src={logoPnp} alt="Logo Politeknik Negeri Padang" className="h-10 w-10 object-contain" />
-            Politeknik Negeri Padang
+            <img src={branding.app_logo_path || logoPnp} alt={branding.app_name} className="h-10 w-10 object-contain" />
+            {branding.app_name}
           </h1>
-          <p className="text-xs text-slate-400 mt-2">Sistem Peminjaman Barang PSDKU TANAH DATAR</p>
+          <p className="text-xs text-slate-400 mt-2">{branding.organization_name}</p>
         </div>
 
-        <nav className="flex-1 px-4 py-4 space-y-1">
+        <nav className="min-h-0 flex-1 overflow-y-auto px-4 py-4 space-y-1">
           {navItems.map((item) => (
             <NavLink
               key={item.to}
@@ -92,7 +97,7 @@ function Layout() {
           ))}
         </nav>
 
-        <div className="px-4 py-4 border-t border-slate-100 space-y-1">
+        <div className="flex-shrink-0 px-4 py-4 border-t border-slate-100 space-y-1">
           <NavLink
             to="/profile"
             className={({ isActive }) =>
@@ -132,8 +137,8 @@ function Layout() {
               <Menu className="w-6 h-6" />
             </button>
             <h1 className="font-bold flex items-center gap-2">
-              <img src={logoPnp} alt="Logo Politeknik Negeri Padang" className="h-9 w-9 object-contain" />
-              Politeknik Negeri Padang
+              <img src={branding.app_logo_path || logoPnp} alt={branding.app_name} className="h-9 w-9 object-contain" />
+              {branding.app_name}
             </h1>
           </div>
           <button onClick={handleLogout} className="text-red-500">
@@ -157,8 +162,8 @@ function Layout() {
         >
           <div className="px-6 py-6 border-b border-slate-100 flex items-center justify-between">
             <h1 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-              <img src={logoPnp} alt="Logo Politeknik Negeri Padang" className="h-10 w-10 object-contain" />
-              Politeknik Negeri Padang
+              <img src={branding.app_logo_path || logoPnp} alt={branding.app_name} className="h-10 w-10 object-contain" />
+              {branding.app_name}
             </h1>
             <button
               onClick={() => setSidebarOpen(false)}
@@ -190,7 +195,7 @@ function Layout() {
             ))}
           </nav>
 
-          <div className="px-4 py-4 border-t border-slate-100 space-y-1">
+          <div className="flex-shrink-0 px-4 py-4 border-t border-slate-100 space-y-1">
             <NavLink
               to="/profile"
               onClick={() => setSidebarOpen(false)}
@@ -218,15 +223,15 @@ function Layout() {
           </div>
         </aside>
 
-        <main className="flex-1 p-4 md:p-8">
+        <main className="flex-1 p-4 pb-16 md:p-8 md:pb-16">
           <Outlet />
         </main>
 
         {/* Footer */}
-        <footer className="border-t border-slate-200 bg-white px-4 md:px-8 py-3">
-          <p className="text-xs text-slate-400 text-center md:text-right">
-            © {new Date().getFullYear()} Sistem Peminjaman Barang — Politeknik Negeri Padang.
-            Dikembangkan oleh <span className="font-medium text-slate-500">Muhammad Syaiful (24)</span>
+        <footer className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white px-4 py-3 md:left-64 md:px-8">
+          <p className="flex items-center justify-center gap-1.5 text-xs text-slate-400">
+            <CopyrightIcon className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>by Muhammad Syaiful</span>
           </p>
         </footer>
       </div>

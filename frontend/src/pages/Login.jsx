@@ -1,12 +1,14 @@
 ﻿import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { useBranding } from '../context/BrandingContext'
 import { QrCode, UserRound, Lock, Eye, EyeOff, Mail } from 'lucide-react'
 import logoPnp from '../assets/Logo_Politeknik_Negeri_Padang_(2014).svg'
 import foto from '../assets/foto.png'
 
 function Login() {
   const { login } = useAuth()
+  const branding = useBranding()
   const navigate = useNavigate()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -64,27 +66,26 @@ function Login() {
               </div>
             ) : (
               <img
-                src={logoPnp}
-                alt="Logo Politeknik Negeri Padang"
+                src={branding.app_logo_path || logoPnp}
+                alt={branding.app_name}
                 onError={() => setLogoError(true)}
                 className="w-12 h-12 object-contain"
               />
             )}
             <span className="text-xl font-bold text-slate-900">
-              Politeknik Negeri Padang
+              {branding.app_name}
             </span>
           </div>
 
           <h1 className="text-4xl font-bold text-slate-900 leading-tight mb-4">
-            Sistem Peminjaman Barang
+            {branding.app_name}
           </h1>
           <p className="text-slate-500 leading-relaxed mb-8">
-            kelola peminjaman,
-            verifikasi foto & QR, serta pantau stok barang dalam satu tempat.
+            {branding.login_description}
           </p>
 
           <div className="rounded-2xl overflow-hidden border border-slate-200 shadow-sm">
-            <img src={foto} alt="PSDKU Politeknik Negeri Padang Kampus Tanah Datar" className="w-full h-64 object-cover" />
+            <img src={branding.landing_photo_path || foto} alt={branding.organization_name} className="w-full h-64 object-cover" />
           </div>
         </div>
       </div>
@@ -93,9 +94,9 @@ function Login() {
       <div className="flex-1 flex items-center justify-center p-6">
         <div className="w-full max-w-md">
           <div className="lg:hidden mb-8 flex items-center gap-3">
-            <img src={logoPnp} alt="Logo Politeknik Negeri Padang" className="w-12 h-12 object-contain" />
+            <img src={branding.app_logo_path || logoPnp} alt={branding.app_name} className="w-12 h-12 object-contain" />
             <span className="text-xl font-bold text-slate-900">
-              Politeknik Negeri Padang
+              {branding.app_name}
             </span>
           </div>
 
@@ -183,8 +184,8 @@ function Login() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/95 text-white">
           <div className="flex flex-col items-center gap-5 text-center">
             <img
-              src={logoPnp}
-              alt="Logo Politeknik Negeri Padang"
+              src={branding.app_logo_path || logoPnp}
+              alt={branding.app_name}
               className="h-24 w-24 object-contain animate-pulse"
             />
             <div className="flex items-center gap-3">

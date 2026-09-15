@@ -54,13 +54,14 @@
         <table class="header-table">
             <tr>
                 <td class="header-left">
-                    <img class="header-logo" src="{{ public_path('images/logo_kampus.png') }}" alt="Logo Kampus">
+                    <img class="header-logo" src="{{ $branding['letterhead_logo_path'] }}" alt="{{ $branding['organization_name'] }}">
                 </td>
                 <td class="header-center">
-                    <h1>POLITEKNIK NEGERI PADANG</h1>
-                    <h2>JURUSAN TEKNOLOGI INFORMASI</h2>
-                    <p>PROGRAM STUDI SISTEM INFORMASI</p>
-                    <p class="address">Kampus Politeknik Negeri Padang, Tanah Datar</p>
+                    <h1>{{ $branding['organization_ministry'] }}</h1>
+                    <h2>{{ $branding['organization_unit'] }}</h2>
+                    <p>{{ $branding['organization_name'] }}</p>
+                    <p class="address">{{ $branding['organization_address'] }}</p>
+                    <p>{{ $branding['organization_department'] }}</p>
                 </td>
                 <td class="header-right">
                     <img class="header-logo" src="{{ public_path('images/si.png') }}" alt="Logo Sistem Informasi">
@@ -166,8 +167,7 @@
 
     <div class="footer">
         <p>
-            Dokumen ini diterbitkan oleh Politeknik Negeri Padang.<br>
-            Tanggal Cetak: {{ now()->format('d M Y, H:i') }} WIB
+            Copyright by Muhammad Syaiful
         </p>
     </div>
 </body>

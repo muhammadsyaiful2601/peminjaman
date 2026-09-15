@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import api from '../api/axios'
+import { useBranding } from '../context/BrandingContext'
 import { CalendarDays, Download, Printer, RefreshCw } from 'lucide-react'
 import logoPnp from '../assets/Logo_Politeknik_Negeri_Padang_(2014).svg'
 import { downloadBlob } from '../utils/downloadBlob'
@@ -12,6 +13,7 @@ const statusLabels = {
 }
 
 function Reports() {
+  const branding = useBranding()
   const [loans, setLoans] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -212,12 +214,13 @@ function Reports() {
       <div className="report-content overflow-hidden rounded-xl border border-slate-200 bg-white">
         <div className="hidden print:block print-header">
           <div className="official-letterhead">
-            <img src={logoPnp} alt="Logo Politeknik Negeri Padang" className="official-logo" />
+            <img src={branding.letterhead_logo_path || logoPnp} alt={branding.organization_name} className="official-logo" />
             <div className="official-identity">
-              <h2>POLITEKNIK NEGERI PADANG</h2>
-              <h3>JURUSAN TEKNOLOGI INFORMASI</h3>
-              <p>PROGRAM STUDI SISTEM INFORMASI</p>
-              <p className="official-address">Kampus Politeknik Negeri Padang, Tanah Datar</p>
+              <h2>{branding.organization_ministry}</h2>
+              <h3>{branding.organization_unit}</h3>
+              <p>{branding.organization_name}</p>
+              <p className="official-address">{branding.organization_address}</p>
+              <p>{branding.organization_department}</p>
             </div>
           </div>
           <div className="official-rule" />

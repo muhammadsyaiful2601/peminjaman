@@ -4,6 +4,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\BrandingController;
 use App\Http\Controllers\Api\HybridController;
 use App\Http\Controllers\Api\ItemController;
 use App\Http\Controllers\Api\LoanController;
@@ -12,6 +13,7 @@ use App\Http\Controllers\Api\TechnicianController;
 use Illuminate\Support\Facades\Route;
 
 // Public routes
+Route::get('/branding', [BrandingController::class, 'show']);
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
 Route::post('/reset-password', [AuthController::class, 'resetPassword']);
@@ -24,6 +26,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/user', [AuthController::class, 'user']);
     Route::post('/email/verification-notification', [AuthController::class, 'sendVerificationNotification']);
+    Route::middleware('role:admin')->group(function () {
+        Route::post('/branding', [BrandingController::class, 'update']);
+    });
 
     // Items - all authenticated users can view
     Route::get('/items', [ItemController::class, 'index']);

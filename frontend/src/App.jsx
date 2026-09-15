@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from './context/AuthContext'
+import { BrandingProvider } from './context/BrandingContext'
 import useIdleTimeout from './hooks/useIdleTimeout'
 import Layout from './components/Layout'
 import HybridSettings from './components/HybridSettings'
@@ -18,6 +19,7 @@ import Profile from './pages/Profile'
 import Reports from './pages/Reports'
 import OfficialLoan from './pages/OfficialLoan'
 import Technicians from './pages/Technicians'
+import SystemSettings from './pages/SystemSettings'
 
 // Sesi kerja berakhir setelah 30 menit tanpa aktivitas.
 const SESSION_IDLE_TIMEOUT_MS = 30 * 60 * 1000
@@ -61,7 +63,7 @@ function ProtectedRoute({ children, roles = [] }) {
 
 function App() {
   return (
-    <>
+    <BrandingProvider>
       <IdleTimeoutHandler />
       <HybridSettings />
       <Routes>
@@ -135,9 +137,17 @@ function App() {
           }
         />
         <Route path="profile" element={<Profile />} />
+        <Route
+          path="settings"
+          element={
+            <ProtectedRoute roles={['admin']}>
+              <SystemSettings />
+            </ProtectedRoute>
+          }
+        />
       </Route>
       </Routes>
-    </>
+    </BrandingProvider>
   )
 }
 

@@ -10,10 +10,10 @@
         .logo { width: 66px; height: 70px; object-fit: contain; }
         .identity { display: table-cell; vertical-align: middle; }
         .identity h1, .identity h2, .identity p, .title h3, .title p { margin: 0; }
-        .identity h1 { font-size: 17px; }
-        .identity h2 { font-size: 13px; }
-        .identity p { font-size: 11px; font-weight: bold; }
-        .identity .address { font-size: 8px; font-weight: normal; margin-top: 3px; }
+        .identity h1 { font-size: 15px; font-weight: 700; text-transform: uppercase; }
+        .identity h2 { font-size: 12px; font-weight: 700; text-transform: uppercase; }
+        .identity p { font-size: 10px; font-weight: 700; text-transform: uppercase; }
+        .identity .address { font-size: 8px; font-weight: normal; margin-top: 3px; text-transform: none; }
         .rule { border-top: 2px solid #111827; border-bottom: 1px solid #111827; height: 4px; margin: 10px 0 18px; }
         .title { text-align: center; margin-bottom: 14px; }
         .title h3 { font-size: 14px; }
@@ -36,12 +36,13 @@
 </head>
 <body>
     <div class="letterhead">
-        <div class="logo-cell"><img class="logo" src="{{ public_path('images/logo_kampus.png') }}" alt="Logo PNP"></div>
+        <div class="logo-cell"><img class="logo" src="{{ $branding['letterhead_logo_path'] }}" alt="{{ $branding['organization_name'] }}"></div>
         <div class="identity">
-            <h1>POLITEKNIK NEGERI PADANG</h1>
-            <h2>JURUSAN TEKNOLOGI INFORMASI</h2>
-            <p>PROGRAM STUDI SISTEM INFORMASI</p>
-            <p class="address">Kampus Politeknik Negeri Padang, Tanah Datar</p>
+            <h1>{{ $branding['organization_ministry'] }}</h1>
+            <h2>{{ $branding['organization_unit'] }}</h2>
+            <p>{{ $branding['organization_name'] }}</p>
+            <p class="address">{{ $branding['organization_address'] }}</p>
+            <p>{{ $branding['organization_department'] }}</p>
         </div>
     </div>
     <div class="rule"></div>

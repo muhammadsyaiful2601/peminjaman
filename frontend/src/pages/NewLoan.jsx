@@ -338,10 +338,10 @@ function NewLoan() {
         <div className="bg-white rounded-xl border border-slate-200 p-6">
           <h2 className="font-semibold text-slate-900 mb-4 flex items-center gap-2">
             <User className="w-5 h-5 text-cyan-600" />
-            2. Data Peminjam (Mahasiswa)
+            2. Data Peminjam
           </h2>
           <p className="text-sm text-slate-500 mb-4">
-            Mahasiswa mengisi data langsung di komputer petugas. QR Code akan dikirim ke email yang dimasukkan.
+            Peminjam mengisi data langsung di komputer petugas. QR Code akan dikirim ke email yang dimasukkan.
           </p>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -354,7 +354,7 @@ function NewLoan() {
                   value={borrowerName}
                   onChange={(e) => setBorrowerName(e.target.value)}
                   className="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none"
-                  placeholder="Nama mahasiswa"
+                  placeholder="Nama lengkap"
                   required
                 />
               </div>

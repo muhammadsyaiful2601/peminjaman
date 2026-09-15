@@ -12,6 +12,7 @@ use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Storage;
+use App\Support\Branding;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
 use Symfony\Component\Mime\Email;
 use Symfony\Component\Mime\Part\DataPart;
@@ -105,6 +106,7 @@ class LoanQrCode extends Mailable
         }
 
         return Pdf::loadView('pdf.loan-qr', [
+            'branding' => Branding::pdfData(),
             'loan' => $this->loan->loadMissing(['item', 'loanItems.item']),
             'qrDataUri' => $qrDataUri,
             'photoDataUri' => $photoDataUri,

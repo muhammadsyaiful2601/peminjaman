@@ -8,6 +8,7 @@ use App\Mail\ReturnConfirmation;
 use App\Models\Item;
 use App\Models\Loan;
 use App\Models\Technician;
+use App\Support\Branding;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -72,6 +73,7 @@ class LoanController extends Controller
             ? Technician::find($request->integer('technician_id'))
             : null;
         $pdf = Pdf::loadView('pdf.loan-report', [
+            'branding' => Branding::pdfData(),
             'loans' => $loans,
             'signatoryName' => $technician?->name,
             'signatoryNip' => $technician?->nip,
@@ -142,6 +144,7 @@ class LoanController extends Controller
         });
 
         $pdf = Pdf::loadView('pdf.official-loan', [
+            'branding' => Branding::pdfData(),
             'loan' => $loan,
             'borrowedDate' => $validated['borrowed_date'],
             'returnDate' => $validated['return_date'],
@@ -392,6 +395,7 @@ class LoanController extends Controller
         }
 
         $pdf = Pdf::loadView('pdf.loan-qr', [
+            'branding' => Branding::pdfData(),
             'loan' => $loan,
             'qrDataUri' => $qrDataUri,
             'photoDataUri' => $photoDataUri,
