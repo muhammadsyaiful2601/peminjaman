@@ -4,6 +4,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\BackupController;
 use App\Http\Controllers\Api\BrandingController;
 use App\Http\Controllers\Api\HybridController;
 use App\Http\Controllers\Api\ItemController;
@@ -53,6 +54,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/loans', [LoanController::class, 'store']);
         Route::post('/loans/official/download', [LoanController::class, 'downloadOfficialLoan']);
         Route::post('/loans/{loan}/return', [LoanController::class, 'returnItem']);
+        Route::patch('/loans/{loan}/items/{item}/quantity', [LoanController::class, 'updateItemQuantity']);
 
         // Verify by code and upload PDF
         Route::get('/loans/code/{code}', [LoanController::class, 'showByCode']);
@@ -62,6 +64,8 @@ Route::middleware('auth:sanctum')->group(function () {
     // User management - admin only
     Route::middleware('role:admin')->group(function () {
         Route::get('/users', [UserController::class, 'index']);
+        Route::get('/backups/status', [BackupController::class, 'status']);
+        Route::post('/backups/{type}', [BackupController::class, 'download']);
         Route::post('/users', [UserController::class, 'store']);
         Route::put('/users/{user}', [UserController::class, 'update']);
         Route::delete('/users/{user}', [UserController::class, 'destroy']);

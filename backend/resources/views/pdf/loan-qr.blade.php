@@ -76,6 +76,13 @@
         <p>Kode Peminjaman: <span class="loan-code">{{ $loan->loan_code }}</span></p>
     </div>
 
+    @if($isRevision ?? false)
+    <div style="margin: 12px 0; padding: 10px 14px; border: 1px solid #0e7490; background: #ecfeff; color: #0e7490; text-align: center; font-weight: 700; font-size: 11px;">
+        DOKUMEN HASIL REVISI<br>
+        <span style="font-size: 9px; font-weight: 400;">Jumlah barang pada peminjaman telah diperbarui. Dokumen ini menggantikan bukti peminjaman sebelumnya.</span>
+    </div>
+    @endif
+
     <div class="section">
         <div class="section-title">Data Peminjam</div>
         <table class="info-table">
@@ -153,7 +160,7 @@
         <div class="qr-box">
             <img src="{{ $qrDataUri }}" alt="QR Code" style="width: 250px; height: 250px;">
         </div>
-        <p class="qr-uuid">{{ $loan->uuid }}</p>
+        <p class="qr-uuid">{{ $loan->qr_token ?: $loan->uuid }}</p>
     </div>
 
     <div class="instructions">

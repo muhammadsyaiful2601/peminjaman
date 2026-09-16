@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import api from '../api/axios'
-import { Plus, Eye, PackageX, Search } from 'lucide-react'
+import { Plus, Eye, Pencil, PackageX, Search } from 'lucide-react'
 
 function Loans() {
   const { user } = useAuth()
@@ -173,13 +173,25 @@ function Loans() {
                           })}
                         </td>
                         <td className="px-6 py-3 text-right">
-                          <Link
-                            to={`/loans/${loan.id}`}
-                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-cyan-50 text-cyan-600 font-medium text-xs hover:bg-cyan-100"
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                            Detail
-                          </Link>
+                          <div className="flex items-center justify-end gap-2">
+                            {isStaff && loan.status === 'borrowed' && (
+                              <Link
+                                to={`/loans/${loan.id}?edit=quantity`}
+                                title="Edit jumlah barang"
+                                className="inline-flex items-center gap-1 rounded-lg border border-cyan-200 px-3 py-1.5 text-xs font-medium text-cyan-700 hover:bg-cyan-50"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                                Edit
+                              </Link>
+                            )}
+                            <Link
+                              to={`/loans/${loan.id}`}
+                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-cyan-50 text-cyan-600 font-medium text-xs hover:bg-cyan-100"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                              Detail
+                            </Link>
+                          </div>
                         </td>
                       </tr>
                     )

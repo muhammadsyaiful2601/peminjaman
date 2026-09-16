@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import api from '../api/axios'
 import CameraCapture, { dataURLtoFile } from '../components/CameraCapture'
@@ -15,11 +15,14 @@ import {
   Camera,
   RefreshCw,
   Download,
+  Pencil,
+  Save,
 } from 'lucide-react'
 import { downloadBlob } from '../utils/downloadBlob'
 
 function LoanDetail() {
   const { id } = useParams()
+  const [searchParams] = useSearchParams()
   const { user } = useAuth()
   const [loan, setLoan] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -27,6 +30,9 @@ function LoanDetail() {
   const [actionLoading, setActionLoading] = useState(false)
   const [returnForm, setReturnForm] = useState({ condition: 'bagus', note: '' })
   const [returnPhoto, setReturnPhoto] = useState(null)
+  const [editingItemId, setEditingItemId] = useState(null)
+  const [editingQuantity, setEditingQuantity] = useState('')
+  const [quantitySaving, setQuantitySaving] = useState(false)
 
   const isStaff = user?.role === 'admin' || user?.role === 'assistant'
 
@@ -80,6 +86,45 @@ function LoanDetail() {
       alert(err.response?.data?.message || 'Bukti peminjaman gagal diunduh.')
     }
   }
+
+  const startQuantityEdit = (loanItem) => {
+    setEditingItemId(loanItem.item?.id)
+    setEditingQuantity(String(loanItem.qty))
+  }
+
+  const cancelQuantityEdit = () => {
+    setEditingItemId(null)
+    setEditingQuantity('')
+  }
+
+  const saveQuantityEdit = async (itemId) => {
+    const quantity = Number(editingQuantity)
+    if (!Number.isInteger(quantity) || quantity < 1) {
+      alert('Jumlah harus berupa angka minimal 1.')
+      return
+    }
+
+    setQuantitySaving(true)
+    try {
+      const response = await api.patch(`/loans/${id}/items/${itemId}/quantity`, { qty: quantity })
+      setLoan(response.data.loan)
+      cancelQuantityEdit()
+      alert(response.data.message)
+    } catch (err) {
+      const messages = err.response?.data?.errors
+      alert(messages ? Object.values(messages).flat().join(', ') : err.response?.data?.message || 'Gagal mengubah jumlah barang.')
+    } finally {
+      setQuantitySaving(false)
+    }
+  }
+
+  useEffect(() => {
+    if (searchParams.get('edit') !== 'quantity' || !loan || editingItemId !== null) return
+    const loanItem = loan.loan_items?.[0] || { item: loan.item, qty: loan.qty }
+    if (loan.status === 'borrowed' && loanItem.item?.id) {
+      startQuantityEdit(loanItem)
+    }
+  }, [loan, searchParams, editingItemId])
 
   if (loading) {
     return <div className="text-center py-12 text-slate-500">Memuat data...</div>
@@ -205,7 +250,7 @@ function LoanDetail() {
             </h2>
             <div className="space-y-3">
               {(loan.loan_items?.length ? loan.loan_items : [{ item: loan.item, qty: loan.qty }]).map((loanItem) => (
-                <div key={loanItem.item?.id} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 border-b border-slate-100 last:border-0 pb-3 last:pb-0">
+                <div key={loanItem.item?.id} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 border-b border-slate-100 last:border-0 pb-3 last:pb-0">
                   <div>
                     <p className="text-sm text-slate-500">Nama Barang</p>
                     <p className="font-medium text-slate-900">{loanItem.item?.name}</p>
@@ -220,8 +265,34 @@ function LoanDetail() {
                   </div>
                   <div>
                     <p className="text-sm text-slate-500">Jumlah</p>
-                    <p className="font-medium text-slate-900">{loanItem.qty}</p>
+                    {editingItemId === loanItem.item?.id ? (
+                      <input
+                        type="number"
+                        min="1"
+                        value={editingQuantity}
+                        onChange={(event) => setEditingQuantity(event.target.value)}
+                        className="mt-1 w-24 rounded-lg border border-slate-300 px-2 py-1 font-medium outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100"
+                      />
+                    ) : (
+                      <p className="font-medium text-slate-900">{loanItem.qty}</p>
+                    )}
                   </div>
+                  {isStaff && loan.status === 'borrowed' && (
+                    <div className="flex items-end gap-2">
+                      {editingItemId === loanItem.item?.id ? (
+                        <>
+                          <button type="button" onClick={() => saveQuantityEdit(loanItem.item.id)} disabled={quantitySaving} className="inline-flex items-center gap-1 rounded-lg bg-cyan-600 px-3 py-2 text-xs font-medium text-white hover:bg-cyan-700 disabled:opacity-50">
+                            <Save className="h-3.5 w-3.5" /> Simpan
+                          </button>
+                          <button type="button" onClick={cancelQuantityEdit} disabled={quantitySaving} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50">Batal</button>
+                        </>
+                      ) : (
+                        <button type="button" onClick={() => startQuantityEdit(loanItem)} className="inline-flex items-center gap-1 rounded-lg border border-cyan-200 px-3 py-2 text-xs font-medium text-cyan-700 hover:bg-cyan-50">
+                          <Pencil className="h-3.5 w-3.5" /> Edit jumlah
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

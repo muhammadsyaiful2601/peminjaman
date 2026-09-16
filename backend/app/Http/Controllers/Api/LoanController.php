@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Mail\LoanQrCode;
+use App\Mail\LoanRevision;
 use App\Mail\ReturnConfirmation;
 use App\Models\Item;
 use App\Models\Loan;
@@ -13,6 +14,7 @@ use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
@@ -127,6 +129,7 @@ class LoanController extends Controller
 
             $loan = Loan::create([
                 'uuid' => (string) Str::uuid(),
+                'qr_token' => (string) Str::uuid(),
                 'loan_code' => $loanCode,
                 'item_id' => $loanItems[0]['item_id'],
                 'qty' => $loanItems[0]['qty'],
@@ -207,6 +210,7 @@ class LoanController extends Controller
 
             $loan = Loan::create([
                 'uuid' => (string) Str::uuid(),
+                'qr_token' => (string) Str::uuid(),
                 'loan_code' => $loanCode,
                 'item_id' => $loanItems[0]['item_id'],
                 'qty' => $loanItems[0]['qty'],
@@ -243,7 +247,7 @@ class LoanController extends Controller
                 : 'Peminjaman berhasil dibuat, tetapi QR Code gagal dikirim ke email. Silakan cek konfigurasi email atau kirim ulang.',
             'email_sent' => $emailSent,
             'loan' => $loan,
-            'qr_payload' => $loan->uuid,
+            'qr_payload' => $loan->qr_token ?: $loan->uuid,
         ], 201);
     }
 
@@ -281,7 +285,7 @@ class LoanController extends Controller
     public function showByUuid(string $uuid)
     {
         $loan = Loan::with(['item', 'loanItems.item', 'creator', 'verifier'])
-            ->where('uuid', $uuid)
+            ->where('qr_token', $uuid)
             ->first();
 
         if (! $loan) {
@@ -316,6 +320,86 @@ class LoanController extends Controller
     }
 
     /**
+     * Change the quantity of an item on an active loan and adjust stock by the difference.
+     */
+    public function updateItemQuantity(Request $request, Loan $loan, Item $item)
+    {
+        $validated = $request->validate([
+            'qty' => ['required', 'integer', 'min:1'],
+        ]);
+
+        $updatedLoan = DB::transaction(function () use ($loan, $item, $validated) {
+            $lockedLoan = Loan::query()->lockForUpdate()->findOrFail($loan->id);
+
+            if ($lockedLoan->status !== 'borrowed') {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'loan' => 'Jumlah hanya dapat diubah saat barang masih dipinjam.',
+                ]);
+            }
+
+            $loanItem = $lockedLoan->loanItems()
+                ->where('item_id', $item->id)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $loanItem) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'item' => 'Barang tersebut tidak ada dalam transaksi ini.',
+                ]);
+            }
+
+            $previousQuantity = (int) $loanItem->qty;
+            $newQty = (int) $validated['qty'];
+            $difference = $newQty - $previousQuantity;
+            $lockedItem = Item::query()->lockForUpdate()->findOrFail($item->id);
+
+            if ($difference > 0 && $lockedItem->stock < $difference) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'qty' => "Stok {$lockedItem->name} tidak mencukupi. Stok tersedia: {$lockedItem->stock}",
+                ]);
+            }
+
+            if ($difference !== 0) {
+                $lockedItem->decrement('stock', $difference);
+            }
+
+            // Rotate the public QR token so every previous PDF/QR becomes invalid.
+            $lockedLoan->qr_token = (string) Str::uuid();
+            $lockedLoan->save();
+            $loanItem->update(['qty' => $newQty]);
+            if ((int) $lockedLoan->item_id === (int) $item->id) {
+                $lockedLoan->update(['qty' => $newQty]);
+            }
+
+            return [
+                'loan' => $lockedLoan->load(['item', 'loanItems.item', 'creator', 'verifier']),
+                'previous_quantity' => $previousQuantity,
+                'updated_quantity' => $newQty,
+            ];
+        });
+
+        $emailSent = false;
+        try {
+            Mail::to($updatedLoan['loan']->borrower_email)->send(new LoanRevision(
+                $updatedLoan['loan'],
+                $updatedLoan['previous_quantity'],
+                $updatedLoan['updated_quantity'],
+            ));
+            $emailSent = true;
+        } catch (\Throwable $exception) {
+            Log::error('Failed to send loan revision email: '.$exception->getMessage());
+        }
+
+        return response()->json([
+            'message' => $emailSent
+                ? 'Jumlah berhasil diperbarui dan PDF revisi dikirim ke email peminjam.'
+                : 'Jumlah berhasil diperbarui, tetapi PDF revisi gagal dikirim ke email.',
+            'email_sent' => $emailSent,
+            'loan' => $updatedLoan['loan'],
+        ]);
+    }
+
+    /**
      * Upload PDF and extract UUID/loan_code to find the loan.
      */
     public function uploadPdf(Request $request)
@@ -337,7 +421,7 @@ class LoanController extends Controller
 
             if (preg_match($uuidPattern, $text, $matches)) {
                 $loan = Loan::with(['item', 'loanItems.item', 'creator', 'verifier'])
-                    ->where('uuid', $matches[0])
+                    ->where('qr_token', $matches[0])
                     ->first();
             }
 
@@ -370,9 +454,9 @@ class LoanController extends Controller
     /**
      * Download QR Code + loan details as PDF (public - UUID acts as security token).
      */
-    public function downloadQr(string $uuid)
+    public function downloadQr(Request $request, string $uuid)
     {
-        $loan = Loan::with(['item', 'loanItems.item'])->where('uuid', $uuid)->first();
+        $loan = Loan::with(['item', 'loanItems.item'])->where('qr_token', $uuid)->first();
 
         if (! $loan) {
             return response()->json([
@@ -381,7 +465,7 @@ class LoanController extends Controller
         }
 
         // Generate QR Code as SVG and convert to base64 data URI
-        $qrSvg = QrCode::size(300)->margin(2)->errorCorrection('H')->generate($loan->uuid);
+        $qrSvg = QrCode::size(300)->margin(2)->errorCorrection('H')->generate($loan->qr_token);
         $qrDataUri = 'data:image/svg+xml;base64,' . base64_encode($qrSvg);
 
         // Get borrower photo as base64 for PDF embedding
@@ -399,6 +483,7 @@ class LoanController extends Controller
             'loan' => $loan,
             'qrDataUri' => $qrDataUri,
             'photoDataUri' => $photoDataUri,
+            'isRevision' => $request->boolean('revision'),
         ]);
 
         $safeName = preg_replace('/[^A-Za-z0-9_-]+/', '-', (string) $loan->borrower_name);

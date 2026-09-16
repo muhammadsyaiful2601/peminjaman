@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
     'uuid',
+    'qr_token',
     'loan_code',
     'item_id',
     'qty',

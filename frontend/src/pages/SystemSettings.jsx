@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Image, Save, Settings2, Upload } from 'lucide-react'
+import { DatabaseBackup, Download, Image, KeyRound, Save, Settings2, Upload, X } from 'lucide-react'
 import api from '../api/axios'
 import { useBranding } from '../context/BrandingContext'
+import { downloadBlob } from '../utils/downloadBlob'
 
 const textFields = [
   ['app_name', 'Nama aplikasi'],
@@ -26,12 +27,50 @@ function SystemSettings() {
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+  const [backupStatus, setBackupStatus] = useState(null)
+  const [backupLoading, setBackupLoading] = useState('')
+  const [backupType, setBackupType] = useState('')
+  const [backupPassword, setBackupPassword] = useState('')
 
   useEffect(() => {
     setForm(branding)
   }, [branding])
 
+  useEffect(() => {
+    api.get('/backups/status').then((response) => setBackupStatus(response.data)).catch(() => {})
+  }, [])
+
   const updateField = (key, value) => setForm((current) => ({ ...current, [key]: value }))
+
+  const openBackupConfirmation = (type) => {
+    setError('')
+    setBackupPassword('')
+    setBackupType(type)
+  }
+
+  const downloadBackup = async (event) => {
+    event.preventDefault()
+    if (!backupType || !backupPassword) return
+
+    const type = backupType
+    setBackupLoading(type)
+    setError('')
+    try {
+      const response = await api.post(`/backups/${type}`, { password: backupPassword }, { responseType: 'blob' })
+      const fallbackName = type === 'mysql' ? 'backup-mysql.sql' : 'backup-sqlite.sqlite'
+      const result = await downloadBlob(response.data, fallbackName)
+      if (result && !result.ok && !result.canceled) setError(result.message || 'Backup gagal disimpan.')
+      if (!result || result.ok || result.canceled) {
+        setBackupType('')
+        setBackupPassword('')
+      }
+    } catch (err) {
+      const responseData = err.response?.data
+      setError(responseData?.message || 'Password salah atau backup database gagal dibuat.')
+    } finally {
+      setBackupLoading('')
+    }
+  }
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -102,10 +141,60 @@ function SystemSettings() {
           </div>
         </section>
 
+        <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="mb-5 flex items-center gap-3">
+            <DatabaseBackup className="h-5 w-5 text-cyan-600" />
+            <div>
+              <h2 className="font-semibold text-slate-900">Backup Database</h2>
+              <p className="text-sm text-slate-500">Unduh salinan database sesuai mode penyimpanan aplikasi.</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            {backupStatus?.sqlite && (
+              <button type="button" onClick={() => openBackupConfirmation('sqlite')} disabled={!!backupLoading} className="inline-flex items-center gap-2 rounded-lg border border-cyan-200 px-4 py-2.5 text-sm font-semibold text-cyan-700 hover:bg-cyan-50 disabled:opacity-50">
+                <Download className="h-4 w-4" />
+                {backupLoading === 'sqlite' ? 'Menyiapkan SQLite...' : 'Download SQLite'}
+              </button>
+            )}
+            {backupStatus?.mysql && (
+              <button type="button" onClick={() => openBackupConfirmation('mysql')} disabled={!!backupLoading} className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 px-4 py-2.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50">
+                <Download className="h-4 w-4" />
+                {backupLoading === 'mysql' ? 'Menyiapkan MySQL...' : 'Download MySQL'}
+              </button>
+            )}
+          </div>
+          <p className="mt-3 text-xs text-slate-500">
+            {backupStatus?.hybrid ? 'Mode hybrid aktif: kedua backup tersedia.' : backupStatus?.driver === 'mysql' ? 'Mode MySQL aktif.' : 'Mode SQLite aktif.'}
+          </p>
+        </section>
+
         {message && <p className="rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{message}</p>}
         {error && <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
         <button disabled={saving} className="inline-flex items-center gap-2 rounded-lg bg-cyan-600 px-5 py-2.5 font-semibold text-white hover:bg-cyan-700 disabled:opacity-50"><Save className="h-4 w-4" />{saving ? 'Menyimpan...' : 'Simpan pengaturan'}</button>
       </form>
+
+      {backupType && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
+          <form onSubmit={downloadBackup} className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <KeyRound className="mt-0.5 h-5 w-5 text-cyan-600" />
+                <div>
+                  <h2 className="font-semibold text-slate-900">Konfirmasi Password</h2>
+                  <p className="mt-1 text-sm text-slate-500">Masukkan password admin untuk mengunduh backup {backupType === 'mysql' ? 'MySQL' : 'SQLite'}.</p>
+                </div>
+              </div>
+              <button type="button" onClick={() => setBackupType('')} className="text-slate-400 hover:text-slate-600" aria-label="Tutup"><X className="h-5 w-5" /></button>
+            </div>
+            <input autoFocus type="password" value={backupPassword} onChange={(event) => setBackupPassword(event.target.value)} placeholder="Password admin" className="mt-5 w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100" required />
+            {error && <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+            <div className="mt-5 flex justify-end gap-2">
+              <button type="button" onClick={() => setBackupType('')} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">Batal</button>
+              <button type="submit" disabled={!!backupLoading} className="inline-flex items-center gap-2 rounded-lg bg-cyan-600 px-4 py-2 text-sm font-semibold text-white hover:bg-cyan-700 disabled:opacity-50"><Download className="h-4 w-4" />{backupLoading ? 'Menyiapkan...' : 'Konfirmasi & Download'}</button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   )
 }

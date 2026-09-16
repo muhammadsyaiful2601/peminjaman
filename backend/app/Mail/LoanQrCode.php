@@ -21,6 +21,8 @@ class LoanQrCode extends Mailable
 {
     use Queueable, SerializesModels;
 
+    protected bool $isRevision = false;
+
     public function __construct(
         public Loan $loan,
     ) {}
@@ -44,7 +46,7 @@ class LoanQrCode extends Mailable
             with: [
                 'attachmentName' => $this->proofFilename(),
                 'downloadUrl' => $publicUrl
-                    ? $publicUrl . '/api/loans/qr/' . $this->loan->uuid . '/download'
+                    ? $publicUrl . '/api/loans/qr/' . ($this->loan->qr_token ?: $this->loan->uuid) . '/download'
                     : null,
             ],
         );
@@ -60,7 +62,7 @@ class LoanQrCode extends Mailable
 
             // QR Code inline berbentuk PNG agar tampil di semua klien email
             // (Gmail/Outlook memblokir SVG dan gambar ber-URI data).
-            $qr = new DataPart(QrPng::generate($this->loan->uuid, 360), 'qr-peminjaman.png', 'image/png');
+            $qr = new DataPart(QrPng::generate($this->loan->qr_token ?: $this->loan->uuid, 360), 'qr-peminjaman.png', 'image/png');
             $qr->setContentId('qr-peminjaman@pnp.local');
             $qr->setDisposition('inline');
             $message->addPart($qr);
@@ -91,9 +93,9 @@ class LoanQrCode extends Mailable
     /**
      * Susun PDF bukti peminjaman (identik dengan endpoint unduh QR di aplikasi).
      */
-    private function proofPdf(): string
+    protected function proofPdf(): string
     {
-        $qrSvg = QrCode::size(300)->margin(2)->errorCorrection('H')->generate($this->loan->uuid);
+        $qrSvg = QrCode::size(300)->margin(2)->errorCorrection('H')->generate($this->loan->qr_token ?: $this->loan->uuid);
         $qrDataUri = 'data:image/svg+xml;base64,' . base64_encode($qrSvg);
 
         $photoDataUri = null;
@@ -110,6 +112,7 @@ class LoanQrCode extends Mailable
             'loan' => $this->loan->loadMissing(['item', 'loanItems.item']),
             'qrDataUri' => $qrDataUri,
             'photoDataUri' => $photoDataUri,
+            'isRevision' => $this->isRevision,
         ])->output();
     }
 }
