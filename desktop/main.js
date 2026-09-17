@@ -35,7 +35,7 @@ const PREFERRED_PORT = 8642;
 //  penegakan storage:link via junction saat boot; 1.0.13: disk "public"
 //  diarahkan ke folder uploads persisten — perbaikan bug "gambar hilang
 //  setelah install ulang").
-const TEMPLATE_VERSION = '1.0.14';
+const TEMPLATE_VERSION = '1.0.15';
 const isDev = !app.isPackaged;
 
 /* ------------------------------------------------------------------ paths */
@@ -209,6 +209,7 @@ function buildDesktopEnv(port) {
     LOG_LEVEL: 'warning',
     DB_CONNECTION: 'sqlite',
     DB_DATABASE: databaseFile,
+    DESKTOP_UPLOAD_PATH: uploadsDir,
     SESSION_DRIVER: 'database',
     SESSION_LIFETIME: '120',
     SESSION_ENCRYPT: 'false',
@@ -238,6 +239,7 @@ function buildDesktopEnv(port) {
     FRONTEND_URL: url,
     DB_CONNECTION: 'sqlite',
     DB_DATABASE: databaseFile,
+    DESKTOP_UPLOAD_PATH: uploadsDir,
   };
 }
 
