@@ -7,6 +7,7 @@ use App\Support\Hybrid;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class BackupController extends Controller
@@ -51,11 +52,18 @@ class BackupController extends Controller
             $databasePath = (string) config('database.connections.sqlite.database');
             abort_unless(is_file($databasePath), 404, 'File database SQLite tidak ditemukan.');
 
+            // Copy the live database first so the download is a consistent snapshot.
+            $snapshotPath = tempnam(sys_get_temp_dir(), 'peminjaman-backup-');
+            if ($snapshotPath === false || ! copy($databasePath, $snapshotPath)) {
+                Log::error('SQLite backup snapshot failed.', ['database' => $databasePath]);
+                abort(500, 'Snapshot database SQLite gagal dibuat.');
+            }
+
             return response()->download(
-                $databasePath,
+                $snapshotPath,
                 'backup-sqlite-'.now()->format('Y-m-d-His').'.sqlite',
                 ['Content-Type' => 'application/octet-stream'],
-            );
+            )->deleteFileAfterSend(true);
         }
 
         abort_unless($driver === 'mysql' || $hybridAvailable, 404, 'Backup MySQL tidak tersedia pada mode ini.');

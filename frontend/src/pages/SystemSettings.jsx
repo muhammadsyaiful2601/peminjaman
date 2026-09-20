@@ -65,7 +65,14 @@ function SystemSettings() {
         setBackupPassword('')
       }
     } catch (err) {
-      const responseData = err.response?.data
+      let responseData = err.response?.data
+      if (responseData instanceof Blob) {
+        try {
+          responseData = JSON.parse(await responseData.text())
+        } catch {
+          responseData = null
+        }
+      }
       setError(responseData?.message || 'Password salah atau backup database gagal dibuat.')
     } finally {
       setBackupLoading('')
