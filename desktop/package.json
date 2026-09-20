@@ -5,7 +5,7 @@
   "description": "Aplikasi Desktop Sistem Peminjaman Barang Politeknik Negeri Padang (offline, tanpa XAMPP/Laragon) — pembaruan manual dari GitHub Releases (menu gear).",
   "main": "main.js",
   "author": "Muhammad Syaiful (24)",
-  "license": "MIT",
+  "license": "UNLICENSED",
   "repository": {
     "type": "git",
     "url": "https://github.com/muhammadsyaiful2601/peminjaman.git"

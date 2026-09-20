@@ -1,58 +1,64 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Backend — Sistem Peminjaman Barang PNP
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+REST API Laravel 13 (PHP 8.3+) untuk Sistem Peminjaman Barang Jurusan Teknologi
+Informasi, Politeknik Negeri Padang. Backend ini melayani dua mode deployment:
 
-## About Laravel
+- **Website** — banyak komputer melalui jaringan/domain, database MySQL.
+- **Aplikasi desktop Electron** — PHP portable + SQLite lokal, satu komputer petugas,
+  tetap berjalan tanpa XAMPP/Laragon/MySQL.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+> Repository ini **bukan open source**. Sistem dihibahkan untuk Politeknik Negeri
+> Padang dan dilisensikan secara komersial untuk institusi lain — lihat
+> [`../LICENSE.md`](../LICENSE.md).
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
-
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
-
-## Learning Laravel
-
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
-
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
-
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
-
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+## Menjalankan backend
 
 ```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+composer install
+cp .env.example .env          # PowerShell: Copy-Item .env.example .env
+php artisan key:generate
+php artisan storage:link
+php artisan migrate --seed
+php artisan serve --port=8000
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+Konfigurasi environment, daftar endpoint API, aturan bisnis stok/multi-item, dan
+checklist deployment dijelaskan pada [`../README.md`](../README.md).
 
-## Contributing
+## Struktur penting
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+| Path | Isi |
+| :--- | :--- |
+| `app/Http/Controllers/Api/` | Controller REST API: `Auth`, `Item`, `Loan`, `User`, `Technician`, `Backup`, `Branding`, `Hybrid` |
+| `app/Http/Middleware/` | `CheckRole` (alias `role`) dan `CheckDesktopKey` (alias `desktop.key`, header `X-Desktop-Key`) |
+| `app/Models/` | `User`, `Item`, `ItemImage`, `Loan`, `LoanItem`, `Technician`, `AppSetting` |
+| `app/Support/` | Helper `Branding`, `Hybrid`, `PublicUrl`, `QrPng` |
+| `app/Services/` | `HybridSyncService` (sinkronisasi SQLite lokal ↔ MySQL hosting) |
+| `app/Mail/` | Email bukti peminjaman, revisi peminjaman, dan konfirmasi pengembalian |
+| `app/Console/Commands/` | `hybrid:migrate` dan `hybrid:sync` (`--due`, `--force`) |
+| `app/Notifications/` | `VerifyEmailNotification` (verifikasi email akun petugas) |
+| `database/seeders/` | `DatabaseSeeder` (akun awal) dan `LoanDummySeeder` (100 peminjaman contoh) |
+| `resources/views/pdf/` | Template PDF: bukti QR, laporan peminjaman, surat peminjaman resmi |
+| `routes/api.php` | Seluruh endpoint `/api`, termasuk route khusus desktop |
 
-## Code of Conduct
+Akun awal dari seeder: `admin` / `password` (petugas utama) dan `asisten` / `password`
+(asisten petugas) — login memakai **username**, bukan email.
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+## Perintah verifikasi
 
-## Security Vulnerabilities
+```bash
+php artisan test
+php artisan view:cache
+php artisan config:clear
+```
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+## Lisensi
 
-## License
+Backend ini adalah bagian dari perangkat lunak **proprietary (bukan open source)** dan
+tunduk pada [`../LICENSE.md`](../LICENSE.md).
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+Komponen pihak ketiga tetap memakai lisensinya masing-masing — di antaranya Laravel
+Framework, Laravel Sanctum, `barryvdh/laravel-dompdf`, `simplesoftwareio/simple-qrcode`
+(MIT), `bacon/bacon-qr-code` (BSD-2-Clause), `dompdf/dompdf` (LGPL-2.1), dan
+`smalot/pdfparser` (LGPL-3.0). Teks lisensi lengkap tersedia pada
+`vendor/<vendor>/<paket>/LICENSE*` dan tidak boleh dihapus dari distribusi.

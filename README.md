@@ -4,8 +4,35 @@ Aplikasi untuk **inventaris**, **peminjaman multi-barang**, **pengembalian denga
 **peminjaman resmi (surat)**, **laporan resmi**, dan **bukti transaksi berbasis QR Code + email**.
 Mahasiswa/peminjam **tidak membuat akun** — petugas memasukkan data peminjam dan menyerahkan barang melalui aplikasi.
 
-> Versi installer desktop saat ini: **1.0.2** (lihat `desktop/release/`).
-> Build installer terbaru sudah memuat Cloudflare Tunnel + perbaikan email bukti.
+> **Versi aplikasi:** lihat `desktop/package.json` (saat ini **1.1.5**). Installer `.exe`
+> tidak disimpan di source — unduh dari halaman **Releases** repositori ini.
+>
+> **Status kepemilikan:** perangkat lunak **proprietary** (bukan open source, bukan MIT).
+> Dihibahkan untuk Politeknik Negeri Padang dan dilisensikan secara komersial untuk
+> institusi lain — lihat [Lisensi dan Kepemilikan](#lisensi-dan-kepemilikan) dan
+> [`LICENSE.md`](LICENSE.md).
+
+## Lisensi dan Kepemilikan
+
+Sistem ini **bukan open source**. Hak cipta dan hak lisensi sepenuhnya dipegang
+pengembang. Ketentuan lengkap ada di [`LICENSE.md`](LICENSE.md); ringkasannya:
+
+| Pemakai | Dasar | Biaya | Jangka waktu |
+| :--- | :--- | :--- | :--- |
+| Politeknik Negeri Padang — Jurusan Teknologi Informasi | Hibah, non-eksklusif, tidak dipindahtangankan | Gratis | Tanpa batas waktu |
+| Institusi, perusahaan, atau perorangan lain | Perjanjian lisensi tertulis (invoice + perjanjian) | Sesuai perjanjian | Sesuai perjanjian |
+
+Yang perlu diperhatikan:
+
+- Source code di repositori ini dipublikasikan untuk keperluan pengembangan dan
+  transparansi, **bukan** pemberian lisensi. Menyalin, menjual, atau menerbitkan ulang
+  tanpa izin tertulis tidak diizinkan.
+- Dilarang menghapus nama pengembang, pemberitahuan hak cipta, dan daftar komponen
+  pihak ketiga.
+- Komponen pihak ketiga (Laravel, React, Electron, PHP, `cloudflared`, dan lainnya) tetap
+  tunduk pada lisensinya masing-masing — daftar lengkap ada di `LICENSE.md` bagian 5.
+- Data transaksi adalah milik institusi pengguna dan disimpan pada infrastruktur
+  pengguna sendiri (SQLite/MySQL); pengembang tidak menarik data tersebut.
 
 ## Pilih Mode Deployment
 
@@ -18,19 +45,34 @@ Repository ini menyediakan dua mode penggunaan:
 
 Website dan desktop memakai source frontend, API, migration, seeder, dan aturan bisnis yang sama. Perbedaannya hanya pada cara menjalankan backend dan database.
 
-## Daftar Isi Deployment
+## Daftar Isi
 
-- [Prasyarat](#persyaratan)
-- [Menjalankan Lokal](#menjalankan-di-lokal)
+- [Lisensi dan Kepemilikan](#lisensi-dan-kepemilikan)
+- [Pilih Mode Deployment](#pilih-mode-deployment)
+- [Ringkasan Sistem](#ringkasan-sistem)
+- [Fitur](#fitur)
+- [Alur Operasional](#alur-operasional)
+- [Teknologi](#teknologi)
+- [Struktur Direktori](#struktur-direktori)
+- [Persyaratan](#persyaratan)
+- [Menjalankan di Lokal](#menjalankan-di-lokal)
+- [Konfigurasi Environment](#konfigurasi-environment)
+- [Akun Seed Default](#akun-seed-default)
+- [API](#api)
+- [Perintah Verifikasi](#perintah-verifikasi)
 - [Deploy Website Production](#deploy-website-production)
-
-> **Catatan versi:** panduan ini mencakup seluruh fitur sampai build desktop 1.0.2 —
-> email bukti offline-proof (QR inline + lampiran PDF) dan tombol unduh publik otomatis
-> via Cloudflare Quick Tunnel saat komputer petugas online (tanpa VPS/hosting).
-- [Build dan Instalasi Desktop](#build-dan-instalasi-desktop-windows)
+- [Build dan Instalasi Desktop Windows](#build-dan-instalasi-desktop-windows)
+- [Tutorial Mandiri untuk Komputer Lain](#tutorial-mandiri-untuk-komputer-lain)
 - [Publikasi ke GitHub](#publikasi-ke-github)
 - [Keamanan Secret](#keamanan-secret)
-- [Checklist Setelah Deploy](#checklist-setelah-deploy)
+- [Checklist Deployment](#checklist-deployment)
+- [Aplikasi Desktop (Electron)](#aplikasi-desktop-electron)
+  - [Unduh bukti publik saat komputer petugas online](#unduh-bukti-publik-saat-komputer-petugas-online-tanpa-vpshosting)
+  - [Pembaruan Otomatis (Auto-Update)](#pembaruan-otomatis-auto-update)
+
+> **Catatan versi:** dokumen ini tidak menuliskan nomor versi installer agar tidak
+> tertinggal saat rilis baru. Acuan versi aplikasi adalah `desktop/package.json`,
+> sedangkan installer terbaru tersedia pada halaman **Releases**.
 
 ## Ringkasan Sistem
 
@@ -45,7 +87,9 @@ Website dan desktop memakai source frontend, API, migration, seeder, dan aturan 
 - Laporan peminjaman dapat difilter (status, tanggal, teknisi), dicetak resmi, dan diunduh sebagai PDF.
 - Peminjaman resmi mendukung peminjaman skala besar dengan surat PDF dan banyak barang.
 - Waktu aplikasi menggunakan WIB (`Asia/Jakarta`).
-- Versi desktop **1.0.3+** dapat memperbarui otomatis dari GitHub Releases di latar belakang (popup restart bila siap).
+- Versi desktop **1.0.3+** dapat mendeteksi pembaruan dari GitHub Releases di latar
+  belakang (cek saat aplikasi dibuka dan tiap 4 jam); pengunduhan dipicu pengguna,
+  lalu aplikasi memasang versi baru secara senyap dan memulai ulang otomatis.
 
 ## Fitur
 
@@ -212,6 +256,16 @@ frontend/
     src/hooks/                     Idle session hook
     src/pages/                     Dashboard, barang, peminjaman, peminjaman resmi, laporan, scan QR (kamera/manual, multi-metode),
                                     detail transaksi, pengembalian, user, teknisi, profil, lupa/reset password
+
+desktop/
+    main.js                        Proses utama Electron: boot backend, PHP portable, wizard, tunnel, pembaruan
+    preload.js                     Jembatan aman window.desktop
+    setup.html / setup.js          Wizard konfigurasi awal (identitas aplikasi + email)
+    scripts/                       prepare-php, prepare-cloudflared, prepare-build, smoke-test
+    resources/                     Runtime PHP portable, cloudflared, backend & frontend hasil rakit
+
+LICENSE.md                         Lisensi proprietary dan daftar komponen pihak ketiga
+README.md                          Dokumentasi utama (deployment, API, dan operasional)
 ```
 
 ## Persyaratan
@@ -329,12 +383,19 @@ Untuk website production multi-pengguna, gunakan MySQL atau MariaDB. SQLite desk
 
 ## Akun Seed Default
 
-Seeder membuat akun berikut jika belum ada:
+Seeder (`DatabaseSeeder`) membuat akun berikut jika belum ada. Login aplikasi memakai
+**username**, bukan email.
 
-| Role | Email | Password awal |
-| :--- | :--- | :--- |
-| Admin | `admin@kampus.ac.id` | `password` |
-| Asisten | `asisten@kampus.ac.id` | `password` |
+| Role | Username | Email | Password awal |
+| :--- | :--- | :--- | :--- |
+| Admin | `admin` | `admin@pnp.local` | `password` |
+| Asisten | `asisten` | `asisten@pnp.local` | `password` |
+
+Seeder juga menambahkan satu data teknisi contoh (`NOFA HENDRAYANA.ST`, NIP
+`197907182025211025`) bila belum ada.
+
+Untuk menambahkan data peminjaman contoh (100 transaksi dummy), jalankan
+`php artisan db:seed --class=LoanDummySeeder` — lihat [Menjalankan di Lokal](#menjalankan-di-lokal).
 
 Segera ganti password default setelah instalasi dan jangan memakai password tersebut di production.
 
@@ -452,7 +513,11 @@ npm run build
 npm run lint
 ```
 
-Test otomatis yang tersedia saat ini masih berupa test contoh Laravel. Belum tersedia test integrasi khusus untuk stok, multi-item, autentikasi, role, email, PDF, dan pengembalian.
+Test yang tersedia saat ini: `LoanQrCodeMailTest` (email bukti QR + tautan unduh publik),
+`DesktopBrandingTest` (endpoint branding khusus aplikasi desktop), dan
+`HybridSettingsTest` (konfigurasi mode hybrid), ditambah test contoh bawaan Laravel.
+Belum tersedia test integrasi khusus untuk stok, multi-item, autentikasi berbasis role,
+PDF, dan alur pengembalian.
 
 ## Deploy Website Production
 
@@ -554,7 +619,8 @@ node desktop/scripts/smoke-test.mjs
 
 Instalasi komputer kampus:
 
-1. Jalankan `Peminjaman Barang PNP Setup 1.0.2.exe`.
+1. Jalankan installer `Peminjaman Barang PNP Setup <versi>.exe` dari halaman **Releases**
+   (atau dari `desktop/release/` bila Anda membangunnya sendiri).
 2. Pilih lokasi instalasi, termasuk drive `C:` atau `E:`.
 3. Buka aplikasi dan tunggu migration SQLite serta seed selesai.
 4. Isi SMTP melalui wizard atau **Aplikasi → Pengaturan Email**.
@@ -669,10 +735,17 @@ git push -u origin main
 
 Ganti URL remote dengan repository Anda. Gunakan Personal Access Token atau Git Credential Manager, bukan password GitHub biasa.
 
-Installer `.exe` dibagikan melalui **GitHub Release** (bukan di-commit ke source). Setelah
-`npm run dist`, buat tag seperti `v1.0.4`, buat Release, lalu upload **tiga file** dari
-`desktop/release/` sebagai Release Asset: installer `.exe`, `latest.yml`, dan `.exe.blockmap`
-(yang dua terakhir dibutuhkan untuk fitur auto-update — lihat [Pembaruan Otomatis](#aplikasi-desktop-electron)).
+Installer `.exe` dibagikan melalui **GitHub Release** (bukan di-commit ke source). Ada dua cara:
+
+1. **Otomatis (disarankan):** naikkan `version` pada `desktop/package.json`, lalu push ke
+   branch `Syaiful`, `main`, atau `master`. Workflow `.github/workflows/release-desktop.yml`
+   membangun installer dan menerbitkannya sebagai Release `v{versi}`; release yang masih
+   berstatus draft difinalkan otomatis pada langkah terakhir.
+2. **Manual:** jalankan `npm run dist`, lalu buat Release dengan tag sesuai versi di
+   `desktop/package.json` (mis. `v1.1.5`) dan upload **tiga file** dari `desktop/release/`:
+   installer `.exe`, `latest.yml`, dan `.exe.blockmap`. Dua file terakhir wajib ada agar
+   aplikasi versi lama dapat mendeteksi pembaruan — lihat
+   [Pembaruan Otomatis (Auto-Update)](#pembaruan-otomatis-auto-update).
 
 ## Keamanan Secret
 
@@ -730,22 +803,28 @@ Catatan:
 
 ### Pembaruan Otomatis (Auto-Update)
 
-Sejak versi **1.0.3**, aplikasi desktop yang terinstal dapat memperbarui **otomatis**
-dari GitHub Releases — tidak perlu install ulang manual setiap kali ada perbaikan:
+Sejak versi **1.0.3**, aplikasi desktop yang terinstal dapat mendeteksi dan memasang
+pembaruan dari GitHub Releases tanpa perlu install ulang manual:
 
-1. Saat aplikasi dibuka, di latar belakang aplikasi periksa versi baru di GitHub
-   (ulangi periodik setiap 4 jam; juga bisa di-trigger via **Aplikasi → Periksa Pembaruan**).
-2. Bila versi baru tersedia → installer diunduh **di latar belakang** tanpa berhenti
-   kerja petugas; status tersedia via menu **Aplikasi → Instal Pembaruan**.
-3. Bila download selesai → aplikasi menampilkan **popup "Pembaruan Siap"** dengan dua pilihan:
-   **Restart Sekarang** (instal otomatis via `quitAndInstall`) atau **Nanti**
-   (instal terjadi otomatis saat aplikasi ditutup). Data
-   (`%APPDATA%\Peminjaman Barang PNP`) tetap bertahan tanpa hilang.
-4. Log pembaruan ditulis ke `%APPDATA%\Peminjaman Barang PNP\update.log`.
+1. Aplikasi memeriksa versi baru di latar belakang — ±20 detik setelah aplikasi siap,
+   lalu berulang setiap 4 jam. Bila tidak ada versi baru, tidak muncul notifikasi apa pun.
+2. Bila versi baru tersedia, muncul **popup "Pembaruan Tersedia"** dengan pilihan
+   **Unduh & Instal** atau **Nanti**. Pemeriksaan manual juga tersedia melalui menu
+   **Aplikasi → Perbarui Aplikasi…** dan panel **Pengaturan** (tombol gear) di aplikasi.
+3. Pengunduhan **tidak dilakukan otomatis**: installer baru diunduh hanya setelah
+   pengguna memilih **Unduh & Instal** (atau menu **Aplikasi → Pengunduh Pembaruan…**),
+   dengan indikator progres. Petugas tetap dapat bekerja selama unduhan berlangsung.
+4. Setelah unduhan selesai, aplikasi menutup diri lalu memasang versi baru secara
+   **senyap** (tanpa wizard NSIS) enam detik kemudian, dan terbuka kembali dengan versi
+   baru. Data (`%APPDATA%\Peminjaman Barang PNP`) serta konfigurasi tidak tersentuh
+   installer.
+5. Status pembaruan juga tampil pada menu **Aplikasi** — mis. **Instal Pembaruan…**
+   aktif setelah unduhan siap — dan pada panel **Pengaturan** (gear).
+6. Log pembaruan ditulis ke `%APPDATA%\Peminjaman Barang PNP\update.log`.
 
 > **Instal pertama:** versi ≤1.0.2 yang sudah terinstal belum berisi modul pembaruan,
 > jadi perlu diinstal ulang **manual** ke 1.0.3 sebanyak satu kali. Setelah itu semua
-> versi berikutnya dapat diinstal otomatis dari GitHub.
+> versi berikutnya dapat diperbarui dari dalam aplikasi.
 
 Publikasi versi baru (untuk developer):
 
@@ -759,8 +838,9 @@ npm run dist:publish      # memerlukan GH_TOKEN di lingkungan (Personal Access T
 
 > `npm run dist:publish` mengunduh `cloudflared`, build installer, lalu **upload otomatis**
 > `Setup*.exe`, `latest.yml`, dan `*.exe.blockmap` sebagai GitHub Release (bila `GH_TOKEN`
-> diset). Upload manual juga boleh: buat Release/tag `v1.0.4` dan upload ketiga file dari
-> `desktop/release/`. File `latest.yml` wajib hadir agar versi lama bisa deteksi pembaruan.
+> diset). Upload manual juga boleh: buat Release dengan tag sesuai versi di
+> `desktop/package.json` (mis. `v1.1.5`) dan upload ketiga file dari `desktop/release/`.
+> File `latest.yml` wajib hadir agar versi lama bisa mendeteksi pembaruan.
 
 ```powershell
 cd desktop

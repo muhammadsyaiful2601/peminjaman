@@ -63,7 +63,8 @@ npm run icons
 npm run dist
 ```
 
-Hasil: `desktop/release/Peminjaman Barang PNP Setup 1.0.2.exe`
+Hasil: `desktop/release/Peminjaman Barang PNP Setup <versi>.exe`, dengan `<versi>` mengikuti
+nilai `version` pada `desktop/package.json`.
 
 ### Menerbitkan pembaruan otomatis
 
@@ -79,13 +80,19 @@ npm run dist:publish
 ```
 
 Perintah tersebut membuat installer dan mengunggah release beserta `latest.yml`
-dan blockmap ke repository GitHub. Pada aplikasi terpasang, pengguna cukup
-memilih **Aplikasi → Perbarui Aplikasi…**. Aplikasi akan mengunduh, memasang,
-dan membuka kembali versi baru secara otomatis tanpa menghapus database,
-konfigurasi email, atau data branding.
+dan blockmap ke repository GitHub. Cara lain yang lebih ringkas: cukup naikkan
+`version` pada `desktop/package.json`, lalu push ke branch `Syaiful`/`main`/`master` —
+workflow `.github/workflows/release-desktop.yml` akan membangun dan menerbitkan
+release `v{versi}` secara otomatis.
 
-Versi `1.1.1` adalah rilis pertama yang harus dipublikasikan agar instalasi
-`1.1.0` yang sudah ada dapat memperbarui dirinya.
+Pada aplikasi terpasang, pengguna memilih **Aplikasi → Perbarui Aplikasi…** untuk
+memeriksa versi baru (pemeriksaan otomatis juga berjalan tiap 4 jam). Setelah pengguna
+memilih **Unduh & Instal**, aplikasi mengunduh, memasang secara senyap, dan membuka
+kembali versi baru tanpa menghapus database, konfigurasi email, atau data branding.
+
+> Instalasi lama versi ≤1.0.2 belum memiliki modul pembaruan, sehingga perlu diinstal
+> ulang manual satu kali. Versi aplikasi terkini selalu dapat dilihat pada
+> `desktop/package.json` dan pada halaman **Releases** repositori.
 
 Perilaku instalasi/first-run di komputer pengguna:
 
@@ -127,3 +134,18 @@ Perilaku instalasi/first-run di komputer pengguna:
 - Port backend mulai dari `8642`, otomatis bergeser bila terpakai.
 - Update template backend: naikkan `TEMPLATE_VERSION` di `main.js` agar AppData
   disalin ulang (kredensial mail & APP_KEY dipertahankan).
+
+## Lisensi
+
+Aplikasi desktop ini adalah bagian dari perangkat lunak **proprietary (bukan open
+source)** dan tunduk pada [`../LICENSE.md`](../LICENSE.md): dihibahkan untuk Politeknik
+Negeri Padang dan dilisensikan secara komersial untuk institusi lain.
+
+Catatan untuk pembuatan dan distribusi installer:
+
+- Teks lisensi komponen pihak ketiga tidak boleh dihapus dari paket — mis.
+  `resources/php/license.txt` (PHP License 3.01), `backend/vendor/*/*/LICENSE*`
+  (Laravel MIT; `dompdf/dompdf` LGPL-2.1; `smalot/pdfparser` LGPL-3.0), serta lisensi
+  Electron, `electron-updater`, dan `cloudflared` (Apache-2.0).
+- Nama pengembang serta pemberitahuan hak cipta — "developed by Muhammad Syaiful" pada
+  sidebar aplikasi dan `copyright` pada `desktop/package.json` — harus dipertahankan.
