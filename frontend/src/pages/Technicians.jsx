@@ -16,7 +16,7 @@ function Technicians() {
       const response = await api.get('/technicians')
       setTechnicians(response.data || [])
     } catch (requestError) {
-      setError(requestError.response?.data?.message || 'Gagal memuat data teknisi.')
+      setError(requestError.response?.data?.message || 'Gagal Memuat Data teknisi.')
     } finally {
       setLoading(false)
     }
@@ -85,10 +85,14 @@ function Technicians() {
       </form>
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-        {loading ? <p className="p-8 text-center text-slate-500">Memuat data...</p> : technicians.length === 0 ? <div className="p-8 text-center text-slate-500"><Wrench className="mx-auto mb-3 h-10 w-10 text-slate-300" />Belum ada teknisi.</div> : <table className="w-full text-sm"><thead className="bg-slate-50"><tr><th className="px-6 py-3 text-left font-medium text-slate-500">Nama</th><th className="px-6 py-3 text-left font-medium text-slate-500">NIP</th><th className="px-6 py-3 text-right font-medium text-slate-500">Aksi</th></tr></thead><tbody className="divide-y divide-slate-200">{technicians.map((technician) => <tr key={technician.id}><td className="px-6 py-3 font-medium text-slate-900">{technician.name}</td><td className="px-6 py-3 text-slate-600">{technician.nip}</td><td className="px-6 py-3 text-right"><div className="inline-flex gap-2"><button onClick={() => handleEdit(technician)} className="rounded-lg p-1.5 text-slate-500 hover:bg-cyan-50 hover:text-cyan-600" aria-label={`Edit ${technician.name}`}><Pencil className="h-4 w-4" /></button><button onClick={() => handleDelete(technician)} className="rounded-lg p-1.5 text-slate-500 hover:bg-red-50 hover:text-red-600" aria-label={`Hapus ${technician.name}`}><Trash2 className="h-4 w-4" /></button></div></td></tr>)}</tbody></table>}
+        {loading ? <p className="p-8 text-center text-slate-500">Memuat Data...</p> : technicians.length === 0 ? <div className="p-8 text-center text-slate-500"><Wrench className="mx-auto mb-3 h-10 w-10 text-slate-300" />Belum ada teknisi.</div> : <table className="w-full text-sm"><thead className="bg-slate-50"><tr><th className="px-6 py-3 text-left font-medium text-slate-500">Nama</th><th className="px-6 py-3 text-left font-medium text-slate-500">NIP</th><th className="px-6 py-3 text-right font-medium text-slate-500">Aksi</th></tr></thead><tbody className="divide-y divide-slate-200">{technicians.map((technician) => <tr key={technician.id}><td className="px-6 py-3 font-medium text-slate-900">{technician.name}</td><td className="px-6 py-3 text-slate-600">{technician.nip}</td><td className="px-6 py-3 text-right"><div className="inline-flex gap-2"><button onClick={() => handleEdit(technician)} className="rounded-lg p-1.5 text-slate-500 hover:bg-cyan-50 hover:text-cyan-600" aria-label={`Edit ${technician.name}`}><Pencil className="h-4 w-4" /></button><button onClick={() => handleDelete(technician)} className="rounded-lg p-1.5 text-slate-500 hover:bg-red-50 hover:text-red-600" aria-label={`Hapus ${technician.name}`}><Trash2 className="h-4 w-4" /></button></div></td></tr>)}</tbody></table>}
       </div>
     </div>
   )
 }
 
 export default Technicians
+
+
+
+

@@ -74,18 +74,59 @@
     #status { font-size: 12.5px; margin-top: 14px; display: none; padding: 10px 12px; border-radius: 9px; line-height: 1.5; }
     #status.ok { display: block; background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; }
     #status.err { display: block; background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
+    .section {
+      font-size: 11.5px;
+      font-weight: 700;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      color: #0e7490;
+      margin: 24px 0 0;
+      padding-top: 18px;
+      border-top: 1px dashed #e2e8f0;
+    }
+    .section:first-of-type { border-top: 0; padding-top: 0; margin-top: 18px; }
+    .logo-row { display: grid; grid-template-columns: 92px 1fr; gap: 14px; align-items: start; margin-top: 6px; }
+    .logo-preview {
+      width: 92px;
+      height: 92px;
+      object-fit: contain;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      background: #f8fafc;
+      padding: 8px;
+    }
+    input[type=file] { padding: 7px 9px; background: #f8fafc; font-size: 12.5px; }
+    .btn-mini { padding: 6px 10px; font-size: 11.5px; margin-top: 8px; }
     .foot { margin-top: 18px; color: #94a3b8; font-size: 11px; text-align: center; }
   </style>
 </head>
 <body>
   <div class="card">
     <div class="head">
-      <img src="assets/logo-pnp.svg" alt="Logo PNP" />
+      <img id="headLogo" src="assets/logo-pnp.svg" alt="Logo aplikasi" />
       <div>
         <h1>Konfigurasi Awal Aplikasi</h1>
-        <p class="muted">Sistem Peminjaman Barang — Politeknik Negeri Padang</p>
+        <p class="muted" id="headSubtitle">Atur nama &amp; logo aplikasi serta email pengirim.</p>
       </div>
     </div>
+
+    <p class="section">Identitas Aplikasi</p>
+
+    <label for="appName">Nama Aplikasi</label>
+    <input id="appName" maxlength="120" placeholder="Sistem Peminjaman Barang" />
+    <p class="hint">Nama ini tampil pada halaman login, menu aplikasi, dan judul jendela.</p>
+
+    <label for="logoFile">Logo Aplikasi</label>
+    <div class="logo-row">
+      <img id="logoPreview" class="logo-preview" src="assets/logo-pnp.svg" alt="Pratinjau logo" />
+      <div>
+        <input id="logoFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" />
+        <p class="hint">PNG, JPG, WEBP, GIF, atau SVG. Maksimal 3 MB. Tampil di halaman login, menu, dan ikon aplikasi.</p>
+        <button id="logoReset" class="btn-ghost btn-mini" type="button">Batalkan pilihan logo</button>
+      </div>
+    </div>
+
+    <p class="section">Email Otomatis (Opsional)</p>
 
     <div class="info">
       Aplikasi berjalan <b>offline penuh</b> — tanpa XAMPP/Laragon dan tanpa internet.
@@ -135,7 +176,7 @@
       <button id="save" class="btn-primary" type="button">Simpan &amp; Mulai Aplikasi</button>
     </div>
 
-    <div class="foot">Konfigurasi tersimpan hanya di komputer ini.</div>
+    <div class="foot">Konfigurasi tersimpan hanya di komputer ini. Nama &amp; logo dapat diubah lagi kapan saja di menu Pengaturan Sistem.</div>
   </div>
 
   <script src="setup.js"></script>

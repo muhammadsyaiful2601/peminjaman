@@ -23,10 +23,10 @@ sedangkan database SQLite dibuat di profil pengguna — **tanpa XAMPP/Laragon/My
 
 | File | Fungsi |
 | :--- | :--- |
-| `main.js` | Main process: salin runtime backend ke AppData, injeksi konfigurasi SQLite/SMTP, migrasi + seed, spawn PHP server & queue worker, health check `/up`, splash + wizard + jendela utama, menu, IPC wizard |
+| `main.js` | Main process: salin runtime backend ke AppData, injeksi konfigurasi SQLite/SMTP, migrasi + seed, spawn PHP server & queue worker, health check `/up`, splash + wizard + jendela utama, menu, IPC wizard (email + nama/logo aplikasi) |
 | `preload.js` | Bridge aman `window.desktop` (contextIsolation + sandbox) |
 | `splash.html` | Layar pembuka saat menyiapkan backend |
-| `setup.html` / `setup.js` | Wizard konfigurasi email (SMTP/Brevo) + tombol kirim email tes + Lewati |
+| `setup.html` / `setup.js` | Wizard konfigurasi awal: nama & logo aplikasi + email (SMTP/Brevo) + tombol kirim email tes + Lewati |
 | `backend/desktop-router.php` | Router PHP built-in: file statis Laravel + SPA React + API Laravel dalam satu origin |
 | `scripts/prepare-php.ps1` | Unduh PHP 8.4 portable ke `resources/php` |
 | `scripts/prepare-build.mjs` | Rakit `resources/` (backend template, frontend dist) |
@@ -92,11 +92,17 @@ Perilaku instalasi/first-run di komputer pengguna:
 1. Installer memasang aplikasi (shortcut desktop + start menu, ikon logo PNP).
 2. Saat pertama dibuka: splash "Menyiapkan aplikasi…" (backend disalin ke
    `%APPDATA%`, SQLite dibuat, migrasi + seed berjalan otomatis).
-3. **Wizard konfigurasi email** muncul — isi SMTP, tombol *Kirim Email Tes*,
-   atau *Lewati*. Setelah masuk halaman login desktop, pengaturan juga dapat
-   dibuka melalui tombol **Pengaturan Email**. Bisa dibuka ulang lewat menu
-   **Aplikasi → Pengaturan Email…** (`Ctrl+E`). Perubahan SMTP langsung memuat
-   ulang backend dan queue worker.
+3. **Wizard konfigurasi awal** muncul dengan dua bagian:
+   - **Identitas aplikasi** — atur *Nama Aplikasi* dan *Logo Aplikasi*
+     (PNG/JPG/WEBP/GIF/SVG, maksimal 3 MB) dengan pratinjau langsung. Nama &
+     logo ini tampil pada halaman login, menu aplikasi, favicon, dan judul
+     jendela. Tersimpan pada tabel `app_settings`, jadi masih bisa diubah
+     kapan saja melalui **Pengaturan Sistem**.
+   - **Email otomatis (opsional)** — isi SMTP, tombol *Kirim Email Tes*, atau
+     *Lewati*. Setelah masuk halaman login desktop, pengaturan juga dapat
+     dibuka melalui tombol **Pengaturan Email**. Bisa dibuka ulang lewat menu
+     **Aplikasi → Pengaturan Email…** (`Ctrl+E`). Perubahan SMTP langsung
+     memuat ulang backend dan queue worker.
 4. Aplikasi utama terbuka. Login pertama: `admin` / `password` (dari seeder).
 5. Email bukti peminjaman/pengembalian terkirim hanya saat komputer online;
    saat offline alur peminjaman tetap aman (sudah di-wrap try/catch).

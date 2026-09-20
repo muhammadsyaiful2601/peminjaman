@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import api from '../api/axios'
@@ -66,7 +66,7 @@ function Dashboard() {
     actions.push({
       to: '/loans/new',
       label: 'Buat Peminjaman',
-      desc: 'Barang langsung diserahkan ke peminjam',
+      desc: 'Barang Langsung Diserahkan Ke Peminjam',
       icon: PlusCircle,
       card: 'bg-cyan-600 hover:bg-cyan-700 text-white shadow-sm hover:shadow-md',
       iconBg: 'bg-white/20 text-white',
@@ -78,7 +78,7 @@ function Dashboard() {
   actions.push({
     to: '/items',
     label: 'Lihat Katalog',
-    desc: 'Cek ketersediaan barang',
+    desc: 'Cek Ketersediaan Barang',
     icon: Package,
     card: 'bg-white border border-slate-200 shadow-sm hover:shadow-md',
     iconBg: 'bg-blue-50 text-blue-600',
@@ -90,7 +90,7 @@ function Dashboard() {
     actions.push({
       to: '/scan',
       label: 'Scan QR',
-      desc: 'Verifikasi pengembalian barang',
+      desc: 'Verifikasi Pengembalian Barang',
       icon: ScanLine,
       card: 'bg-white border border-slate-200 shadow-sm hover:shadow-md',
       iconBg: 'bg-emerald-50 text-emerald-600',
@@ -105,7 +105,7 @@ function Dashboard() {
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
         <p className="text-slate-500 mt-1">
-          Selamat datang kembali, <span className="font-semibold text-slate-900">{user?.name}</span>!
+          Selamat Datang Kembali, <span className="font-semibold text-slate-900">{user?.name}</span>!
         </p>
       </div>
 
@@ -150,14 +150,14 @@ function Dashboard() {
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
           <h2 className="font-semibold text-slate-900">Transaksi Terbaru</h2>
           <Link to="/loans" className="text-sm text-cyan-600 font-medium hover:underline">
-            Lihat semua
+            Lihat Semua
           </Link>
         </div>
 
         {loading ? (
-          <div className="p-6 text-center text-slate-500">Memuat data...</div>
+          <div className="p-6 text-center text-slate-500">Memuat Data...</div>
         ) : recentLoans.length === 0 ? (
-          <div className="p-6 text-center text-slate-500">Belum ada transaksi peminjaman.</div>
+          <div className="p-6 text-center text-slate-500">Belum Ada Transaksi Peminjaman.</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -204,3 +204,8 @@ function Dashboard() {
 }
 
 export default Dashboard
+
+
+
+
+

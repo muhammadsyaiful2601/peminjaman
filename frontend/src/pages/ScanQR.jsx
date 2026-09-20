@@ -173,10 +173,10 @@ function ScanQR() {
   const handleReturn = async (e) => {
     e.preventDefault()
     if (!returnPhoto) {
-      setError('Ambil foto bukti pengembalian terlebih dahulu.')
+      setError('Ambil Foto bukti pengembalian terlebih dahulu.')
       return
     }
-    if (!window.confirm('Konfirmasi pengembalian barang ini? Bukti akan dikirim ke email peminjam.')) return
+    if (!window.confirm('Konfirmasi Pengembalian Barang ini? Bukti akan dikirim ke email peminjam.')) return
     setActionLoading(true)
     try {
       const formData = new FormData()
@@ -225,7 +225,7 @@ function ScanQR() {
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-slate-900">Verifikasi Pengembalian</h1>
         <p className="text-slate-500 mt-1">
-          Pilih metode: scan QR, upload PDF, atau masukkan kode peminjaman untuk memproses pengembalian barang
+          Pilih Metode: Scan QR, Upload PDF, Atau Masukkan Kode Peminjaman Untuk Memproses Pengembalian Barang
         </p>
       </div>
 
@@ -303,7 +303,7 @@ function ScanQR() {
                 {!returnPhoto ? (
                   <div className="space-y-3">
                     <p className="text-sm text-slate-500">
-                      Ambil foto bukti barang yang dikembalikan, lalu isi formulir bukti barang diterima.
+                      Ambil Foto bukti barang yang dikembalikan, lalu isi formulir bukti barang diterima.
                       Bukti akan dikirim ke email peminjam.
                     </p>
                     <CameraCapture onCapture={setReturnPhoto} />
@@ -477,3 +477,7 @@ function ScanQR() {
 }
 
 export default ScanQR
+
+
+
+

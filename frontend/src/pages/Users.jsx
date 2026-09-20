@@ -120,7 +120,7 @@ function Users() {
       <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Kelola User</h1>
-          <p className="text-slate-500 mt-1">Total {total} user terdaftar</p>
+          <p className="text-slate-500 mt-1">Total {total} User Terdaftar</p>
         </div>
         <button
           onClick={openAddModal}
@@ -139,18 +139,18 @@ function Users() {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Cari nama atau email..."
+            placeholder="Cari Nama atau email..."
             className="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none"
           />
         </div>
       </div>
 
       {loading ? (
-        <div className="text-center py-12 text-slate-500">Memuat data...</div>
+        <div className="text-center py-12 text-slate-500">Memuat Data...</div>
       ) : users.length === 0 ? (
         <div className="text-center py-12 bg-white rounded-xl border border-slate-200">
           <UsersIcon className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-          <p className="text-slate-500">Tidak ada user ditemukan</p>
+          <p className="text-slate-500">Tidak Ada User Ditemukan</p>
         </div>
       ) : (
         <>
@@ -299,6 +299,7 @@ function Users() {
                   value={form.password}
                   onChange={(e) => setForm({ ...form, password: e.target.value })}
                   className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none"
+                  placeholder="Masukkan Password Anda"
                   minLength={8}
                   required={!editingUser}
                 />
@@ -311,6 +312,7 @@ function Users() {
                   value={form.password_confirmation}
                   onChange={(e) => setForm({ ...form, password_confirmation: e.target.value })}
                   className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none"
+                  placeholder="Konfirmasi Password Anda"
                   required={!editingUser}
                 />
               </div>
@@ -340,3 +342,8 @@ function Users() {
 }
 
 export default Users
+
+
+
+
+

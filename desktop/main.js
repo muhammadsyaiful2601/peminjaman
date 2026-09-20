@@ -29,6 +29,16 @@ try {
 }
 
 const APP_TITLE = 'Peminjaman Barang — Politeknik Negeri Padang';
+
+/**
+ * Judul jendela mengikuti nama aplikasi yang diatur pengguna pada wizard
+ * konfigurasi awal (tersimpan di desktop-config.json). Jatuh kembali ke
+ * APP_TITLE bila pengguna belum pernah mengubahnya.
+ */
+function appTitle() {
+  return config.appName || APP_TITLE;
+}
+
 const PREFERRED_PORT = 8642;
 // Naikkan versi template agar instalasi lama menyalin ulang runtime backend
 // (fitur mode hybrid: popup gear + sinkronisasi MySQL hosting + pdo_mysql;
@@ -1027,11 +1037,11 @@ function closeSplash() {
 
 function createSetupWindow() {
   setupWindow = new BrowserWindow({
-    width: 620,
-    height: 780,
-    minWidth: 540,
-    minHeight: 660,
-    title: 'Konfigurasi Awal — ' + APP_TITLE,
+    width: 640,
+    height: 880,
+    minWidth: 560,
+    minHeight: 640,
+    title: 'Konfigurasi Awal — ' + appTitle(),
     show: false,
     backgroundColor: '#f1f5f9',
     icon: iconPath(),
@@ -1062,7 +1072,7 @@ function openMainWindow() {
     height: 880,
     minWidth: 1100,
     minHeight: 700,
-    title: APP_TITLE,
+    title: appTitle(),
     show: false,
     backgroundColor: '#f8fafc',
     icon: iconPath(),
@@ -1155,6 +1165,128 @@ function postJson(pathname, body) {
   });
 }
 
+/** GET JSON dari server lokal (dipakai untuk membaca branding aktif). */
+function getJson(pathname) {
+  return new Promise((resolve, reject) => {
+    const req = http.request(
+      {
+        hostname: '127.0.0.1',
+        port: backendPort,
+        path: pathname,
+        method: 'GET',
+        headers: {
+          Accept: 'application/json',
+          'X-Desktop-Key': config.desktopKey || '',
+        },
+        timeout: 15000,
+      },
+      (res) => {
+        let raw = '';
+        res.on('data', (c) => {
+          raw += c;
+        });
+        res.on('end', () => {
+          try {
+            resolve({ status: res.statusCode, json: JSON.parse(raw) });
+          } catch {
+            reject(new Error(`Respons tidak valid (${res.statusCode}): ${raw.slice(0, 300)}`));
+          }
+        });
+      },
+    );
+    req.on('error', reject);
+    req.on('timeout', () => {
+      req.destroy(new Error('Waktu tunggu habis saat menghubungi server lokal.'));
+    });
+    req.end();
+  });
+}
+
+/**
+ * Baca logo tersimpan (path "/storage/...") dari folder uploads dan ubah ke
+ * data URL, sehingga pratinjau di wizard tidak bergantung pada pemuatan gambar
+ * lintas-origin dari halaman file://.
+ */
+function logoDataUrl(storagePath) {
+  const relative = String(storagePath || '')
+    .replace(/^\/storage\//, '')
+    .replace(/^\/+/, '');
+
+  if (!relative || relative.includes('..')) return '';
+
+  const filePath = path.join(uploadsDir, relative);
+  try {
+    if (!fs.statSync(filePath).isFile()) return '';
+    const extension = path.extname(filePath).slice(1).toLowerCase();
+    const mime = {
+      png: 'image/png',
+      jpg: 'image/jpeg',
+      jpeg: 'image/jpeg',
+      gif: 'image/gif',
+      webp: 'image/webp',
+      bmp: 'image/bmp',
+      svg: 'image/svg+xml',
+    }[extension] || 'application/octet-stream';
+
+    return `data:${mime};base64,${fs.readFileSync(filePath).toString('base64')}`;
+  } catch {
+    // Berkas hilang / belum ada: wizard memakai logo bawaan.
+    return '';
+  }
+}
+
+/** Ambil branding aktif (nama + logo aplikasi) dari server lokal. */
+async function fetchBranding() {
+  try {
+    const { json } = await getJson('/api/branding');
+    return (json && json.branding) || {};
+  } catch {
+    // Server belum siap / bukan mode desktop: wizard memakai nilai bawaan.
+    return {};
+  }
+}
+
+/**
+ * Simpan nama & logo aplikasi dari wizard konfigurasi awal.
+ * Logo dikirim sebagai data URL base64 ke endpoint khusus desktop
+ * (X-Desktop-Key) karena saat wizard berjalan belum ada sesi admin.
+ */
+async function saveBranding({ appName, logoBase64 }) {
+  const body = {};
+  if (appName) body.app_name = appName;
+  if (logoBase64) body.app_logo_base64 = logoBase64;
+
+  // Tidak ada yang diubah (mis. wizard dibuka hanya untuk mengatur email).
+  if (Object.keys(body).length === 0) {
+    return { ok: true, branding: await fetchBranding() };
+  }
+
+  try {
+    const { status, json } = await postJson('/api/desktop/branding', body);
+
+    if (status >= 400 || !json) {
+      const firstError = json && json.errors ? Object.values(json.errors)[0] : null;
+      return {
+        ok: false,
+        message: (Array.isArray(firstError) ? firstError[0] : null)
+          || (json && json.message)
+          || `Gagal menyimpan nama/logo aplikasi (${status}).`,
+      };
+    }
+
+    return { ok: true, branding: json.branding || {} };
+  } catch (e) {
+    return { ok: false, message: String(e && e.message ? e.message : e) };
+  }
+}
+
+/** Terapkan nama aplikasi terbaru ke judul jendela wizard & jendela utama. */
+function applyBrandingToWindows() {
+  const title = appTitle();
+  if (setupWindow && !setupWindow.isDestroyed()) setupWindow.setTitle('Konfigurasi Awal — ' + title);
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setTitle(title);
+}
+
 function registerIpc() {
   ipcMain.handle('file:save-pdf', async (_event, data) => {
     try {
@@ -1214,9 +1346,13 @@ function registerIpc() {
     return { ok: true };
   });
 
-  ipcMain.handle('setup:get', () => {
+  ipcMain.handle('setup:get', async () => {
     const env = readEnvFile(runtimeBackend);
     const mail = config.mail || {};
+    // Nama & logo aktif dibaca dari server lokal agar wizard menampilkan
+    // keadaan terkini (wizard juga bisa dibuka lagi dari menu gear).
+    const branding = await fetchBranding();
+
     return {
       configured: Boolean(config.mail && config.mail.useSmtp && config.mail.username),
       defaults: {
@@ -1227,17 +1363,36 @@ function registerIpc() {
         fromAddress: mail.fromAddress || env.MAIL_FROM_ADDRESS || '',
         fromName: mail.fromName || env.MAIL_FROM_NAME || 'Peminjaman Barang PNP',
       },
+      app: {
+        name: config.appName || branding.app_name || 'Sistem Peminjaman Barang',
+        logoUrl: logoDataUrl(branding.app_logo_path),
+      },
     };
   });
 
   ipcMain.handle('setup:save', (_event, payload) => {
     return (async () => {
       try {
-      applyMailSettings(payload);
-      await restartBackend();
-      config.setupDone = true;
-      saveConfig();
-      return { ok: true };
+        const appName = String((payload && payload.appName) || '').trim();
+        const logoBase64 = String((payload && payload.logoBase64) || '');
+
+        applyMailSettings(payload);
+        await restartBackend();
+
+        // Identitas aplikasi disimpan setelah server siap karena dikirim ke
+        // endpoint /api/desktop/branding (butuh backend berjalan).
+        const result = await saveBranding({ appName, logoBase64 });
+        if (!result.ok) return { ok: false, message: result.message };
+
+        const savedName = String((result.branding && result.branding.app_name) || appName).trim();
+        if (savedName) {
+          config.appName = savedName;
+          applyBrandingToWindows();
+        }
+
+        config.setupDone = true;
+        saveConfig();
+        return { ok: true };
       } catch (e) {
         return { ok: false, message: String(e && e.message ? e.message : e) };
       }
@@ -1377,6 +1532,14 @@ async function boot() {
     await runArtisan(['storage:link'], { allowFailure: true });
     await startPhpServer();
     await waitHealth();
+
+    // Simpan nama aplikasi dari branding tersimpan sebagai judul jendela,
+    // termasuk bila nama pernah diubah lewat menu Pengaturan Sistem.
+    const branding = await fetchBranding();
+    if (branding.app_name && branding.app_name !== config.appName) {
+      config.appName = branding.app_name;
+      saveConfig();
+    }
 
     bootSucceeded = true;
     startQueueWorker();

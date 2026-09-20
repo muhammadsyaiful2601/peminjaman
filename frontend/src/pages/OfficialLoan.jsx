@@ -75,7 +75,7 @@ function OfficialLoan() {
         </section>
 
         <section className="rounded-xl border border-slate-200 bg-white p-6">
-          <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold text-slate-900">Daftar barang dan jumlah <span className="text-red-600" aria-label="wajib diisi">*</span></h2><button type="button" onClick={addLoanItem} className="inline-flex items-center gap-1 text-sm font-medium text-cyan-700"><Plus className="h-4 w-4" />Tambah barang</button></div>
+          <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold text-slate-900">Daftar barang dan jumlah <span className="text-red-600" aria-label="wajib diisi">*</span></h2><button type="button" onClick={addLoanItem} className="inline-flex items-center gap-1 text-sm font-medium text-cyan-700"><Plus className="h-4 w-4" />Tambah Barang</button></div>
           <div className="space-y-3">
             {loanItems.map((loanItem, index) => <div key={index} className="flex gap-2">
               <select required aria-label="Barang wajib dipilih" value={loanItem.item_id} onChange={(event) => updateLoanItem(index, 'item_id', event.target.value)} disabled={loading} className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2.5 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500"><option value="">Pilih barang</option>{items.map((item) => <option key={item.id} value={item.id}>{item.name} (stok: {item.stock})</option>)}</select>
@@ -92,3 +92,7 @@ function OfficialLoan() {
 }
 
 export default OfficialLoan
+
+
+
+

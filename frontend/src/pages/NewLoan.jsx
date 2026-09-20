@@ -127,7 +127,7 @@ function NewLoan() {
     setError('')
 
     if (!photo) {
-      setPhotoError('Wajib mengambil foto peminjam sebagai verifikasi identitas visual.')
+      setPhotoError('Wajib mengAmbil Foto peminjam sebagai verifikasi identitas visual.')
       return
     }
 
@@ -192,8 +192,8 @@ function NewLoan() {
 
           <h1 className="text-2xl font-bold text-slate-900 mb-3">Peminjaman Berhasil Dibuat!</h1>
           <p className="text-slate-500 mb-8">
-            Barang telah langsung diserahkan kepada peminjam (status: Dipinjam). QR Code transaksi telah
-            dikirim ke email peminjam dan digunakan untuk verifikasi pengembalian barang.
+            Barang telah langsung diserahkan kepada peminjam (status: Dipinjam). QR Code Transaksi telah
+            dikirim ke email peminjam dan digunakan untuk verifikasi Pengembalian Barang.
           </p>
 
           {/* Loan summary */}
@@ -232,7 +232,7 @@ function NewLoan() {
                 <p className="text-sm font-medium text-cyan-900">QR Code Terkirim via Email</p>
                 <p className="text-xs text-cyan-700 mt-1">
                   Email berisi QR Code telah dikirim ke <strong>{successLoan.borrower_email}</strong>.
-                  Saat pengembalian, peminjam menunjukkan email/QR ini kepada petugas untuk verifikasi pengembalian barang.
+                  Saat pengembalian, peminjam menunjukkan email/QR ini kepada petugas untuk verifikasi Pengembalian Barang.
                 </p>
               </div>
             </div>
@@ -266,7 +266,7 @@ function NewLoan() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Buat Peminjaman Baru</h1>
           <p className="text-slate-500 mt-1">
-            Petugas mendaftarkan peminjaman untuk mahasiswa & kirim QR via email
+            Petugas Mendaftarkan Peminjaman Untuk Mahasiswa & Kirim QR Via Email
           </p>
         </div>
         <Link to="/loans" className="inline-flex items-center gap-2 text-slate-500 hover:text-slate-700">
@@ -328,7 +328,7 @@ function NewLoan() {
                 </div>
               ))}
               <button type="button" onClick={() => setLoanItems((current) => [...current, { item_id: '', qty: 1 }])} className="inline-flex items-center gap-2 text-cyan-600 hover:text-cyan-700 text-sm font-medium">
-                <Plus className="w-4 h-4" /> Tambah barang lain
+                <Plus className="w-4 h-4" /> Tambah Barang lain
               </button>
             </div>
           )}
@@ -409,7 +409,7 @@ function NewLoan() {
             3. Foto Verifikasi Peminjam
           </h2>
           <p className="text-sm text-slate-500 mb-4">
-            Petugas memfoto wajah mahasiswa yang meminjam sebagai bukti identitas visual.
+            Petugas Memfoto Wajah Mahasiswa Yang Meminjam Sebagai Bukti Identitas Visual.
           </p>
 
           {photoError && (
@@ -422,7 +422,7 @@ function NewLoan() {
             <div className="space-y-3">
               <img
                 src={URL.createObjectURL(photo)}
-                alt="Foto verifikasi peminjam"
+                alt="Foto Verifikasi Peminjam"
                 className="w-full max-w-md h-64 object-cover rounded-lg border border-slate-200"
               />
               <button
@@ -431,7 +431,7 @@ function NewLoan() {
                 className="inline-flex items-center gap-2 text-red-600 font-medium text-sm hover:text-red-700"
               >
                 <RefreshCw className="w-4 h-4" />
-                Ambil ulang foto
+                Ambil Ulang Foto
               </button>
             </div>
           ) : cameraActive ? (
@@ -485,3 +485,9 @@ function NewLoan() {
 }
 
 export default NewLoan
+
+
+
+
+
+

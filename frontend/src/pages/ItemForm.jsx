@@ -42,7 +42,7 @@ function ItemForm() {
           ]
           setImagePreviews(existingImages.map((src) => ({ src, existing: true })))
         } catch (err) {
-          setError('Gagal memuat data barang')
+          setError('Gagal Memuat Data barang')
         } finally {
           setLoading(false)
         }
@@ -108,7 +108,7 @@ function ItemForm() {
   }
 
   if (loading) {
-    return <div className="text-center py-12 text-slate-500">Memuat data...</div>
+    return <div className="text-center py-12 text-slate-500">Memuat Data...</div>
   }
 
   return (
@@ -119,7 +119,7 @@ function ItemForm() {
             {isEdit ? 'Edit Barang' : 'Tambah Barang'}
           </h1>
           <p className="text-slate-500 mt-1">
-            {isEdit ? 'Perbarui informasi barang' : 'Tambahkan barang baru ke inventaris'}
+            {isEdit ? 'Perbarui Informasi Barang' : 'Tambahkan Barang Baru Ke Inventaris'}
           </p>
         </div>
         <Link
@@ -208,7 +208,7 @@ function ItemForm() {
                   className="inline-flex items-center gap-2 rounded-lg border border-cyan-200 px-3 py-2 text-sm font-medium text-cyan-700 hover:bg-cyan-50"
                 >
                   <Upload className="w-4 h-4" />
-                  Tambah foto baru
+                  Tambah Foto Baru
                 </button>
                 <button
                   type="button"
@@ -216,7 +216,7 @@ function ItemForm() {
                   className="inline-flex items-center gap-2 text-sm text-red-600 hover:text-red-700 font-medium"
                 >
                   <X className="w-4 h-4" />
-                  Hapus pilihan foto baru
+                  Hapus Pilihan Foto Baru
                 </button>
               </div>
             </div>
@@ -228,7 +228,7 @@ function ItemForm() {
               <div className="inline-flex items-center justify-center w-12 h-12 bg-slate-100 rounded-full mb-3">
                 <Upload className="w-6 h-6 text-slate-400" />
               </div>
-              <p className="text-sm text-slate-600 font-medium">Klik untuk upload gambar</p>
+              <p className="text-sm text-slate-600 font-medium">Klik Untuk Upload Gambar</p>
               <p className="text-xs text-slate-400 mt-1">PNG, JPG, JPEG (max 2MB)</p>
             </div>
           )}
@@ -258,3 +258,7 @@ function ItemForm() {
 }
 
 export default ItemForm
+
+
+
+

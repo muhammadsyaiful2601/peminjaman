@@ -200,7 +200,7 @@ function Reports() {
       <div className="report-summary mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">
         {[
           ['Total transaksi', filteredLoans.length],
-          ['Total barang', totalQuantity],
+          ['Total Barang', totalQuantity],
           ['Sedang dipinjam', borrowedCount],
           ['Dikembalikan', returnedCount],
         ].map(([label, value]) => (
@@ -290,3 +290,7 @@ function Reports() {
 }
 
 export default Reports
+
+
+
+

@@ -103,7 +103,7 @@ function Items() {
       <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Katalog Barang</h1>
-          <p className="text-slate-500 mt-1">Total {total} barang tersedia</p>
+          <p className="text-slate-500 mt-1">Total {total} Barang Tersedia</p>
         </div>
         {isStaff && (
           <Link
@@ -124,14 +124,14 @@ function Items() {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Cari barang, kode, atau kategori..."
+            placeholder="Cari Barang, Kode, Atau Kategori..."
             className="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none"
           />
         </div>
       </div>
 
       {loading ? (
-        <div className="text-center py-12 text-slate-500">Memuat data...</div>
+        <div className="text-center py-12 text-slate-500">Memuat Data...</div>
       ) : items.length === 0 ? (
         <div className="text-center py-12 bg-white rounded-xl border border-slate-200">
           <PackageX className="w-16 h-16 text-slate-300 mx-auto mb-4" />
@@ -284,3 +284,8 @@ function Items() {
 }
 
 export default Items
+
+
+
+
+

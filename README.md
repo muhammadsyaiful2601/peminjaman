@@ -374,6 +374,7 @@ Semua endpoint berada di bawah prefix `/api`. Kecuali login dan download PDF QR,
 | POST | `/api/loans/{loan}/return` | Admin/Asisten | Memproses pengembalian |
 | POST | `/api/loans/upload-pdf` | Admin/Asisten | Membaca UUID/kode dari PDF |
 - `POST /api/desktop/mail-test` (khusus desktop, header `X-Desktop-Key`): mengirim email percobaan dari wizard.
+- `POST /api/desktop/branding` (khusus desktop, header `X-Desktop-Key`): menyimpan nama & logo aplikasi dari wizard konfigurasi awal — dipakai sebelum admin login karena `POST /api/branding` butuh sesi admin.
 | GET | `/api/loans/qr/{uuid}/download` | Publik | Mengunduh PDF; UUID berfungsi sebagai token akses |
 
 ### User

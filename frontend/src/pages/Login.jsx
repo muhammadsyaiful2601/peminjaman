@@ -47,7 +47,7 @@ function Login() {
       await login(username, password)
       setLoginSuccess(true)
     } catch (err) {
-      setError(err.response?.data?.message || 'Login gagal. Silakan coba lagi.')
+      setError(err.response?.data?.message || 'Login Gagal. Silakan coba lagi.')
     } finally {
       setLoading(false)
     }
@@ -139,7 +139,7 @@ function Login() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="w-full pl-10 pr-10 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none"
-                    placeholder="••••••••"
+                    placeholder="Masukkan Password Anda"
                     required
                   />
                   <button
@@ -157,11 +157,11 @@ function Login() {
                 disabled={loading || loginSuccess}
                 className="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-semibold py-2.5 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {loading ? 'Memproses...' : loginSuccess ? 'Berhasil masuk' : 'Masuk'}
+                {loading ? 'Memproses...' : loginSuccess ? 'Berhasil Masuk' : 'Masuk'}
               </button>
               <div className="text-center">
                 <Link to="/forgot-password" className="text-sm text-cyan-700 hover:text-cyan-800 font-medium">
-                  Lupa password?
+                  Lupa Password?
                 </Link>
               </div>
               {isDesktop && (
@@ -190,7 +190,7 @@ function Login() {
             />
             <div className="flex items-center gap-3">
               <span className="h-5 w-5 rounded-full border-2 border-white/30 border-t-cyan-400 animate-spin" />
-              <span className="text-sm font-medium tracking-wide text-slate-200">Menyiapkan ruang kerja...</span>
+              <span className="text-sm font-medium tracking-wide text-slate-200">Menyiapkan Ruang kerja...</span>
             </div>
             <div className="w-64">
               <div className="h-1.5 overflow-hidden rounded-full bg-white/20">
@@ -209,3 +209,10 @@ function Login() {
 }
 
 export default Login
+
+
+
+
+
+
+

@@ -89,7 +89,7 @@ function Profile() {
     <div className="max-w-2xl mx-auto">
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-slate-900">Profil Saya</h1>
-        <p className="text-slate-500 mt-1">Kelola informasi akun Anda</p>
+        <p className="text-slate-500 mt-1">Kelola Informasi Akun Anda</p>
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden mb-6">
@@ -195,6 +195,7 @@ function Profile() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none"
+                placeholder="Masukkan Password Anda"
                 minLength={8}
               />
             </div>
@@ -205,6 +206,7 @@ function Profile() {
                 value={passwordConfirmation}
                 onChange={(e) => setPasswordConfirmation(e.target.value)}
                 className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none"
+                placeholder="Konfirmasi Password Anda"
               />
             </div>
           </div>
@@ -224,3 +226,7 @@ function Profile() {
 }
 
 export default Profile
+
+
+
+

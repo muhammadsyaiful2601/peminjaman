@@ -54,10 +54,10 @@ function LoanDetail() {
   const handleReturn = async (e) => {
     e.preventDefault()
     if (!returnPhoto) {
-      alert('Ambil foto bukti pengembalian terlebih dahulu.')
+      alert('Ambil Foto bukti pengembalian terlebih dahulu.')
       return
     }
-    if (!window.confirm('Konfirmasi pengembalian barang ini? Bukti akan dikirim ke email peminjam.')) return
+    if (!window.confirm('Konfirmasi Pengembalian Barang ini? Bukti akan dikirim ke email peminjam.')) return
     setActionLoading(true)
     try {
       const formData = new FormData()
@@ -127,7 +127,7 @@ function LoanDetail() {
   }, [loan, searchParams, editingItemId])
 
   if (loading) {
-    return <div className="text-center py-12 text-slate-500">Memuat data...</div>
+    return <div className="text-center py-12 text-slate-500">Memuat Data...</div>
   }
 
   if (error || !loan) {
@@ -203,7 +203,7 @@ function LoanDetail() {
                 <h2 className="font-semibold text-cyan-900 text-sm mb-1">QR Code via Email</h2>
                 <p className="text-xs text-cyan-700 leading-relaxed">
                   QR Code transaksi telah dikirim ke email peminjam: <strong>{loan.borrower_email}</strong>.
-                  Saat pengembalian, peminjam menunjukkan email/QR ini kepada petugas untuk verifikasi pengembalian barang.
+                  Saat pengembalian, peminjam menunjukkan email/QR ini kepada petugas untuk verifikasi Pengembalian Barang.
                 </p>
               </div>
             </div>
@@ -307,7 +307,7 @@ function LoanDetail() {
               </h2>
               <img
                 src={`/storage/${loan.borrow_photo}`}
-                alt="Foto verifikasi peminjam"
+                alt="Foto Verifikasi Peminjam"
                 className="w-full max-w-md h-64 object-cover rounded-lg border border-slate-200"
               />
             </div>
@@ -361,7 +361,7 @@ function LoanDetail() {
               {!returnPhoto ? (
                 <div className="space-y-3">
                   <p className="text-sm text-slate-500">
-                    Ambil foto bukti barang yang dikembalikan, lalu isi formulir bukti barang diterima.
+                    Ambil Foto bukti barang yang dikembalikan, lalu isi formulir bukti barang diterima.
                     Bukti akan dikirim ke email peminjam.
                   </p>
                   <CameraCapture onCapture={setReturnPhoto} />
@@ -424,3 +424,7 @@ function LoanDetail() {
 }
 
 export default LoanDetail
+
+
+
+

@@ -186,7 +186,7 @@ function SystemSettings() {
               </div>
               <button type="button" onClick={() => setBackupType('')} className="text-slate-400 hover:text-slate-600" aria-label="Tutup"><X className="h-5 w-5" /></button>
             </div>
-            <input autoFocus type="password" value={backupPassword} onChange={(event) => setBackupPassword(event.target.value)} placeholder="Password admin" className="mt-5 w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100" required />
+            <input autoFocus type="password" value={backupPassword} onChange={(event) => setBackupPassword(event.target.value)} placeholder="Masukkan Password Admin" className="mt-5 w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100" required />
             {error && <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
             <div className="mt-5 flex justify-end gap-2">
               <button type="button" onClick={() => setBackupType('')} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">Batal</button>
@@ -200,3 +200,8 @@ function SystemSettings() {
 }
 
 export default SystemSettings
+
+
+
+
+

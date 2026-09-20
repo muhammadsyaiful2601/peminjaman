@@ -56,14 +56,14 @@ function ResetPassword() {
             <label className="block text-sm font-medium text-slate-700 mb-1.5">Password Baru</label>
             <div className="relative">
               <Lock className="w-5 h-5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} className="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none" minLength={8} required />
+              <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} className="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none" placeholder="Masukkan Password Anda" minLength={8} required />
             </div>
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">Konfirmasi Password</label>
             <div className="relative">
               <Lock className="w-5 h-5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input type="password" value={passwordConfirmation} onChange={(event) => setPasswordConfirmation(event.target.value)} className="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none" minLength={8} required />
+              <input type="password" value={passwordConfirmation} onChange={(event) => setPasswordConfirmation(event.target.value)} className="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none" placeholder="Konfirmasi Password Anda" minLength={8} required />
             </div>
           </div>
           <button type="submit" disabled={loading || !searchParams.get('token') || !searchParams.get('email')} className="w-full inline-flex justify-center items-center gap-2 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold py-2.5 rounded-lg disabled:opacity-50">
@@ -76,3 +76,8 @@ function ResetPassword() {
 }
 
 export default ResetPassword
+
+
+
+
+

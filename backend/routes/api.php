@@ -91,6 +91,16 @@ Route::middleware('desktop.key')->prefix('hybrid')->group(function () {
 });
 
 // ---------------------------------------------------------------------
+// Branding untuk wizard konfigurasi awal aplikasi desktop: pengguna dapat
+// mengatur nama & logo aplikasi sebelum admin login (first-run), sehingga
+// tidak bisa memakai sesi Sanctum + role admin seperti POST /branding.
+// Dilindungi X-Desktop-Key seperti endpoint hybrid.
+// ---------------------------------------------------------------------
+Route::middleware('desktop.key')->prefix('desktop')->group(function () {
+    Route::post('/branding', [BrandingController::class, 'desktopUpdate']);
+});
+
+// ---------------------------------------------------------------------
 // Endpoint khusus aplikasi desktop (Electron).
 // Dilindungi secret key (X-Desktop-Key) karena bila server lokal diekspos
 // ke internet melalui tunnel, endpoint ini tidak boleh dipakai orang lain.
