@@ -45,7 +45,7 @@ const PREFERRED_PORT = 8642;
 //  penegakan storage:link via junction saat boot; 1.0.13: disk "public"
 //  diarahkan ke folder uploads persisten — perbaikan bug "gambar hilang
 //  setelah install ulang").
-const TEMPLATE_VERSION = '1.0.15';
+const TEMPLATE_VERSION = '1.2.1';
 const isDev = !app.isPackaged;
 
 /* ------------------------------------------------------------------ paths */
