@@ -180,6 +180,7 @@ dan runtime PHP bawaan sudah mengaktifkan ekstensi `pdo_mysql`.
 | Membuat peminjaman | Ya | Ya |
 | Memproses pengembalian | Ya | Ya |
 | Scan/lookup QR, kode, dan PDF | Ya | Ya |
+| Menerbitkan surat bebas labor | Ya | Ya |
 | Mengelola akun user | Ya | Tidak |
 | Mengubah profil sendiri | Ya | Ya |
 
@@ -205,6 +206,46 @@ Halaman `/loans/official` digunakan petugas untuk membuat peminjaman resmi yang 
 Data transaksi peminjam tersimpan pada daftar peminjaman. Setelah surat dibuat, tombol **Proses Barang Kembali**
 membuka detail transaksi. Petugas dapat mengambil foto bukti, memilih kondisi barang (`bagus`/`rusak`/`hilang`),
 dan sistem mengirim email konfirmasi pengembalian ke peminjam.
+
+### Data Mahasiswa
+
+Menu **Data Mahasiswa** dipakai admin dan asisten untuk menyimpan NIM/NIP, nama,
+email, dan nomor telepon mahasiswa. Data dapat dicari, ditambah, diubah, atau dihapus.
+
+Saat membuat peminjaman, petugas cukup memilih mahasiswa tersimpan; nama, email,
+nomor telepon, dan NIM/NIP otomatis terisi pada form. Pengisian manual tetap tersedia
+untuk peminjam yang belum terdaftar. Data yang dikirim ke transaksi disimpan sebagai
+snapshot, sehingga perubahan data mahasiswa tidak mengubah riwayat peminjaman.
+
+### Bebas Labor
+
+Halaman `/clearance` (menu **Bebas Labor**) dipakai petugas untuk menerbitkan **Surat Keterangan Bebas
+Laboratorium** berkop surat. Seluruh isi surat diambil dari data peminjaman barang:
+
+1. Petugas mencari peminjam berdasarkan nama, NIM, atau email.
+2. Sistem menampilkan ringkasan transaksi peminjam tersebut beserta status kelayakannya.
+3. Bila seluruh barang sudah dikembalikan, surat diterbitkan sebagai **Surat Keterangan Bebas
+   Laboratorium** (`surat-bebas-labor-<nama peminjam>.pdf`) yang menyatakan peminjam tidak memiliki
+   tanggungan dan memuat daftar transaksi yang sudah dikembalikan.
+4. Bila masih ada barang yang **belum dikembalikan** (status `borrowed` atau `pending`), tombol unduh
+   tetap dapat dipakai — namun surat yang dihasilkan otomatis berupa **Surat Keterangan Tanggungan
+   Peminjaman Laboratorium** (`surat-tanggungan-labor-<nama peminjam>.pdf`) berisi rincian barang yang
+   belum dikembalikan, **bukan** pernyataan bebas labor. Peringatan dan daftar barang yang belum
+   kembali juga tampil di halaman.
+5. Petugas mengisi keperluan surat (mis. *Persyaratan bebas pustaka*), tanggal surat, laboratorium
+   (opsional), serta nama dan NIP penandatangan, lalu menekan
+   **Buat & Unduh Surat**. Penandatangan dapat dipilih cepat dari daftar teknisi sehingga nama dan NIP
+   terisi otomatis.
+
+Isi surat memuat kop instansi (nama kementerian, unit, instansi, alamat, jurusan), nomor surat,
+identitas peminjam, status tanggungan, tabel transaksi (barang yang sudah dikembalikan atau barang yang
+belum dikembalikan), pernyataan yang menyesuaikan status, serta kolom tanda tangan peminjam dan petugas
+laboratorium.
+
+Pengelompokan peminjam memakai **NIM**. Bila NIM kosong (peminjaman yang hanya mengisi nama dan email),
+**nama + email** dipakai sebagai kunci, sehingga dua orang yang memakai email sama tetap terpisah.
+Transaksi lama tanpa NIM milik orang yang sama tetap ikut dihitung agar surat tidak terbit saat barang
+masih ditahan.
 
 ## Alur Operasional
 
@@ -240,7 +281,7 @@ backend/
     app/Http/Middleware/          Middleware role
     app/Mail/                     Email bukti peminjaman (QR inline + lampiran PDF + tombol unduh kondisional) & konfirmasi pengembalian
    app/Support/                  Helper QR PNG (GD) & URL publik tunnel
-    app/Models/                   User, Item, Loan, LoanItem
+   app/Models/                   User, Item, Student, Loan, LoanItem
     config/                       Konfigurasi aplikasi dan Sanctum
     database/migrations/           Struktur tabel
     database/seeders/              Seeder akun dan data dummy
@@ -254,8 +295,8 @@ frontend/
     src/components/                Layout, kamera, dan komponen UI
     src/context/                   AuthContext
     src/hooks/                     Idle session hook
-    src/pages/                     Dashboard, barang, peminjaman, peminjaman resmi, laporan, scan QR (kamera/manual, multi-metode),
-                                    detail transaksi, pengembalian, user, teknisi, profil, lupa/reset password
+   src/pages/                     Dashboard, barang, mahasiswa, peminjaman, peminjaman resmi, laporan, scan QR (kamera/manual, multi-metode),
+                           detail transaksi, pengembalian, user, teknisi, profil, lupa/reset password
 
 desktop/
     main.js                        Proses utama Electron: boot backend, PHP portable, wizard, tunnel, pembaruan
@@ -421,6 +462,15 @@ Semua endpoint berada di bawah prefix `/api`. Kecuali login dan download PDF QR,
 | PUT | `/api/items/{item}` | Admin/Asisten | Ubah barang |
 | DELETE | `/api/items/{item}` | Admin/Asisten | Hapus barang |
 
+### Mahasiswa
+
+| Method | Endpoint | Akses | Keterangan |
+| :--- | :--- | :--- | :--- |
+| GET | `/api/students` | Auth | Daftar dan pencarian data mahasiswa |
+| POST | `/api/students` | Admin/Asisten | Menambahkan data mahasiswa |
+| PUT | `/api/students/{student}` | Admin/Asisten | Memperbarui data mahasiswa |
+| DELETE | `/api/students/{student}` | Admin/Asisten | Menghapus data mahasiswa |
+
 ### Peminjaman
 
 | Method | Endpoint | Akses | Keterangan |
@@ -429,6 +479,9 @@ Semua endpoint berada di bawah prefix `/api`. Kecuali login dan download PDF QR,
 | GET | `/api/loans/{loan}` | Auth | Detail transaksi |
 | GET | `/api/loans/qr/{uuid}` | Auth | Lookup melalui UUID QR |
 | GET | `/api/loans/report/download` | Auth | Mengunduh laporan peminjaman dalam format PDF; mendukung filter status/tanggal dan data penandatangan |
+| GET | `/api/loans/clearance/borrowers` | Auth | Daftar peminjam dari data peminjaman + status bebas labor; search nama/NIM/email |
+| GET | `/api/loans/clearance/detail` | Auth | Rincian barang yang belum kembali dan riwayat pengembalian satu peminjam |
+| POST | `/api/loans/clearance/download` | Admin/Asisten | Menerbitkan surat PDF dari data peminjaman: surat bebas labor bila semua barang sudah kembali, atau surat keterangan tanggungan bila masih ada `borrowed`/`pending` |
 | POST | `/api/loans/official/download` | Admin/Asisten | Membuat peminjaman skala besar dan mengunduh surat resmi PDF |
 | GET | `/api/loans/code/{code}` | Admin/Asisten | Lookup melalui kode peminjaman |
 | POST | `/api/loans` | Admin/Asisten | Membuat transaksi dan mengurangi stok |

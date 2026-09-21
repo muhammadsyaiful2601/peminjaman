@@ -12,6 +12,8 @@ import {
   Mail,
   Phone,
   IdCard,
+  GraduationCap,
+  Search,
   CheckCircle,
   Plus,
 } from 'lucide-react'
@@ -29,6 +31,9 @@ function NewLoan() {
   const [error, setError] = useState('')
   const [successLoan, setSuccessLoan] = useState(null)
   const [loadingItems, setLoadingItems] = useState(true)
+  const [students, setStudents] = useState([])
+  const [selectedStudentId, setSelectedStudentId] = useState('')
+  const [studentSearch, setStudentSearch] = useState('')
 
   // Borrower form data
   const [borrowerName, setBorrowerName] = useState('')
@@ -47,7 +52,16 @@ function NewLoan() {
         setLoadingItems(false)
       }
     }
+    const fetchStudents = async () => {
+      try {
+        const response = await api.get('/students')
+        setStudents(response.data.data || [])
+      } catch {
+        // Pengisian manual tetap tersedia bila daftar mahasiswa belum dapat dimuat.
+      }
+    }
     fetchItems()
+    fetchStudents()
 
     return () => {
       stopCamera()
@@ -122,6 +136,16 @@ function NewLoan() {
     }, 'image/jpeg', 0.9)
   }
 
+  const handleStudentSelect = (student) => {
+    setSelectedStudentId(String(student.id))
+    setStudentSearch(`${student.student_id} - ${student.name}`)
+
+    setBorrowerName(student.name || '')
+    setBorrowerEmail(student.email || '')
+    setBorrowerPhone(student.phone || '')
+    setBorrowerStudentId(student.student_id || '')
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
@@ -179,6 +203,8 @@ function NewLoan() {
     setBorrowerEmail('')
     setBorrowerPhone('')
     setBorrowerStudentId('')
+    setSelectedStudentId('')
+    setStudentSearch('')
   }
 
   // Success page after loan is created
@@ -341,8 +367,55 @@ function NewLoan() {
             2. Data Peminjam
           </h2>
           <p className="text-sm text-slate-500 mb-4">
-            Peminjam mengisi data langsung di komputer petugas. QR Code akan dikirim ke email yang dimasukkan.
+            Pilih data mahasiswa tersimpan untuk mengisi otomatis, atau isi data secara manual. QR Code akan dikirim ke email yang dimasukkan.
           </p>
+
+          <div className="mb-5 rounded-lg border border-cyan-100 bg-cyan-50 p-4">
+            <label className="flex items-center gap-2 text-sm font-medium text-cyan-900">
+              <GraduationCap className="h-5 w-5 text-cyan-600" />
+              Gunakan data mahasiswa tersimpan
+            </label>
+            <div className="relative mt-2">
+              <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+              <input
+                type="search"
+                value={studentSearch}
+                onChange={(event) => {
+                  setStudentSearch(event.target.value)
+                  setSelectedStudentId('')
+                }}
+                placeholder="Cari NIM atau nama mahasiswa..."
+                className="w-full rounded-lg border border-cyan-200 bg-white py-2.5 pl-10 pr-4 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500"
+              />
+            </div>
+            {students.length > 0 ? (
+              <div className="mt-2 max-h-52 space-y-1 overflow-y-auto rounded-lg border border-cyan-200 bg-white p-1">
+                {students
+                  .filter((student) => `${student.student_id} ${student.name} ${student.email}`.toLowerCase().includes(studentSearch.toLowerCase().trim()))
+                  .slice(0, 8)
+                  .map((student) => (
+                    <button
+                      key={student.id}
+                      type="button"
+                      onClick={() => handleStudentSelect(student)}
+                      className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-left transition-colors ${String(student.id) === selectedStudentId ? 'bg-cyan-100 text-cyan-900' : 'hover:bg-slate-50'}`}
+                    >
+                      <span>
+                        <span className="block text-sm font-medium text-slate-900">{student.name}</span>
+                        <span className="block text-xs text-slate-500">{student.student_id} · {student.email}</span>
+                      </span>
+                      {String(student.id) === selectedStudentId && <span className="text-xs font-semibold text-cyan-700">Terpilih</span>}
+                    </button>
+                  ))}
+                {students.filter((student) => `${student.student_id} ${student.name} ${student.email}`.toLowerCase().includes(studentSearch.toLowerCase().trim())).length === 0 && (
+                  <p className="px-3 py-3 text-center text-xs text-slate-500">Mahasiswa tidak ditemukan.</p>
+                )}
+              </div>
+            ) : (
+              <p className="mt-2 text-xs text-cyan-700">Belum ada data mahasiswa tersimpan. Tambahkan melalui menu Data Mahasiswa.</p>
+            )}
+            <p className="mt-2 text-xs text-cyan-700">Klik data mahasiswa di daftar untuk mengisi form otomatis. Kosongkan pencarian untuk mengisi manual.</p>
+          </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>

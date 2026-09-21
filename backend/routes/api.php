@@ -6,9 +6,11 @@ use Illuminate\Support\Facades\Mail;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BackupController;
 use App\Http\Controllers\Api\BrandingController;
+use App\Http\Controllers\Api\ClearanceController;
 use App\Http\Controllers\Api\HybridController;
 use App\Http\Controllers\Api\ItemController;
 use App\Http\Controllers\Api\LoanController;
+use App\Http\Controllers\Api\StudentController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\TechnicianController;
 use Illuminate\Support\Facades\Route;
@@ -45,14 +47,21 @@ Route::middleware('auth:sanctum')->group(function () {
     // Loans - all staff can view
     Route::get('/loans', [LoanController::class, 'index']);
     Route::get('/loans/report/download', [LoanController::class, 'downloadReport']);
+
+    // Bebas labor: data peminjaman per peminjam + kelayakan surat
+    Route::get('/loans/clearance/borrowers', [ClearanceController::class, 'borrowers']);
+    Route::get('/loans/clearance/detail', [ClearanceController::class, 'detail']);
+
     Route::get('/loans/{loan}', [LoanController::class, 'show']);
     Route::get('/loans/qr/{uuid}', [LoanController::class, 'showByUuid']);
     Route::get('/technicians', [TechnicianController::class, 'index']);
+    Route::get('/students', [StudentController::class, 'index']);
 
     // Loan management - admin & assistant only (petugas creates & verifies)
     Route::middleware('role:admin,assistant')->group(function () {
         Route::post('/loans', [LoanController::class, 'store']);
         Route::post('/loans/official/download', [LoanController::class, 'downloadOfficialLoan']);
+        Route::post('/loans/clearance/download', [ClearanceController::class, 'download']);
         Route::post('/loans/{loan}/return', [LoanController::class, 'returnItem']);
         Route::patch('/loans/{loan}/items/{item}/quantity', [LoanController::class, 'updateItemQuantity']);
 
@@ -72,6 +81,13 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/technicians', [TechnicianController::class, 'store']);
         Route::put('/technicians/{technician}', [TechnicianController::class, 'update']);
         Route::delete('/technicians/{technician}', [TechnicianController::class, 'destroy']);
+    });
+
+    Route::middleware('role:admin,assistant')->group(function () {
+        // Data mahasiswa dapat dikelola seluruh petugas peminjaman.
+        Route::post('/students', [StudentController::class, 'store']);
+        Route::put('/students/{student}', [StudentController::class, 'update']);
+        Route::delete('/students/{student}', [StudentController::class, 'destroy']);
     });
 });
 

@@ -29,7 +29,7 @@ checklist deployment dijelaskan pada [`../README.md`](../README.md).
 
 | Path | Isi |
 | :--- | :--- |
-| `app/Http/Controllers/Api/` | Controller REST API: `Auth`, `Item`, `Loan`, `User`, `Technician`, `Backup`, `Branding`, `Hybrid` |
+| `app/Http/Controllers/Api/` | Controller REST API: `Auth`, `Item`, `Loan`, `Clearance`, `User`, `Technician`, `Backup`, `Branding`, `Hybrid` |
 | `app/Http/Middleware/` | `CheckRole` (alias `role`) dan `CheckDesktopKey` (alias `desktop.key`, header `X-Desktop-Key`) |
 | `app/Models/` | `User`, `Item`, `ItemImage`, `Loan`, `LoanItem`, `Technician`, `AppSetting` |
 | `app/Support/` | Helper `Branding`, `Hybrid`, `PublicUrl`, `QrPng` |
@@ -38,7 +38,7 @@ checklist deployment dijelaskan pada [`../README.md`](../README.md).
 | `app/Console/Commands/` | `hybrid:migrate` dan `hybrid:sync` (`--due`, `--force`) |
 | `app/Notifications/` | `VerifyEmailNotification` (verifikasi email akun petugas) |
 | `database/seeders/` | `DatabaseSeeder` (akun awal) dan `LoanDummySeeder` (100 peminjaman contoh) |
-| `resources/views/pdf/` | Template PDF: bukti QR, laporan peminjaman, surat peminjaman resmi |
+| `resources/views/pdf/` | Template PDF: bukti QR, laporan peminjaman, surat peminjaman resmi, surat bebas labor |
 | `routes/api.php` | Seluruh endpoint `/api`, termasuk route khusus desktop |
 
 Akun awal dari seeder: `admin` / `password` (petugas utama) dan `asisten` / `password`
