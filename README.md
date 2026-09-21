@@ -4,7 +4,7 @@ Aplikasi untuk **inventaris**, **peminjaman multi-barang**, **pengembalian denga
 **peminjaman resmi (surat)**, **laporan resmi**, dan **bukti transaksi berbasis QR Code + email**.
 Mahasiswa/peminjam **tidak membuat akun** — petugas memasukkan data peminjam dan menyerahkan barang melalui aplikasi.
 
-> **Versi aplikasi:** lihat `desktop/package.json` (saat ini **1.1.5**). Installer `.exe`
+> **Versi aplikasi:** lihat `desktop/package.json` (saat ini **1.2.0**). Installer `.exe`
 > tidak disimpan di source — unduh dari halaman **Releases** repositori ini.
 >
 > **Status kepemilikan:** perangkat lunak **proprietary** (bukan open source, bukan MIT).

@@ -39,6 +39,7 @@ const env = {
   APP_URL: BASE,
   FRONTEND_URL: BASE,
   DESKTOP_FRONTEND_DIST: dist,
+  DESKTOP_API_KEY: 'desktop-smoke-test-key',
 };
 
 function run(args, timeoutMs = 120000) {
@@ -184,7 +185,9 @@ try {
   record('POST /api/login (admin/password, Sanctum)', login.status === 200 && Boolean(token), `status=${login.status}`);
 
   // 8. Route desktop mail-test (tanpa SMTP aktif -> ok:false, tapi route hidup)
-  const mailTest = await request('POST', '/api/desktop/mail-test', { to: 'tes@polpad.ac.id' });
+  const mailTest = await request('POST', '/api/desktop/mail-test', { to: 'tes@polpad.ac.id' }, {
+    'X-Desktop-Key': env.DESKTOP_API_KEY,
+  });
   let mailJson = {};
   try {
     mailJson = JSON.parse(mailTest.body.toString('utf8'));
