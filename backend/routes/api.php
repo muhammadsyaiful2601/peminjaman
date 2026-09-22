@@ -86,6 +86,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware('role:admin,assistant')->group(function () {
         // Data mahasiswa dapat dikelola seluruh petugas peminjaman.
         Route::post('/students', [StudentController::class, 'store']);
+        Route::post('/students/import', [StudentController::class, 'import']);
+        Route::get('/students/import/template', [StudentController::class, 'downloadTemplate']);
         Route::put('/students/{student}', [StudentController::class, 'update']);
         Route::delete('/students/{student}', [StudentController::class, 'destroy']);
     });

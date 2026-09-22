@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Mail, Pencil, Phone, Plus, Search, Trash2, UserRound } from 'lucide-react'
+import { Mail, Pencil, Phone, Plus, Search, Trash2, UserRound, Upload } from 'lucide-react'
 import api from '../api/axios'
+import ImportStudentsModal from '../components/ImportStudentsModal'
 
 const emptyForm = { student_id: '', name: '', email: '', phone: '' }
 
@@ -13,6 +14,7 @@ function Students() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [showImportModal, setShowImportModal] = useState(false)
 
   const fetchStudents = async (searchValue = search) => {
     setLoading(true)
@@ -85,10 +87,26 @@ function Students() {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-slate-900">Data Mahasiswa</h1>
-        <p className="mt-1 text-slate-500">Simpan data mahasiswa agar pengisian peminjaman lebih cepat.</p>
+      <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Data Mahasiswa</h1>
+          <p className="mt-1 text-slate-500">Simpan data mahasiswa agar pengisian peminjaman lebih cepat.</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowImportModal(true)}
+          className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-cyan-600 px-4 py-2.5 font-medium text-cyan-700 hover:bg-cyan-50"
+        >
+          <Upload className="h-4 w-4" />
+          Impor Spreadsheet
+        </button>
       </div>
+
+      <ImportStudentsModal
+        open={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onImported={() => fetchStudents()}
+      />
 
       {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
       {success && <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{success}</div>}

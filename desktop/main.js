@@ -44,8 +44,9 @@ const PREFERRED_PORT = 8642;
 // (fitur mode hybrid: popup gear + sinkronisasi MySQL hosting + pdo_mysql;
 //  penegakan storage:link via junction saat boot; 1.0.13: disk "public"
 //  diarahkan ke folder uploads persisten — perbaikan bug "gambar hilang
-//  setelah install ulang").
-const TEMPLATE_VERSION = '1.2.1';
+//  setelah install ulang"; 1.2.2: impor data mahasiswa dari spreadsheet
+//  CSV/XLSX/XLS — template .xls + parser PhpSpreadsheet).
+const TEMPLATE_VERSION = '1.2.2';
 const isDev = !app.isPackaged;
 
 /* ------------------------------------------------------------------ paths */
