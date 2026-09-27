@@ -143,6 +143,20 @@ class StudentTest extends TestCase
         $this->assertDatabaseHas('students', ['student_id' => '2211082002']);
     }
 
+    public function test_aplikasi_desktop_mendapat_pesan_validasi_saat_csv_google_sheets_tidak_dapat_dihubungi(): void
+    {
+        config(['app.desktop_key' => 'test-desktop-key']);
+        Http::fake(function () {
+            throw new \RuntimeException('Connection refused');
+        });
+
+        $this->postJson('/api/desktop/students/import-csv-url', [
+            'url' => 'https://docs.google.com/spreadsheets/d/example/pubhtml',
+        ], ['X-Desktop-Key' => 'test-desktop-key'])
+            ->assertUnprocessable()
+            ->assertJsonPath('message', 'CSV Google Sheets tidak dapat dihubungi.');
+    }
+
     public function test_impor_mahasiswa_dari_aplikasi_desktop_butuh_kunci_desktop(): void
     {
         config(['app.desktop_key' => 'test-desktop-key']);

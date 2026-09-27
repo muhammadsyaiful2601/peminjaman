@@ -48,7 +48,8 @@ const PREFERRED_PORT = 8642;
 //  CSV/XLSX/XLS — template .xls + parser PhpSpreadsheet).
 //  1.2.3: surat bebas labor (PDF & cetak massal) + impor mahasiswa dari
 //  CSV/link terpublikasi — instalasi lama menyalin ulang view suratnya.
-const TEMPLATE_VERSION = '1.2.3';
+//  1.2.4: tangani kegagalan koneksi CSV Google Sheets tanpa HTTP 500.
+const TEMPLATE_VERSION = '1.2.4';
 const isDev = !app.isPackaged;
 
 /* ------------------------------------------------------------------ paths */

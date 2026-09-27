@@ -123,7 +123,7 @@ class StudentController extends Controller
             $response = Http::timeout(20)
                 ->withHeaders(['Cache-Control' => 'no-cache'])
                 ->get($this->publishedCsvUrl($validated['url']));
-        } catch (Throwable) {
+        } catch (\Throwable) {
             return response()->json([
                 'message' => 'CSV Google Sheets tidak dapat dihubungi.',
             ], 422);
