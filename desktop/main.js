@@ -49,7 +49,8 @@ const PREFERRED_PORT = 8642;
 //  1.2.3: surat bebas labor (PDF & cetak massal) + impor mahasiswa dari
 //  CSV/link terpublikasi — instalasi lama menyalin ulang view suratnya.
 //  1.2.4: tangani kegagalan koneksi CSV Google Sheets tanpa HTTP 500.
-const TEMPLATE_VERSION = '1.2.4';
+//  1.2.5: sertakan CA bundle untuk koneksi HTTPS PHP portable.
+const TEMPLATE_VERSION = '1.2.5';
 const isDev = !app.isPackaged;
 
 /* ------------------------------------------------------------------ paths */
@@ -71,6 +72,20 @@ if (isDev) {
   backendTemplate = path.join(process.resourcesPath, 'backend');
   frontendDist = path.join(process.resourcesPath, 'frontend-dist');
   cloudflaredBin = path.join(process.resourcesPath, 'cloudflared', 'cloudflared.exe');
+}
+
+const phpCaBundle = isDev
+  ? path.join(__dirname, 'resources', 'php', 'cacert.pem')
+  : path.join(process.resourcesPath, 'php', 'cacert.pem');
+
+function phpArgs(args) {
+  if (!fs.existsSync(phpCaBundle)) return args;
+
+  return [
+    '-d', `curl.cainfo=${phpCaBundle}`,
+    '-d', `openssl.cafile=${phpCaBundle}`,
+    ...args,
+  ];
 }
 
 const userDataDir = app.getPath('userData');
@@ -521,7 +536,7 @@ function phpEnv(extra = {}) {
 
 function runArtisan(args, { allowFailure = false } = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn(phpBin, ['artisan', ...args], {
+    const child = spawn(phpBin, phpArgs(['artisan', ...args]), {
       cwd: runtimeBackend,
       env: phpEnv(),
       windowsHide: true,
@@ -562,7 +577,7 @@ function startPhpServer() {
     phpServerError = '';
     phpServer = spawn(
       phpBin,
-      ['-S', `127.0.0.1:${backendPort}`, '-t', 'public', 'desktop-router.php'],
+      phpArgs(['-S', `127.0.0.1:${backendPort}`, '-t', 'public', 'desktop-router.php']),
       { cwd: runtimeBackend, env: phpEnv(), windowsHide: true },
     );
     let started = false;

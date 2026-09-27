@@ -63,6 +63,13 @@ Copy-Item -Path $iniSrc -Destination (Join-Path $dest 'php.ini') -Force
 $phpExe = Join-Path $dest 'php.exe'
 if (-not (Test-Path $phpExe)) { throw "php.exe tidak ditemukan setelah ekstraksi!" }
 
+$caBundle = Join-Path $dest 'cacert.pem'
+Write-Host 'Mengunduh CA bundle untuk koneksi HTTPS ...'
+Invoke-WebRequest -Uri 'https://curl.se/ca/cacert.pem' -OutFile $caBundle -UseBasicParsing
+if (-not (Select-String -Path $caBundle -Pattern '-----BEGIN CERTIFICATE-----' -Quiet)) {
+    throw 'CA bundle yang diunduh tidak valid.'
+}
+
 Write-Host "Verifikasi:"
 & $phpExe -v
 Write-Host ""
