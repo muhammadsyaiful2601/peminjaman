@@ -15,13 +15,37 @@ $dest = Join-Path $PSScriptRoot '..\resources\php'
 New-Item -ItemType Directory -Force -Path $dest | Out-Null
 
 # PHP 8.4 NTS x64 (build vs17 / Visual Studio 2022) dari server resmi php.net.
-# Versi pinned agar build dapat direproduksi; link "latest" juga tersedia di
-# https://windows.php.net/downloads/releases/latest/php-8.4-nts-Win32-vs17-x64-latest.zip
-$url = 'https://windows.php.net/downloads/releases/php-8.4.25-nts-Win32-vs17-x64.zip'
+# Kandidat dicoba berurutan: versi pinned (reproduktif) -> arsip versi pinned ->
+# "latest" yang selalu tersedia. Berkas versi pinned dipindahkan server ke folder
+# arsip setelah rilis baru terbit (pernah membuat langkah CI gagal 404), jadi
+# unduhan wajib punya cadangan + percobaan ulang.
+$candidates = @(
+    'https://windows.php.net/downloads/releases/php-8.4.25-nts-Win32-vs17-x64.zip',
+    'https://windows.php.net/downloads/releases/archives/php-8.4.25-nts-Win32-vs17-x64.zip',
+    'https://windows.php.net/downloads/releases/latest/php-8.4-nts-Win32-vs17-x64-latest.zip'
+)
 $zip = Join-Path $env:TEMP 'php-8.4-nts-Win32-vs17-x64.zip'
 
-Write-Host "Mengunduh PHP dari $url ..."
-Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
+$downloaded = $false
+foreach ($url in $candidates) {
+    for ($attempt = 1; $attempt -le 2; $attempt++) {
+        Write-Host "Mengunduh PHP dari $url (percobaan $attempt) ..."
+        try {
+            Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
+            $downloaded = $true
+            break
+        } catch {
+            Write-Warning "Gagal mengunduh dari $url : $($_.Exception.Message)"
+            Start-Sleep -Seconds 5
+        }
+    }
+
+    if ($downloaded) { break }
+}
+
+if (-not $downloaded) {
+    throw 'PHP portable tidak dapat diunduh dari semua URL kandidat.'
+}
 
 Write-Host "Ekstrak ke $dest ..."
 Expand-Archive -Path $zip -DestinationPath $dest -Force
