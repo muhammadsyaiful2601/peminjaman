@@ -71,9 +71,12 @@ nilai `version` pada `desktop/package.json`.
 Pengguna yang sudah memasang aplikasi tidak perlu mengunduh installer secara
 manual untuk rilis berikutnya. Setiap rilis baru cukup:
 
-1. Naikkan `version` pada `desktop/package.json` (contoh `1.1.0` menjadi `1.1.1`).
-2. Pastikan `GH_TOKEN` memiliki izin membuat GitHub Release.
-3. Jalankan dari folder `desktop`:
+1. Naikkan `version` pada `desktop/package.json` (contoh `1.2.2` menjadi `1.2.3`).
+2. Bila backend ikut berubah (view/rute/kontroler/migrasi), naikkan juga
+   `TEMPLATE_VERSION` di `main.js` agar instalasi lama menyalin ulang runtime
+   backend di `%APPDATA%` — view surat/laporan yang baru tidak akan terpakai tanpa ini.
+3. Pastikan `GH_TOKEN` memiliki izin membuat GitHub Release.
+4. Jalankan dari folder `desktop`:
 
 ```powershell
 npm run dist:publish
@@ -84,6 +87,21 @@ dan blockmap ke repository GitHub. Cara lain yang lebih ringkas: cukup naikkan
 `version` pada `desktop/package.json`, lalu push ke branch `Syaiful`/`main`/`master` —
 workflow `.github/workflows/release-desktop.yml` akan membangun dan menerbitkan
 release `v{versi}` secara otomatis.
+
+### Kanal stabil dan beta
+
+- **Stabil (default)** — `version` tanpa sufiks (mis. `1.2.3`): rilis final +
+  `latest.yml`. Seluruh instalasi menerimanya.
+- **Beta** — `version` bersufiks prarilis (mis. `1.2.4-beta.1`): diterbitkan sebagai
+  GitHub **prerelease** dengan kanal `beta`, sehingga hanya aplikasi yang memilih
+  kanal Beta yang mendeteksinya. Workflow CI menandainya otomatis
+  (`EP_PRE_RELEASE=true`); bila menerbitkan dari komputer sendiri, set variabel
+  itu lebih dulu.
+
+Pengguna berpindah kanal melalui panel **Pengaturan** (gear) → *Pembaruan Aplikasi* →
+tombol **Stabil/Beta**, atau menu **Aplikasi → Kanal Pembaruan** (tersimpan sebagai
+`updateChannel` pada `desktop-config.json`). Installer beta yang dipasang otomatis
+mengikuti kanal beta; aplikasi kanal stabil tidak pernah ikut menerima rilis beta.
 
 Pada aplikasi terpasang, pengguna memilih **Aplikasi → Perbarui Aplikasi…** untuk
 memeriksa versi baru (pemeriksaan otomatis juga berjalan tiap 4 jam). Setelah pengguna
@@ -117,7 +135,8 @@ Perilaku instalasi/first-run di komputer pengguna:
 ## Data, backup, dan update
 
 - Database utama: `%APPDATA%\Peminjaman Barang PNP\peminjaman.sqlite`.
-- Konfigurasi lokal dan `APP_KEY`: `%APPDATA%\Peminjaman Barang PNP\desktop-config.json`.
+- Konfigurasi lokal dan `APP_KEY`: `%APPDATA%\Peminjaman Barang PNP\desktop-config.json`
+  (termasuk pilihan kanal pembaruan `updateChannel`: `stable`/`beta`).
 - Backup dilakukan saat aplikasi tertutup dengan menyalin folder data tersebut.
 - Resource dapat dipasang di drive `C:`, `D:`, atau `E:`; resource mengikuti lokasi installer.
 - Template backend akan disalin ulang otomatis ketika `TEMPLATE_VERSION` berubah.

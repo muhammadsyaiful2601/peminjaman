@@ -7,6 +7,13 @@ name: Release Desktop
 # menampilkan tombol "Unduh & Instal" di menu gear (stil Play Store).
 #
 # Push biasa tanpa perubahan versi akan dilewati cepat (gate release sudah ada).
+#
+# Kanal rilis:
+#   - versi stabil (mis. 1.2.3)  -> GitHub release final, berkas latest.yml
+#     (kanal `latest`) untuk seluruh instalasi.
+#   - versi prarilis (mis. 1.2.4-beta.1) -> GitHub **prerelease** (kanal beta)
+#     supaya instalasi kanal stabil tidak ikut menariknya; hanya aplikasi yang
+#     memilih kanal Beta (panel Pengaturan/gear) yang menerimanya.
 
 on:
   push:
@@ -46,6 +53,19 @@ jobs:
         id: ver
         shell: bash
         run: echo "version=$(node -p "require('./desktop/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Deteksi kanal rilis (stabil/beta)
+        id: channel
+        shell: bash
+        run: |
+          V="${{ steps.ver.outputs.version }}"
+          if [[ "$V" == *-* ]]; then
+            echo "beta=true" >> "$GITHUB_OUTPUT"
+            echo "[kanal] Versi $V mengandung komponen prarilis -> kanal beta (GitHub prerelease)."
+          else
+            echo "beta=false" >> "$GITHUB_OUTPUT"
+            echo "[kanal] Versi $V stabil -> kanal latest (GitHub release final)."
+          fi
 
       - name: Lewati bila release untuk versi ini sudah ada (termasuk draft)
         id: gate
@@ -96,6 +116,9 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
+          # Nilai harus eksplisit "true"/"false": electron-publish memperlakukan
+          # string kosong sebagai true, jadi jangan pernah mengosongkan var ini.
+          EP_PRE_RELEASE: ${{ steps.channel.outputs.beta }}
         run: npm run dist:publish
 
       # electron-builder kerap meninggalkan release sebagai DRAFT (finalize
@@ -130,4 +153,9 @@ jobs:
       - name: Ringkasan
         if: steps.gate.outputs.skip != 'true'
         shell: bash
-        run: echo "Release v${{ steps.ver.outputs.version }} dipublikasikan. Komputer yang terinstall versi lama akan mendeteksinya dalam <= 4 jam atau saat aplikasi dibuka, lalu menampilkan tombol Unduh & Instal di menu gear."
+        run: |
+          if [ "${{ steps.channel.outputs.beta }}" = "true" ]; then
+            echo "Prerelease v${{ steps.ver.outputs.version }} (kanal beta) dipublikasikan. Hanya komputer yang memilih kanal Beta di panel Pengaturan (gear) yang menerimanya."
+          else
+            echo "Release v${{ steps.ver.outputs.version }} dipublikasikan. Komputer yang terinstall versi lama akan mendeteksinya dalam <= 4 jam atau saat aplikasi dibuka, lalu menampilkan tombol Unduh & Instal di menu gear."
+          fi

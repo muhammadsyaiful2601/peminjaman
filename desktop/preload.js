@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld('desktop', {
   checkForUpdates: () => ipcRenderer.invoke('update:check'),
   downloadUpdate: () => ipcRenderer.invoke('update:download'),
   installUpdate: () => ipcRenderer.invoke('update:install'),
+  setUpdateChannel: (channel) => ipcRenderer.invoke('update:set-channel', channel),
   onUpdateState: (callback) => {
     const channel = 'update:state-push';
     ipcRenderer.removeAllListeners(channel);

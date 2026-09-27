@@ -29,6 +29,7 @@ function HybridSettings() {
   const [feedback, setFeedback] = useState(null) // { ok, message }
   const [updateState, setUpdateState] = useState(null) // state pembaruan (menu gear)
   const [updateBusy, setUpdateBusy] = useState(null) // 'check' | 'download' | null
+  const [channelBusy, setChannelBusy] = useState(null) // 'stable' | 'beta' | null
 
   const loadStatus = useCallback(async () => {
     try {
@@ -65,7 +66,9 @@ function HybridSettings() {
         .catch(() => setUpdateState({ state: 'error', message: 'Tak dapat membaca state pembaruan.' }))
     }
     if (desktop?.onUpdateState) {
-      return desktop.onUpdateState(setUpdateState)
+      // Digabung dengan state sebelumnya agar kanal (channel) tidak hilang
+      // saat push state dari main process datang.
+      return desktop.onUpdateState((state) => setUpdateState((prev) => ({ ...(prev || {}), ...state })))
     }
     return undefined
   }, [isDesktop])
@@ -136,6 +139,22 @@ function HybridSettings() {
       await window.desktop.downloadUpdate()
     } finally {
       setUpdateBusy(null)
+    }
+  }
+
+  const canSwitchChannel = Boolean(window.desktop?.setUpdateChannel)
+  const activeChannel = updateState?.channel === 'beta' ? 'beta' : 'stable'
+
+  const handleChannelChange = async (channel) => {
+    if (!canSwitchChannel || channelBusy !== null || channel === activeChannel) return
+    setChannelBusy(channel)
+    try {
+      const result = await window.desktop.setUpdateChannel(channel)
+      setUpdateState((prev) => ({ ...(prev || {}), channel: result?.channel || channel }))
+    } catch {
+      setUpdateState((prev) => ({ ...(prev || {}), channel: activeChannel }))
+    } finally {
+      setChannelBusy(null)
     }
   }
 
@@ -269,6 +288,35 @@ function HybridSettings() {
                     )}
                   </div>
                 )}
+
+                {/* KANAL PEMBARUAN: stabil (rilis final) / beta (uji coba awal) */}
+                <div className="mt-2 flex items-center justify-between border-t border-slate-100 pt-2">
+                  <span className="flex items-center gap-1.5">
+                    <RefreshCw className="h-3.5 w-3.5 text-slate-400" />
+                    Kanal pembaruan
+                  </span>
+                  <div className="inline-flex overflow-hidden rounded-lg border border-slate-200">
+                    {['stable', 'beta'].map((channel) => (
+                      <button
+                        key={channel}
+                        type="button"
+                        disabled={channelBusy !== null || !canSwitchChannel}
+                        onClick={() => handleChannelChange(channel)}
+                        className={`px-2.5 py-1 text-xs font-semibold transition disabled:opacity-50 ${
+                          activeChannel === channel
+                            ? 'bg-cyan-600 text-white'
+                            : 'bg-white text-slate-500 hover:bg-slate-50'
+                        }`}
+                      >
+                        {channel === 'beta' ? 'Beta' : 'Stabil'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
+                  <b>Stabil</b> memakai rilis final. <b>Beta</b> mengikuti rilis uji coba lebih awal agar fitur baru bisa
+                  dicoba sebelum rilis resmi.
+                </p>
               </div>
             </div>
 

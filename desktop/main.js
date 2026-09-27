@@ -48,7 +48,9 @@ const PREFERRED_PORT = 8642;
 //  diarahkan ke folder uploads persisten — perbaikan bug "gambar hilang
 //  setelah install ulang"; 1.2.2: impor data mahasiswa dari spreadsheet
 //  CSV/XLSX/XLS — template .xls + parser PhpSpreadsheet).
-const TEMPLATE_VERSION = '1.2.2';
+//  1.2.3: surat bebas labor (PDF & cetak massal) + impor mahasiswa dari
+//  CSV/link terpublikasi — instalasi lama menyalin ulang view suratnya.
+const TEMPLATE_VERSION = '1.2.3';
 const isDev = !app.isPackaged;
 
 /* ------------------------------------------------------------------ paths */
@@ -87,7 +89,7 @@ const uploadsDir = isDev
 
 /* ------------------------------------------------------------------ state */
 
-let config = { setupDone: false, preferredPort: null, mail: null, appKey: null, desktopKey: null };
+let config = { setupDone: false, preferredPort: null, mail: null, appKey: null, desktopKey: null, updateChannel: null };
 let phpServer = null;
 let queueWorker = null;
 let tunnelProcess = null;
@@ -956,6 +958,57 @@ async function downloadUpdate({ manual = false } = {}) {
   }
 }
 
+/* ------------------------------------------------------ kanal pembaruan */
+// Dua kanal rilis:
+//   - stabil (`latest.yml`) : rilis final, dipakai semua instalasi default.
+//   - beta   (`beta.yml`)   : rilis prarilis (mis. 1.2.4-beta.1) untuk uji
+//     coba lebih awal. Metadata kanal beta dipublikasikan sebagai GitHub
+//     prerelease sehingga instalasi stabil tidak pernah ikut menariknya.
+const UPDATE_CHANNEL_FILES = { stable: 'latest', beta: 'beta' };
+
+/** Versi prarilis mengandung tanda hubung, mis. `1.2.4-beta.1`. */
+function isPrereleaseVersion(version) {
+  return String(version || '').includes('-');
+}
+
+/**
+ * Kanal yang sedang dipakai:
+ *   - pilihan pengguna (menu gear / menu Aplikasi) bila sudah pernah diset,
+ *   - bila belum: mengikuti versi terpasang (build beta tetap di kanal beta).
+ */
+function resolveUpdateChannel() {
+  const configured = String(config.updateChannel || '').trim().toLowerCase();
+  if (configured === 'stable' || configured === 'beta') return configured;
+  return isPrereleaseVersion(app.getVersion()) ? 'beta' : 'stable';
+}
+
+/**
+ * Terapkan kanal ke electron-updater. Klien stabil (`allowPrerelease=false`,
+ * kanal default) hanya melihat rilis final; klien beta juga melihat prarilis
+ * dan otomatis jatuh ke `latest.yml` bila rilis prarilis belum punya
+ * `beta.yml`.
+ */
+function applyUpdateChannel() {
+  const channel = resolveUpdateChannel();
+  if (!autoUpdater) return channel;
+  const isBeta = channel === 'beta';
+  autoUpdater.allowPrerelease = isBeta;
+  autoUpdater.channel = isBeta ? UPDATE_CHANNEL_FILES.beta : null;
+  return channel;
+}
+
+/** Simpan pilihan kanal, segarkan menu, lalu periksa versi pada kanal baru. */
+function setUpdateChannel(value) {
+  const channel = value === 'beta' ? 'beta' : 'stable';
+  config.updateChannel = channel;
+  saveConfig();
+  applyUpdateChannel();
+  buildMenu();
+  logUpdate(`Kanal pembaruan diatur ke ${channel === 'beta' ? 'beta' : 'stabil'}.`);
+  if (!isDev && autoUpdater) checkForUpdates();
+  return channel;
+}
+
 function configureAutoUpdater() {
   if (isDev || !autoUpdater) return;
   // Pembaruan MANUAL (stil Play Store):
@@ -968,6 +1021,8 @@ function configureAutoUpdater() {
   // ada jalur instalasi lain yang bisa memunculkan wizard NSIS saat app
   // ditutup — pembaruan murni manual stil Play Store.
   autoUpdater.autoInstallOnAppQuit = false;
+  // Kanal (stabil/beta) harus diterapkan sebelum pemeriksaan pertama.
+  applyUpdateChannel();
 
   autoUpdater.on('checking-for-update', () => {
     setUpdateState({ state: 'checking', version: null, percent: 0, message: '' });
@@ -1543,7 +1598,8 @@ function registerIpc() {
     return { ok: true };
   });
 
-  ipcMain.handle('update:get-state', () => ({ ...updateState }));
+  // State pembaruan + kanal aktif (gear menampilkan versi sekaligus kanalnya).
+  ipcMain.handle('update:get-state', () => ({ ...updateState, channel: resolveUpdateChannel() }));
   ipcMain.handle('update:check', () => {
     checkForUpdates({ manual: true });
     return { ok: true };
@@ -1558,6 +1614,12 @@ function registerIpc() {
     installUpdate();
     return { ok: true };
   });
+
+  // Pindah kanal pembaruan: stabil (rilis final) atau beta (uji coba awal).
+  ipcMain.handle('update:set-channel', (_event, value) => ({
+    ok: true,
+    channel: setUpdateChannel(value),
+  }));
 
   // Mode hybrid: kunci X-Desktop-Key untuk request /api/hybrid/* dari SPA.
   ipcMain.handle('desktop:get-key', () => config.desktopKey || '');
@@ -1597,6 +1659,24 @@ function buildMenu() {
           click: () => {
             if (updateState.state === 'ready') installUpdate();
           },
+        },
+        { type: 'separator' },
+        {
+          label: 'Kanal Pembaruan',
+          submenu: [
+            {
+              label: 'Stabil (rilis final)',
+              type: 'radio',
+              checked: resolveUpdateChannel() === 'stable',
+              click: () => setUpdateChannel('stable'),
+            },
+            {
+              label: 'Beta (uji coba lebih awal)',
+              type: 'radio',
+              checked: resolveUpdateChannel() === 'beta',
+              click: () => setUpdateChannel('beta'),
+            },
+          ],
         },
         { type: 'separator' },
         {

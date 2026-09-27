@@ -4,7 +4,8 @@ Aplikasi untuk **inventaris**, **peminjaman multi-barang**, **pengembalian denga
 **peminjaman resmi (surat)**, **laporan resmi**, dan **bukti transaksi berbasis QR Code + email**.
 Mahasiswa/peminjam **tidak membuat akun** — petugas memasukkan data peminjam dan menyerahkan barang melalui aplikasi.
 
-> **Versi aplikasi:** lihat `desktop/package.json` (saat ini **1.2.0**). Installer `.exe`
+> **Versi aplikasi:** lihat `desktop/package.json` dan halaman **Releases**
+> repositori ini. Installer `.exe`
 > tidak disimpan di source — unduh dari halaman **Releases** repositori ini.
 >
 > **Status kepemilikan:** perangkat lunak **proprietary** (bukan open source, bukan MIT).
@@ -911,6 +912,19 @@ pembaruan dari GitHub Releases tanpa perlu install ulang manual:
    aktif setelah unduhan siap — dan pada panel **Pengaturan** (gear).
 6. Log pembaruan ditulis ke `%APPDATA%\Peminjaman Barang PNP\update.log`.
 
+**Kanal pembaruan (stabil & beta).** Tersedia dua kanal rilis:
+
+| Kanal | Sumber | Cocok untuk |
+| :--- | :--- | :--- |
+| **Stabil** (default) | rilis final, mis. `1.2.3` (`latest.yml`) | seluruh petugas — versi paling teruji |
+| **Beta** | rilis prarilis, mis. `1.2.4-beta.1` (`beta.yml`) | uji coba fitur baru lebih awal |
+
+Kanal diubah lewat panel **Pengaturan** (tombol gear) → bagian **Pembaruan Aplikasi** →
+tombol **Stabil/Beta**, atau menu **Aplikasi → Kanal Pembaruan**. Pilihan disimpan pada
+`desktop-config.json` (`updateChannel`). Aplikasi yang memakai kanal **Stabil tidak pernah**
+menerima rilis beta; aplikasi yang memilih kanal **Beta** tetap menerima rilis stabil
+terbaru bila belum ada beta baru.
+
 > **Instal pertama:** versi ≤1.0.2 yang sudah terinstal belum berisi modul pembaruan,
 > jadi perlu diinstal ulang **manual** ke 1.0.3 sebanyak satu kali. Setelah itu semua
 > versi berikutnya dapat diperbarui dari dalam aplikasi.
@@ -930,6 +944,20 @@ npm run dist:publish      # memerlukan GH_TOKEN di lingkungan (Personal Access T
 > diset). Upload manual juga boleh: buat Release dengan tag sesuai versi di
 > `desktop/package.json` (mis. `v1.1.5`) dan upload ketiga file dari `desktop/release/`.
 > File `latest.yml` wajib hadir agar versi lama bisa mendeteksi pembaruan.
+
+Rilis **beta** (uji coba lebih awal) — beri sufiks prarilis pada `version`:
+
+```powershell
+cd desktop
+# contoh: version di package.json diubah menjadi 1.2.4-beta.1 lebih dulu
+$env:EP_PRE_RELEASE='true'   # wajib untuk versi prarilis
+npm run dist:publish
+```
+
+> Versi ber-sufiks (`1.2.4-beta.1`) harus diterbitkan sebagai **GitHub prerelease**:
+> hanya aplikasi berkanal Beta yang mendeteksinya, instalasi stabil tetap aman. Cara
+> paling ringkas tetap cukup **push** kenaikan `version` tersebut — workflow
+> `.github/workflows/release-desktop.yml` sudah menandai rilis beta secara otomatis.
 
 ```powershell
 cd desktop
