@@ -56,12 +56,15 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/loans/qr/{uuid}', [LoanController::class, 'showByUuid']);
     Route::get('/technicians', [TechnicianController::class, 'index']);
     Route::get('/students', [StudentController::class, 'index']);
+    Route::get('/students/import/source', [StudentController::class, 'importSource']);
 
     // Loan management - admin & assistant only (petugas creates & verifies)
     Route::middleware('role:admin,assistant')->group(function () {
         Route::post('/loans', [LoanController::class, 'store']);
         Route::post('/loans/official/download', [LoanController::class, 'downloadOfficialLoan']);
         Route::post('/loans/clearance/download', [ClearanceController::class, 'download']);
+        Route::post('/loans/clearance/print', [ClearanceController::class, 'printLetters']);
+
         Route::post('/loans/{loan}/return', [LoanController::class, 'returnItem']);
         Route::patch('/loans/{loan}/items/{item}/quantity', [LoanController::class, 'updateItemQuantity']);
 
@@ -87,6 +90,8 @@ Route::middleware('auth:sanctum')->group(function () {
         // Data mahasiswa dapat dikelola seluruh petugas peminjaman.
         Route::post('/students', [StudentController::class, 'store']);
         Route::post('/students/import', [StudentController::class, 'import']);
+        Route::post('/students/import/csv-url', [StudentController::class, 'importFromPublishedCsv']);
+        Route::post('/students/import/source', [StudentController::class, 'saveImportSource']);
         Route::get('/students/import/template', [StudentController::class, 'downloadTemplate']);
         Route::put('/students/{student}', [StudentController::class, 'update']);
         Route::delete('/students/{student}', [StudentController::class, 'destroy']);

@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Item;
 use App\Models\Loan;
+use App\Models\Student;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
@@ -14,9 +15,26 @@ use Tests\TestCase;
 /**
  * Surat Keterangan Bebas Laboratorium.
  *
- * Aturan bisnis: surat hanya dapat diterbitkan bila peminjam tidak memiliki
- * transaksi yang belum dikembalikan (`borrowed`/`pending`). Isi surat diambil
- * dari data peminjaman peminjam tersebut.
+ * Aturan bisnis:
+ * 1. Daftar pada halaman Bebas Labor memakai data mahasiswa (sama dengan halaman
+ *    Data Mahasiswa).
+ * 2. Surat dapat diterbitkan untuk setiap peminjam yang tidak memiliki
+ *    tanggungan: seluruh barang sudah dikembalikan, termasuk mahasiswa yang
+ *    belum pernah meminjam barang sama sekali (dan yang transaksinya `rejected`).
+ *    Untuk peminjam tanpa riwayat, surat menyatakan tidak ada transaksi
+ *    peminjaman yang tercatat.
+ * 3. Bila seluruh barang sudah dikembalikan, surat berupa Surat Keterangan Bebas
+ *    Laboratorium; bila masih ada `borrowed`/`pending`, surat otomatis berupa
+ *    Surat Keterangan Tanggungan. Surat bebas labor selalu menyatakan "tidak ada
+ *    tanggungan" dan tidak pernah memuat paragraf/tabel tanggungan (tabel rincian
+ *    menuliskan "Tidak ada tanggungan peminjaman barang yang tercatat" bila
+ *    peminjam belum pernah meminjam). Keperluan surat tampil sebagai baris pada
+ *    tabel identitas surat, dan surat tidak memuat jejak waktu cetak
+ *    ("Dicetak dari sistem pada ... WIB") agar tampilannya tetap resmi.
+ * 4. Transaksi lama (dibuat sebelum data mahasiswa tersedia) tetap dihubungkan ke
+ *    mahasiswa bila salah satu data cocok: NIM, email, nama, atau nomor telepon.
+ *    Peminjam manual yang tidak cocok dengan data mahasiswa mana pun tetap tampil
+ *    (dari data peminjaman) agar tanggungannya terpantau.
  */
 class ClearanceLetterTest extends TestCase
 {
@@ -38,6 +56,18 @@ class ClearanceLetterTest extends TestCase
             'name' => 'Arduino Uno Kit',
             'category' => 'Elektronik',
             'stock' => 10,
+        ]);
+    }
+
+    /**
+     * Data mahasiswa (halaman Data Mahasiswa) yang dipakai halaman Bebas Labor.
+     */
+    private function student(string $studentId = self::NIM, string $name = 'Budi Santoso', string $email = self::EMAIL): Student
+    {
+        return Student::create([
+            'student_id' => $studentId,
+            'name' => $name,
+            'email' => $email,
         ]);
     }
 
@@ -85,7 +115,7 @@ class ClearanceLetterTest extends TestCase
         return trim((string) preg_replace('/\s+/', ' ', $text));
     }
 
-    public function test_daftar_peminjam_menandai_yang_masih_punya_tanggungan(): void
+    public function test_daftar_peminjam_manual_ditandai_masih_punya_tanggungan(): void
     {
         Sanctum::actingAs($this->staff());
 
@@ -100,15 +130,19 @@ class ClearanceLetterTest extends TestCase
 
         $response = $this->getJson('/api/loans/clearance/borrowers?search=' . self::NIM);
 
+        // Peminjam ini tidak punya data mahasiswa, jadi tampil dari data peminjaman.
         $response->assertStatus(200)
             ->assertJsonPath('data.0.name', 'Budi Santoso')
             ->assertJsonPath('data.0.student_id', self::NIM)
+            ->assertJsonPath('data.0.has_student_record', false)
+            ->assertJsonPath('data.0.has_loans', true)
             ->assertJsonPath('data.0.total_loans', 2)
             ->assertJsonPath('data.0.returned_loans', 1)
             ->assertJsonPath('data.0.outstanding_loans', 1)
             ->assertJsonPath('data.0.total_qty', 3)
             ->assertJsonPath('data.0.outstanding_qty', 1)
             ->assertJsonPath('data.0.eligible', false)
+            ->assertJsonPath('data.0.letter_status', 'tanggungan')
             ->assertJsonPath('meta.total', 1);
     }
 
@@ -205,6 +239,9 @@ class ClearanceLetterTest extends TestCase
         $this->assertStringContainsString($borrowed->loan_code, $text);
         $this->assertStringContainsString('Arduino Uno Kit', $text);
         $this->assertStringNotContainsString('SURAT KETERANGAN BEBAS LABORATORIUM', $text);
+        // Surat tidak memuat jejak waktu cetak agar tetap terlihat resmi.
+        $this->assertStringNotContainsString('Dicetak dari sistem', $text);
+        $this->assertStringNotContainsString('WIB', $text);
     }
 
     public function test_unduh_surat_bebas_labor_menghasilkan_pdf_berkop_surat(): void
@@ -241,11 +278,19 @@ class ClearanceLetterTest extends TestCase
         $text = $this->pdfText($content);
         $this->assertStringContainsString('SURAT KETERANGAN BEBAS LABORATORIUM', $text);
         $this->assertStringContainsString('POLITEKNIK NEGERI PADANG', $text);
-        $this->assertStringContainsString('Tidak ada (bebas labor)', $text);
+        $this->assertStringContainsString('Tidak ada tanggungan (bebas labor)', $text);
         $this->assertStringContainsString('Budi Santoso', $text);
+        // Keperluan surat tampil pada tabel identitas.
+        $this->assertStringContainsString('Keperluan', $text);
+        $this->assertStringContainsString('Persyaratan pengambilan bebas pustaka', $text);
+        // Surat tidak memuat jejak waktu cetak agar tetap terlihat resmi.
+        $this->assertStringNotContainsString('Dicetak dari sistem', $text);
+        $this->assertStringNotContainsString('WIB', $text);
         $this->assertStringContainsString($loan->loan_code, $text);
         $this->assertStringContainsString('001/BEBAS-LAB/PNP/IX/2026', $text);
         $this->assertStringContainsString('Nofa Hendrayana', $text);
+        // Surat bebas labor tidak boleh memuat pernyataan tanggungan.
+        $this->assertStringNotContainsString('masih memiliki tanggungan', $text);
 
         $this->assertNotNull($loan->returned_at);
     }
@@ -424,6 +469,293 @@ class ClearanceLetterTest extends TestCase
         ])->assertStatus(403);
     }
 
+    public function test_daftar_bebas_labor_memakai_data_mahasiswa_dan_menandai_kelayakan(): void
+    {
+        Sanctum::actingAs($this->staff());
+        $staff = $this->staff();
+
+        $this->student();                                                // sudah meminjam & semua kembali
+        $this->student('2211082002', 'Siti Aminah', 'siti@example.com');  // masih menahan barang
+        $this->student('2211082003', 'Andi Pratama', 'andi@example.com'); // belum pernah meminjam
+
+        $this->makeLoan($staff);
+        $this->makeLoan($staff, [
+            'borrower_name' => 'Siti Aminah',
+            'borrower_email' => 'siti@example.com',
+            'borrower_student_id' => '2211082002',
+            'status' => 'borrowed',
+            'returned_at' => null,
+            'borrowed_at' => now(),
+        ]);
+
+        $response = $this->getJson('/api/loans/clearance/borrowers')->assertStatus(200);
+
+        // Seluruh mahasiswa tampil, termasuk yang belum pernah meminjam.
+        $this->assertSame(3, $response->json('meta.total'));
+
+        $rows = collect($response->json('data'))->keyBy('student_id');
+
+        // Semua barang sudah kembali -> surat bebas labor.
+        $this->assertTrue($rows[self::NIM]['has_student_record']);
+        $this->assertTrue($rows[self::NIM]['has_loans']);
+        $this->assertTrue($rows[self::NIM]['eligible']);
+        $this->assertTrue($rows[self::NIM]['can_issue_letter']);
+        $this->assertSame('bebas_labor', $rows[self::NIM]['letter_status']);
+        $this->assertSame(1, $rows[self::NIM]['total_loans']);
+
+        // Masih ada barang yang belum kembali -> hanya surat tanggungan.
+        $this->assertTrue($rows['2211082002']['has_loans']);
+        $this->assertFalse($rows['2211082002']['eligible']);
+        $this->assertSame('tanggungan', $rows['2211082002']['letter_status']);
+        $this->assertSame(1, $rows['2211082002']['outstanding_loans']);
+        $this->assertSame('siti@example.com', $rows['2211082002']['email']);
+
+        // Belum pernah meminjam -> tidak ada tanggungan, tetap bebas labor dan
+        // suratnya dapat diterbitkan dengan keterangan tanpa riwayat.
+        $this->assertFalse($rows['2211082003']['has_loans']);
+        $this->assertTrue($rows['2211082003']['eligible']);
+        $this->assertTrue($rows['2211082003']['can_issue_letter']);
+        $this->assertSame('belum_pernah_meminjam', $rows['2211082003']['letter_status']);
+        $this->assertSame(0, $rows['2211082003']['total_loans']);
+    }
+
+    public function test_pencarian_daftar_bebas_labor_memakai_data_mahasiswa(): void
+    {
+        Sanctum::actingAs($this->staff());
+        $staff = $this->staff();
+
+        $this->student();
+        $this->student('2211082002', 'Siti Aminah', 'siti@example.com');
+
+        $this->makeLoan($staff);
+        $this->makeLoan($staff, [
+            'borrower_name' => 'Siti Aminah',
+            'borrower_email' => 'siti@example.com',
+            'borrower_student_id' => '2211082002',
+            'status' => 'borrowed',
+            'returned_at' => null,
+            'borrowed_at' => now(),
+        ]);
+
+        $this->getJson('/api/loans/clearance/borrowers?search=2211082002')
+            ->assertStatus(200)
+            ->assertJsonPath('meta.total', 1)
+            ->assertJsonPath('data.0.name', 'Siti Aminah');
+
+        $this->getJson('/api/loans/clearance/borrowers?search=Santoso')
+            ->assertStatus(200)
+            ->assertJsonPath('meta.total', 1)
+            ->assertJsonPath('data.0.student_id', self::NIM);
+
+        $this->getJson('/api/loans/clearance/borrowers?search=siti@example.com')
+            ->assertStatus(200)
+            ->assertJsonPath('meta.total', 1)
+            ->assertJsonPath('data.0.student_id', '2211082002');
+
+        $this->getJson('/api/loans/clearance/borrowers?search=TidakAdaMahasiswa')
+            ->assertStatus(200)
+            ->assertJsonPath('meta.total', 0);
+    }
+
+    public function test_mahasiswa_tanpa_riwayat_peminjaman_tetap_mendapat_surat_bebas_labor(): void
+    {
+        Sanctum::actingAs($this->staff());
+
+        $this->student('2211082099', 'Tanpa Riwayat', 'tanpa@example.com');
+
+        // Tanpa transaksi berarti tidak ada tanggungan: mahasiswa tetap bebas
+        // labor dan suratnya dapat diterbitkan dengan keterangan tanpa riwayat.
+        $this->getJson('/api/loans/clearance/detail?student_id=2211082099&borrower_email=tanpa@example.com&borrower_name=Tanpa+Riwayat')
+            ->assertStatus(200)
+            ->assertJsonPath('borrower.name', 'Tanpa Riwayat')
+            ->assertJsonPath('borrower.has_student_record', true)
+            ->assertJsonPath('has_loans', false)
+            ->assertJsonPath('can_issue_letter', true)
+            ->assertJsonPath('eligible', true)
+            ->assertJsonPath('letter_status', 'belum_pernah_meminjam')
+            ->assertJsonPath('totals.total_loans', 0);
+
+        $response = $this->postJson('/api/loans/clearance/download', [
+            'student_id' => '2211082099',
+            'purpose' => 'Persyaratan bebas pustaka',
+            'signatory_name' => 'Nofa Hendrayana, S.T.',
+            'signatory_nip' => '197907182025211025',
+        ]);
+
+        $response->assertStatus(200);
+        $response->assertHeader('X-Clearance-Eligible', '1');
+        $this->assertStringContainsString(
+            'surat-bebas-labor-Tanpa-Riwayat',
+            (string) $response->headers->get('content-disposition'),
+        );
+
+        // Surat menyatakan bebas labor sekaligus menegaskan tidak ada transaksi
+        // dan tidak ada tanggungan (tanpa pernyataan tanggungan palsu).
+        $text = $this->pdfText($response->getContent());
+        $this->assertStringContainsString('SURAT KETERANGAN BEBAS LABORATORIUM', $text);
+        $this->assertStringContainsString('Tidak ada transaksi peminjaman', $text);
+        $this->assertStringContainsString('Tidak ada tanggungan (bebas labor)', $text);
+        $this->assertStringContainsString('Tidak ada tanggungan peminjaman barang', $text);
+        $this->assertStringContainsString('Keperluan', $text);
+        $this->assertStringContainsString('Persyaratan bebas pustaka', $text);
+        $this->assertStringNotContainsString('masih memiliki tanggungan', $text);
+        $this->assertStringNotContainsString('SURAT KETERANGAN TANGGUNGAN PEMINJAMAN LABORATORIUM', $text);
+
+        $this->assertDatabaseCount('clearance_letters', 1);
+    }
+
+    public function test_transaksi_ditolak_menghasilkan_surat_bebas_labor_tanpa_riwayat(): void
+    {
+        Sanctum::actingAs($this->staff());
+        $staff = $this->staff();
+
+        $this->student();
+
+        // Pengajuan yang ditolak: peminjam tidak pernah menerima barang, sehingga
+        // tetap dianggap bebas labor (tanpa riwayat peminjaman).
+        $this->makeLoan($staff, [
+            'status' => 'rejected',
+            'returned_at' => null,
+            'borrowed_at' => null,
+        ]);
+
+        $this->getJson('/api/loans/clearance/borrowers?search=' . self::NIM)
+            ->assertStatus(200)
+            ->assertJsonPath('data.0.has_loans', false)
+            ->assertJsonPath('data.0.eligible', true)
+            ->assertJsonPath('data.0.can_issue_letter', true)
+            ->assertJsonPath('data.0.letter_status', 'belum_pernah_meminjam');
+
+        $this->postJson('/api/loans/clearance/download', [
+            'student_id' => self::NIM,
+            'purpose' => 'Persyaratan bebas pustaka',
+            'signatory_name' => 'Nofa Hendrayana, S.T.',
+            'signatory_nip' => '197907182025211025',
+        ])->assertStatus(200)->assertHeader('X-Clearance-Eligible', '1');
+
+        $this->assertDatabaseCount('clearance_letters', 1);
+    }
+
+    public function test_surat_memakai_identitas_data_mahasiswa(): void
+    {
+        Sanctum::actingAs($this->staff());
+        $staff = $this->staff();
+
+        // Nama pada data mahasiswa berbeda dari snapshot transaksi; surat harus
+        // memakai data mahasiswa (sumber sama dengan halaman Data Mahasiswa).
+        $this->student(self::NIM, 'Budi Santoso Muda', 'budi.mahasiswa@example.com');
+
+        $loan = $this->makeLoan($staff);
+
+        $response = $this->postJson('/api/loans/clearance/download', [
+            'student_id' => self::NIM,
+            'borrower_email' => 'budi.mahasiswa@example.com',
+            'borrower_name' => 'Budi Santoso Muda',
+            'purpose' => 'Persyaratan bebas pustaka',
+            'signatory_name' => 'Nofa Hendrayana, S.T.',
+            'signatory_nip' => '197907182025211025',
+        ]);
+
+        $response->assertStatus(200);
+        $this->assertStringContainsString(
+            'surat-bebas-labor-Budi-Santoso-Muda',
+            (string) $response->headers->get('content-disposition'),
+        );
+
+        $text = $this->pdfText($response->getContent());
+        $this->assertStringContainsString('Budi Santoso Muda', $text);
+        $this->assertStringContainsString('budi.mahasiswa@example.com', $text);
+        $this->assertStringContainsString($loan->loan_code, $text);
+    }
+
+    public function test_transaksi_lama_dicocokkan_ke_mahasiswa_walau_hanya_satu_data_yang_sama(): void
+    {
+        Sanctum::actingAs($this->staff());
+        $staff = $this->staff();
+
+        // Data mahasiswa baru tersedia setelah beberapa peminjaman terjadi.
+        Student::create([
+            'student_id' => self::NIM,
+            'name' => 'Budi Santoso',
+            'email' => self::EMAIL,
+            'phone' => '081234567890',
+        ]);
+
+        // (1) Transaksi lama: hanya NAMA yang sama (tanpa NIM, email berbeda).
+        $this->makeLoan($staff, [
+            'borrower_name' => 'budi santoso',
+            'borrower_email' => 'budi.lama@example.com',
+            'borrower_student_id' => null,
+            'status' => 'borrowed',
+            'returned_at' => null,
+            'borrowed_at' => now(),
+        ]);
+
+        // (2) Transaksi lama: hanya EMAIL yang sama (nama berbeda, tanpa NIM).
+        $this->makeLoan($staff, [
+            'borrower_name' => 'Budi S.',
+            'borrower_email' => self::EMAIL,
+            'borrower_student_id' => null,
+        ]);
+
+        // (3) Transaksi lama: hanya NOMOR TELEPON yang sama (+62 vs 0).
+        $this->makeLoan($staff, [
+            'borrower_name' => 'B S',
+            'borrower_email' => 'lain@example.com',
+            'borrower_student_id' => null,
+            'borrower_phone' => '+6281234567890',
+            'returned_at' => now()->subDay(),
+        ]);
+
+        $response = $this->getJson('/api/loans/clearance/borrowers?search=' . self::NIM)->assertStatus(200);
+
+        // Ketiga transaksi tercocokkan ke mahasiswa tersebut; tidak ada baris
+        // peminjam manual yang terpisah.
+        $this->assertSame(1, $response->json('meta.total'));
+
+        $row = $response->json('data.0');
+        $this->assertTrue($row['has_student_record']);
+        $this->assertSame(self::NIM, $row['student_id']);
+        $this->assertSame(3, $row['total_loans']);
+        $this->assertSame(1, $row['outstanding_loans']);
+        $this->assertSame('tanggungan', $row['letter_status']);
+
+        // Halaman detail memakai pencocokan yang sama.
+        $this->getJson('/api/loans/clearance/detail?student_id=' . self::NIM . '&borrower_email=' . self::EMAIL)
+            ->assertStatus(200)
+            ->assertJsonPath('has_loans', true)
+            ->assertJsonPath('totals.total_loans', 3)
+            ->assertJsonPath('totals.outstanding_loans', 1);
+    }
+
+    public function test_nim_pada_transaksi_mengikat_bila_terdaftar_pada_mahasiswa_lain(): void
+    {
+        Sanctum::actingAs($this->staff());
+        $staff = $this->staff();
+
+        $this->student();
+        $this->student('2211082002', 'Siti Aminah', 'siti@example.com');
+
+        // Transaksi memakai NIM Siti, tetapi nama & email Budi.
+        $this->makeLoan($staff, [
+            'borrower_name' => 'Budi Santoso',
+            'borrower_email' => self::EMAIL,
+            'borrower_student_id' => '2211082002',
+            'status' => 'borrowed',
+            'returned_at' => null,
+            'borrowed_at' => now(),
+        ]);
+
+        $rows = collect($this->getJson('/api/loans/clearance/borrowers')->assertStatus(200)->json('data'))
+            ->keyBy('student_id');
+
+        // Pemilik NIM yang dipakai, bukan pemilik nama/email.
+        $this->assertSame(0, $rows[self::NIM]['total_loans']);
+        $this->assertFalse($rows[self::NIM]['has_loans']);
+        $this->assertSame(1, $rows['2211082002']['total_loans']);
+        $this->assertSame(1, $rows['2211082002']['outstanding_loans']);
+    }
+
     public function test_asisten_petugas_dapat_mengunduh_surat(): void
     {
         Sanctum::actingAs($this->staff('assistant'));
@@ -436,4 +768,144 @@ class ClearanceLetterTest extends TestCase
             'signatory_nip' => '197907182025211025',
         ])->assertStatus(200);
     }
+
+    public function test_cetak_masal_menghasilkan_dokumen_html_untuk_mahasiswa_bebas_labor(): void
+    {
+        Sanctum::actingAs($this->staff());
+        $staff = $this->staff();
+
+        $this->student();
+        $this->student('2211082002', 'Siti Aminah', 'siti@example.com');
+
+        // Budi dan Siti sama-sama pernah meminjam dan sudah mengembalikan
+        $this->makeLoan($staff, ['returned_at' => now(), 'status' => 'returned']);
+        $this->makeLoan($staff, [
+            'borrower_student_id' => '2211082002',
+            'borrower_name' => 'Siti Aminah',
+            'borrower_email' => 'siti@example.com',
+            'returned_at' => now(),
+            'status' => 'returned',
+        ]);
+
+        $response = $this->postJson('/api/loans/clearance/print', [
+            'borrowers' => [
+                ['student_id' => self::NIM, 'borrower_name' => 'Budi Santoso', 'borrower_email' => self::EMAIL],
+                ['student_id' => '2211082002', 'borrower_name' => 'Siti Aminah', 'borrower_email' => 'siti@example.com'],
+            ],
+            'purpose' => 'Persyaratan yudisium',
+            'signatory_name' => 'Nofa Hendrayana, S.T.',
+            'signatory_nip' => '197907182025211025',
+        ]);
+
+        $response->assertStatus(200);
+        $this->assertStringContainsString('SURAT KETERANGAN BEBAS LABORATORIUM', $response->getContent());
+        $this->assertStringContainsString('Budi Santoso', $response->getContent());
+        $this->assertStringContainsString('Siti Aminah', $response->getContent());
+        // Dua surat bebas labor: masing-masing menyatakan tidak ada tanggungan.
+        $this->assertSame(2, substr_count($response->getContent(), 'Tidak ada tanggungan (bebas labor)'));
+        $this->assertStringContainsString('Tanggal kembali', $response->getContent());
+        $this->assertStringNotContainsString('masih memiliki tanggungan', $response->getContent());
+        // Tidak ada jejak waktu cetak pada dokumen surat.
+        $this->assertStringNotContainsString('Dicetak dari sistem', $response->getContent());
+        $this->assertStringNotContainsString('WIB', $response->getContent());
+    }
+
+    public function test_cetak_masal_menolak_mahasiswa_yang_belum_bebas_labor(): void
+    {
+        Sanctum::actingAs($this->staff());
+        $staff = $this->staff();
+
+        $this->student();
+        $this->student('2211082002', 'Siti Aminah', 'siti@example.com');
+
+        // Budi sudah kembali, Siti masih pinjam
+        $this->makeLoan($staff, ['returned_at' => now(), 'status' => 'returned']);
+        $this->makeLoan($staff, [
+            'borrower_student_id' => '2211082002',
+            'borrower_name' => 'Siti Aminah',
+            'borrower_email' => 'siti@example.com',
+            'status' => 'borrowed',
+            'returned_at' => null,
+            'borrowed_at' => now(),
+        ]);
+
+        $response = $this->postJson('/api/loans/clearance/print', [
+            'borrowers' => [
+                ['student_id' => self::NIM],
+                ['student_id' => '2211082002'],
+            ],
+            'purpose' => 'Persyaratan yudisium',
+            'signatory_name' => 'Nofa Hendrayana, S.T.',
+            'signatory_nip' => '197907182025211025',
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors(['borrowers']);
+    }
+
+    public function test_cetak_masal_menerima_mahasiswa_yang_belum_pernah_meminjam(): void
+    {
+        Sanctum::actingAs($this->staff());
+        $this->student();
+
+        $response = $this->postJson('/api/loans/clearance/print', [
+            'borrowers' => [
+                ['student_id' => self::NIM],
+            ],
+            'purpose' => 'Persyaratan yudisium',
+            'signatory_name' => 'Nofa Hendrayana, S.T.',
+            'signatory_nip' => '197907182025211025',
+        ]);
+
+        // Tanpa transaksi berarti bebas labor: cetak masal tetap menghasilkan
+        // surat bebas labor dengan keterangan tidak ada transaksi peminjaman.
+        $response->assertStatus(200);
+        $html = $response->getContent();
+        $this->assertStringContainsString('SURAT KETERANGAN BEBAS LABORATORIUM', $html);
+        $this->assertStringContainsString('Budi Santoso', $html);
+        $this->assertStringContainsString('Tidak ada transaksi peminjaman', $html);
+        $this->assertStringContainsString('belum pernah melakukan peminjaman barang', $html);
+
+        // Tabel rincian menuliskan tidak ada tanggungan, dan surat tidak memuat
+        // pernyataan tanggungan (0 transaksi/0 unit) yang menyesatkan.
+        $this->assertStringContainsString('Tidak ada tanggungan (bebas labor)', $html);
+        $this->assertStringContainsString('Tidak ada tanggungan peminjaman barang yang tercatat.', $html);
+        $this->assertStringNotContainsString('masih memiliki tanggungan', $html);
+        $this->assertStringNotContainsString('0 transaksi (0 unit barang)', $html);
+
+        // Keperluan surat tampil sebagai baris pada tabel identitas.
+        $this->assertStringContainsString('<td>Keperluan</td>', $html);
+        $this->assertStringContainsString('<td>Persyaratan yudisium</td>', $html);
+    }
+
+    public function test_surat_bebas_labor_menyatakan_tidak_ada_tanggungan(): void
+    {
+        Sanctum::actingAs($this->staff());
+        $staff = $this->staff();
+
+        // Sudah mengembalikan seluruh barang -> bebas labor.
+        $this->makeLoan($staff, ['status' => 'returned', 'returned_at' => now()->subDay()]);
+
+        $response = $this->postJson('/api/loans/clearance/print', [
+            'borrowers' => [
+                ['student_id' => self::NIM],
+            ],
+            'purpose' => 'Persyaratan yudisium',
+            'signatory_name' => 'Nofa Hendrayana, S.T.',
+            'signatory_nip' => '197907182025211025',
+        ]);
+
+        $html = $response->getContent();
+        $response->assertStatus(200);
+        $this->assertStringContainsString('tidak memiliki tanggungan peminjaman barang', $html);
+        $this->assertStringContainsString('Tidak ada tanggungan (bebas labor)', $html);
+        $this->assertStringContainsString('Tanggal kembali', $html);
+        $this->assertStringContainsString('<td>Keperluan</td>', $html);
+        $this->assertStringContainsString('<td>Persyaratan yudisium</td>', $html);
+        $this->assertStringNotContainsString('masih memiliki tanggungan', $html);
+        $this->assertStringNotContainsString('belum dikembalikan, dengan rincian', $html);
+        $this->assertStringNotContainsString('Dicetak dari sistem', $html);
+        $this->assertStringNotContainsString('WIB', $html);
+    }
+
 }

@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\AppSetting;
 use App\Models\Student;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Validator;
 
 class StudentController extends Controller
@@ -64,6 +66,27 @@ class StudentController extends Controller
         return response()->json(['message' => 'Data mahasiswa berhasil dihapus.']);
     }
 
+    public function importSource()
+    {
+        return response()->json([
+            'url' => AppSetting::getValue('student_sync_csv_url', ''),
+        ]);
+    }
+
+    public function saveImportSource(Request $request)
+    {
+        $validated = $request->validate([
+            'url' => ['required', 'url', 'max:2000'],
+        ]);
+
+        AppSetting::setValue('student_sync_csv_url', $validated['url']);
+
+        return response()->json([
+            'message' => 'URL spreadsheet berhasil disimpan.',
+            'url' => $validated['url'],
+        ]);
+    }
+
     /**
      * Impor data mahasiswa dari file spreadsheet (CSV hasil unduhan
      * Google Sheets / Excel). Baris dengan NIM yang sudah ada akan
@@ -82,6 +105,55 @@ class StudentController extends Controller
                 'message' => 'File tidak dapat dibaca. Gunakan format CSV, XLSX, atau XLS.',
             ], 422);
         }
+
+        return $this->importRows($rows);
+    }
+
+    /**
+     * Ambil CSV Google Sheets yang sudah dipublikasikan untuk penggunaan web.
+     * Tidak menggunakan Google Sheets API atau API key.
+     */
+    public function importFromPublishedCsv(Request $request)
+    {
+        $validated = $request->validate([
+            'url' => ['required', 'url', 'max:2000'],
+        ]);
+
+        try {
+            $response = Http::timeout(20)
+                ->withHeaders(['Cache-Control' => 'no-cache'])
+                ->get($this->publishedCsvUrl($validated['url']));
+        } catch (Throwable) {
+            return response()->json([
+                'message' => 'CSV Google Sheets tidak dapat dihubungi.',
+            ], 422);
+        }
+
+        if ($response->failed()) {
+            return response()->json([
+                'message' => "Google Sheets mengembalikan HTTP {$response->status()}. Pastikan sheet sudah dipublikasikan sebagai CSV.",
+            ], 422);
+        }
+
+        $rows = $this->readCsvContent($response->body());
+
+        if ($rows === null) {
+            return response()->json([
+                'message' => 'Respons Google Sheets bukan CSV yang valid.',
+            ], 422);
+        }
+
+        $result = $this->importRows($rows);
+
+        if ($result->getStatusCode() < 300) {
+            AppSetting::setValue('student_sync_csv_url', $validated['url']);
+        }
+
+        return $result;
+    }
+
+    private function importRows(array $rows)
+    {
 
         // Cari baris header di dalam file: template berisi baris judul &
         // petunjuk di atasnya, sedangkan CSV biasa langsung ber-header.
@@ -192,6 +264,7 @@ class StudentController extends Controller
         if ($imported === 0 && $updated === 0) {
             return response()->json([
                 'message' => 'Tidak ada data yang diimpor. Periksa kembali isi file.',
+                'ok' => false,
                 'imported' => 0,
                 'updated' => 0,
                 'errors' => $errors,
@@ -199,6 +272,7 @@ class StudentController extends Controller
         }
 
         return response()->json([
+            'ok' => true,
             'message' => "Impor selesai: {$imported} mahasiswa baru ditambahkan, {$updated} diperbarui."
                 . (count($errors) > 0 ? ' ' . count($errors) . ' baris dilewati.' : ''),
             'imported' => $imported,
@@ -295,6 +369,47 @@ class StudentController extends Controller
         fclose($handle);
 
         return $rows;
+    }
+
+    private function readCsvContent(string $content): ?array
+    {
+        $handle = fopen('php://temp', 'r+');
+
+        if ($handle === false || fwrite($handle, $content) === false || ! rewind($handle)) {
+            return null;
+        }
+
+        $rows = [];
+        while (($raw = fgetcsv($handle)) !== false) {
+            $rows[] = $this->normalizeRow((array) $raw);
+        }
+
+        fclose($handle);
+
+        return $rows;
+    }
+
+    private function publishedCsvUrl(string $url): string
+    {
+        $parts = parse_url($url);
+
+        if (($parts['host'] ?? '') !== 'docs.google.com') {
+            return $url;
+        }
+
+        $path = $parts['path'] ?? '';
+        parse_str($parts['query'] ?? '', $query);
+
+        if (str_ends_with($path, '/pubhtml')) {
+            $path = substr($path, 0, -8).'/pub';
+            $query['output'] = 'csv';
+        } elseif (str_ends_with($path, '/edit')) {
+            $path = substr($path, 0, -5).'/export';
+            $query['format'] = 'csv';
+        }
+
+        return ($parts['scheme'] ?? 'https').'://'.$parts['host'].$path
+            .'?'.http_build_query([...$query, '_sync' => (string) now()->timestamp]);
     }
 
     private function readSpreadsheetRows(string $path): ?array

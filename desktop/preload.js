@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld('desktop', {
   testMail: (payload) => ipcRenderer.invoke('setup:test', payload),
   skipSetup: () => ipcRenderer.invoke('setup:skip'),
   getDesktopKey: () => ipcRenderer.invoke('desktop:get-key'),
+  importStudentsFromCsv: (csvUrl) => ipcRenderer.invoke('students:import-published-csv', csvUrl),
   getUpdateState: () => ipcRenderer.invoke('update:get-state'),
   checkForUpdates: () => ipcRenderer.invoke('update:check'),
   downloadUpdate: () => ipcRenderer.invoke('update:download'),

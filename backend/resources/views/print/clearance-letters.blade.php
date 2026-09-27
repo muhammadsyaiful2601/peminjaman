@@ -2,9 +2,32 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
+    <title>Surat Bebas Laboratorium</title>
     <style>
+        @page {
+            size: A4;
+            margin: 18mm 16mm;
+        }
         * { box-sizing: border-box; }
-        body { font-family: DejaVu Sans, sans-serif; color: #111827; font-size: 11px; margin: 34px 42px; line-height: 1.5; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+            color: #111827;
+            font-size: 11px;
+            line-height: 1.5;
+            margin: 0;
+            background: #f1f5f9;
+        }
+        .page {
+            background: #ffffff;
+            max-width: 210mm;
+            margin: 16px auto;
+            padding: 20mm 18mm;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            page-break-after: always;
+        }
+        .page:last-child {
+            page-break-after: auto;
+        }
         .letterhead { display: table; width: 100%; text-align: center; }
         .logo-cell { display: table-cell; width: 82px; vertical-align: middle; text-align: left; }
         .logo { width: 70px; height: 74px; object-fit: contain; }
@@ -31,9 +54,26 @@
         .signature { display: table-cell; width: 50%; text-align: center; vertical-align: top; }
         .signature p { margin: 0; } .signature .space { height: 58px; }
         .signature .name { font-weight: bold; text-decoration: underline; }
+
+        @media print {
+            body {
+                background: none;
+            }
+            .page {
+                box-shadow: none;
+                margin: 0;
+                padding: 0;
+                width: 100%;
+                max-width: none;
+            }
+        }
     </style>
 </head>
 <body>
-    @include('pdf.partials.clearance-letter-body')
+    @foreach($letters as $letterData)
+        <div class="page">
+            @include('pdf.partials.clearance-letter-body', $letterData)
+        </div>
+    @endforeach
 </body>
 </html>

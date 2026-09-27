@@ -20,7 +20,9 @@
     "dist:publish": "npm run icons && npm run prepare-cloudflared && npm run prepare-build && electron-builder --publish always"
   },
   "dependencies": {
-    "electron-updater": "6.3.9"
+    "better-sqlite3": "^13.0.3",
+    "electron-updater": "6.3.9",
+    "papaparse": "^5.7.0"
   },
   "devDependencies": {
     "electron": "^33.2.0",

@@ -52,6 +52,15 @@ class Branding
         return $branding;
     }
 
+    public static function printableData(): array
+    {
+        $branding = self::all();
+        $branding['letterhead_logo_path'] = self::publicUrl($branding['letterhead_logo_path'])
+            ?? '/images/logo_kampus.png';
+
+        return $branding;
+    }
+
     public static function publicUrl(?string $path): ?string
     {
         if (! $path) {

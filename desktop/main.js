@@ -18,6 +18,8 @@ const fs = require('fs');
 const crypto = require('crypto');
 const net = require('net');
 const http = require('http');
+const Database = require('better-sqlite3');
+const Papa = require('papaparse');
 
 // Pembaruan otomatis dari GitHub Releases (electron-updater). Kosong saat
 // paket tidak bisa dilaya (mode dev) — fitur tetap aktif pada versi terinstal.
@@ -124,6 +126,126 @@ function loadConfig() {
 function saveConfig() {
   fs.mkdirSync(path.dirname(configPath), { recursive: true });
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+}
+
+function normalizeCsvHeader(value) {
+  return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function csvField(row, aliases) {
+  const entry = Object.entries(row).find(([header]) => aliases.includes(normalizeCsvHeader(header)));
+  return entry ? String(entry[1] ?? '').trim() : '';
+}
+
+async function importStudentsFromPublishedCsv(csvUrl) {
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(String(csvUrl || '').trim());
+  } catch {
+    return { ok: false, message: 'URL CSV Google Sheets tidak valid.' };
+  }
+
+  if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+    return { ok: false, message: 'URL CSV harus menggunakan HTTP atau HTTPS.' };
+  }
+
+  if (parsedUrl.hostname === 'docs.google.com') {
+    if (parsedUrl.pathname.endsWith('/pubhtml')) {
+      parsedUrl.pathname = `${parsedUrl.pathname.slice(0, -8)}/pub`;
+      parsedUrl.searchParams.set('output', 'csv');
+    } else if (parsedUrl.pathname.endsWith('/edit')) {
+      parsedUrl.pathname = `${parsedUrl.pathname.slice(0, -5)}/export`;
+      parsedUrl.searchParams.set('format', 'csv');
+    }
+    parsedUrl.searchParams.set('_sync', String(Date.now()));
+  }
+
+  let response;
+  try {
+    response = await fetch(parsedUrl, {
+      cache: 'no-store',
+      headers: { 'Cache-Control': 'no-cache' },
+      signal: AbortSignal.timeout(20000),
+    });
+  } catch (error) {
+    return { ok: false, message: `CSV Google Sheets tidak dapat diambil: ${error.message}` };
+  }
+
+  if (!response.ok) {
+    return { ok: false, message: `Google Sheets mengembalikan HTTP ${response.status}. Pastikan sheet sudah Publish to web sebagai CSV.` };
+  }
+
+  const csvText = await response.text();
+  const parsed = Papa.parse(csvText, {
+    header: true,
+    skipEmptyLines: 'greedy',
+    transformHeader: (header) => String(header || '').replace(/^\uFEFF/, '').trim(),
+  });
+
+  if (parsed.errors.length > 0 && parsed.data.length === 0) {
+    return { ok: false, message: `CSV tidak valid: ${parsed.errors[0].message}` };
+  }
+
+  let database;
+  try {
+    database = new Database(databaseFile);
+    database.pragma('foreign_keys = ON');
+
+    const findStudent = database.prepare('SELECT id FROM students WHERE student_id = ?');
+    const upsertStudent = database.prepare(`
+      INSERT INTO students (student_id, name, email, phone, created_at, updated_at)
+      VALUES (@student_id, @name, @email, @phone, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      ON CONFLICT(student_id) DO UPDATE SET
+        name = excluded.name,
+        email = excluded.email,
+        phone = excluded.phone,
+        updated_at = CURRENT_TIMESTAMP
+    `);
+    const errors = [];
+    let imported = 0;
+    let updated = 0;
+
+    const sync = database.transaction(() => {
+      parsed.data.forEach((row, index) => {
+        const line = index + 2;
+        const student = {
+          student_id: csvField(row, ['nim', 'nimnip', 'nip', 'studentid', 'nomorinduk']),
+          name: csvField(row, ['nama', 'namamahasiswa', 'namalengkap', 'name']),
+          email: csvField(row, ['email', 'surel']).toLowerCase(),
+          phone: csvField(row, ['notelepon', 'notelp', 'telepon', 'phone', 'nohp', 'hp']) || null,
+        };
+
+        if (!student.student_id && !student.name && !student.email) return;
+        if (!student.student_id || !student.name || !student.email) {
+          errors.push(`Baris ${line}: NIM, Nama, dan Email wajib diisi.`);
+          return;
+        }
+
+        const existing = findStudent.get(student.student_id);
+        try {
+          upsertStudent.run(student);
+          if (existing) updated += 1;
+          else imported += 1;
+        } catch (error) {
+          errors.push(`Baris ${line}: ${error.message}`);
+        }
+      });
+    });
+
+    sync();
+    database.close();
+
+    return {
+      ok: imported > 0 || updated > 0,
+      message: `Impor selesai: ${imported} mahasiswa baru ditambahkan, ${updated} diperbarui.${errors.length ? ` ${errors.length} baris dilewati.` : ''}`,
+      imported,
+      updated,
+      errors,
+    };
+  } catch (error) {
+    if (database) database.close();
+    return { ok: false, message: `Database mahasiswa tidak dapat diperbarui: ${error.message}` };
+  }
 }
 
 /* ------------------------------------------------------------- .env utils */
@@ -1289,6 +1411,10 @@ function applyBrandingToWindows() {
 }
 
 function registerIpc() {
+  ipcMain.handle('students:import-published-csv', async (_event, csvUrl) => {
+    return importStudentsFromPublishedCsv(csvUrl);
+  });
+
   ipcMain.handle('file:save-pdf', async (_event, data) => {
     try {
       if (!data || !Array.isArray(data.bytes) || !data.filename) {

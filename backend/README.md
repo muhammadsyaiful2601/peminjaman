@@ -31,7 +31,7 @@ checklist deployment dijelaskan pada [`../README.md`](../README.md).
 | :--- | :--- |
 | `app/Http/Controllers/Api/` | Controller REST API: `Auth`, `Item`, `Loan`, `Clearance`, `User`, `Technician`, `Backup`, `Branding`, `Hybrid` |
 | `app/Http/Middleware/` | `CheckRole` (alias `role`) dan `CheckDesktopKey` (alias `desktop.key`, header `X-Desktop-Key`) |
-| `app/Models/` | `User`, `Item`, `ItemImage`, `Loan`, `LoanItem`, `Technician`, `AppSetting` |
+| `app/Models/` | `User`, `Item`, `ItemImage`, `Loan`, `LoanItem`, `Student`, `Technician`, `AppSetting` |
 | `app/Support/` | Helper `Branding`, `Hybrid`, `PublicUrl`, `QrPng` |
 | `app/Services/` | `HybridSyncService` (sinkronisasi SQLite lokal ↔ MySQL hosting) |
 | `app/Mail/` | Email bukti peminjaman, revisi peminjaman, dan konfirmasi pengembalian |

@@ -220,30 +220,64 @@ snapshot, sehingga perubahan data mahasiswa tidak mengubah riwayat peminjaman.
 ### Bebas Labor
 
 Halaman `/clearance` (menu **Bebas Labor**) dipakai petugas untuk menerbitkan **Surat Keterangan Bebas
-Laboratorium** berkop surat. Seluruh isi surat diambil dari data peminjaman barang:
+Laboratorium** berkop surat. Daftar pada halaman ini memakai **data mahasiswa yang sama dengan menu Data
+Mahasiswa**, lalu dilengkapi ringkasan peminjaman tiap orang:
 
-1. Petugas mencari peminjam berdasarkan nama, NIM, atau email.
-2. Sistem menampilkan ringkasan transaksi peminjam tersebut beserta status kelayakannya.
-3. Bila seluruh barang sudah dikembalikan, surat diterbitkan sebagai **Surat Keterangan Bebas
+1. Petugas mencari mahasiswa berdasarkan nama, NIM, atau email.
+2. Setiap mahasiswa ditandai kelayakannya: **Bebas Labor** (semua barang yang pernah dipinjam sudah
+   dikembalikan), **N belum kembali** (masih menahan barang), atau **Belum pernah meminjam**
+   (belum ada riwayat peminjaman, tetap dihitung bebas labor).
+3. Surat dapat diterbitkan untuk setiap peminjam yang **tidak memiliki tanggungan**. Mahasiswa yang
+   **belum pernah meminjam** tetap memperoleh **Surat Keterangan Bebas Laboratorium**; isinya
+   menerangkan bahwa tidak ada transaksi peminjaman yang tercatat atas namanya dan tabel rincian
+   menuliskan *Tidak ada tanggungan peminjaman barang yang tercatat* (status tanggungan pada surat:
+   *Tidak ada tanggungan (bebas labor)*). Transaksi berstatus `rejected` (ditolak) juga dianggap tidak
+   pernah menerima barang, sehingga tetap bebas labor.
+4. Bila seluruh barang sudah dikembalikan, surat diterbitkan sebagai **Surat Keterangan Bebas
    Laboratorium** (`surat-bebas-labor-<nama peminjam>.pdf`) yang menyatakan peminjam tidak memiliki
    tanggungan dan memuat daftar transaksi yang sudah dikembalikan.
-4. Bila masih ada barang yang **belum dikembalikan** (status `borrowed` atau `pending`), tombol unduh
-   tetap dapat dipakai — namun surat yang dihasilkan otomatis berupa **Surat Keterangan Tanggungan
-   Peminjaman Laboratorium** (`surat-tanggungan-labor-<nama peminjam>.pdf`) berisi rincian barang yang
-   belum dikembalikan, **bukan** pernyataan bebas labor. Peringatan dan daftar barang yang belum
+5. Bila masih ada barang yang **belum dikembalikan** (status `borrowed` atau `pending`), tombol unduh
+   tetap dapat dipakai, namun surat yang dihasilkan otomatis berupa **Surat Keterangan Tanggungan
+   Peminjaman Laboratorium** (`surat-tanggungan-labor-<nama peminjam>.pdf`) berisi rincian barang
+   yang belum dikembalikan, **bukan** pernyataan bebas labor. Peringatan dan daftar barang yang belum
    kembali juga tampil di halaman.
-5. Petugas mengisi keperluan surat (mis. *Persyaratan bebas pustaka*), tanggal surat, laboratorium
+6. **Aksi Per Baris & Cetak Masal**:
+   - Di sisi kanan setiap baris mahasiswa berstatus **Bebas Labor**, tersedia tombol langsung **Unduh** (PDF) dan **Cetak** (print dialog).
+   - Di sisi kiri setiap baris mahasiswa bebas labor, terdapat kotak centang (checkbox) untuk pemilihan multi-mahasiswa.
+   - Tersedia tombol **Cetak Masal** di toolbar atas untuk mencetak surat bebas labor beberapa mahasiswa sekaligus dalam satu sesi cetak.
+   - Kotak centang, tombol Unduh baris, dan fitur Cetak Masal tersedia untuk semua peminjam **bebas labor**, termasuk mahasiswa yang belum pernah meminjam. Peminjam yang masih memiliki tanggungan tidak dapat dipilih/dicetak masal (ditolak HTTP 422 oleh backend).
+7. Petugas mengisi keperluan surat (mis. *Persyaratan bebas pustaka*), tanggal surat, laboratorium
    (opsional), serta nama dan NIP penandatangan, lalu menekan
    **Buat & Unduh Surat**. Penandatangan dapat dipilih cepat dari daftar teknisi sehingga nama dan NIP
    terisi otomatis.
 
-Isi surat memuat kop instansi (nama kementerian, unit, instansi, alamat, jurusan), nomor surat,
-identitas peminjam, status tanggungan, tabel transaksi (barang yang sudah dikembalikan atau barang yang
-belum dikembalikan), pernyataan yang menyesuaikan status, serta kolom tanda tangan peminjam dan petugas
-laboratorium.
+Identitas pada surat (nama, NIM/NIP, email) diambil dari **data mahasiswa** bila orang tersebut terdaftar,
+sehingga perubahan nama/email pada data mahasiswa langsung terpakai tanpa mengubah riwayat peminjaman.
+Peminjam manual yang belum terdaftar pada data mahasiswa tetap tampil pada daftar (ditandai *Peminjam
+manual*) agar tanggungannya tetap terpantau, dengan identitas dari transaksi terbarunya.
 
-Pengelompokan peminjam memakai **NIM**. Bila NIM kosong (peminjaman yang hanya mengisi nama dan email),
-**nama + email** dipakai sebagai kunci, sehingga dua orang yang memakai email sama tetap terpisah.
+Isi surat memuat kop instansi (nama kementerian, unit, instansi, alamat, jurusan), nomor surat,
+identitas peminjam (nama, NIM/NIP, email, **keperluan surat**), status tanggungan, tabel transaksi,
+pernyataan yang menyesuaikan status, serta kolom tanda tangan peminjam dan petugas laboratorium. Surat
+tidak memuat jejak waktu cetak (*Dicetak dari sistem pada … WIB*) agar tampilannya tetap resmi dan tidak
+lekas usang bila surat dicetak ulang. Surat bebas labor selalu menuliskan **tidak ada tanggungan** dan
+tidak pernah memuat pernyataan/tabel tanggungan:
+
+- Peminjam yang sudah mengembalikan seluruh barang: tabel rincian berisi transaksi yang sudah
+  dikembalikan (kolom *Tanggal kembali*).
+- Peminjam yang belum pernah meminjam: keterangan bahwa tidak ada transaksi peminjaman yang tercatat
+  dan tabel rincian menuliskan *Tidak ada tanggungan peminjaman barang yang tercatat*.
+- Peminjam yang masih menahan barang: surat otomatis menjadi Surat Keterangan Tanggungan dengan tabel
+  barang yang belum dikembalikan (kolom *Tanggal pinjam*).
+
+Transaksi dihubungkan ke data mahasiswa dengan mencocokkan **salah satu** data yang tercatat pada
+transaksi: NIM, email, nama, atau nomor telepon (varian penulisan telepon seperti `+62`/`0` dan spasi
+dianggap sama). Dengan begitu transaksi yang dibuat **sebelum data mahasiswa tersedia** tetap tampil pada
+mahasiswanya dan tidak hilang dari halaman. Bila transaksi memuat NIM yang terdaftar, NIM tersebut
+bersifat mengikat sehingga transaksi tidak salah menempel ke mahasiswa lain yang email/nama-nya kebetulan
+sama. Transaksi yang tidak cocok dengan data mahasiswa mana pun tetap tampil sebagai **peminjam manual**
+(dari data peminjaman, dikelompokkan per NIM atau email + nama). Transaksi berstatus `rejected` (ditolak)
+tidak dihitung sebagai peminjaman.
 Transaksi lama tanpa NIM milik orang yang sama tetap ikut dihitung agar surat tidak terbit saat barang
 masih ditahan.
 
@@ -479,9 +513,11 @@ Semua endpoint berada di bawah prefix `/api`. Kecuali login dan download PDF QR,
 | GET | `/api/loans/{loan}` | Auth | Detail transaksi |
 | GET | `/api/loans/qr/{uuid}` | Auth | Lookup melalui UUID QR |
 | GET | `/api/loans/report/download` | Auth | Mengunduh laporan peminjaman dalam format PDF; mendukung filter status/tanggal dan data penandatangan |
-| GET | `/api/loans/clearance/borrowers` | Auth | Daftar peminjam dari data peminjaman + status bebas labor; search nama/NIM/email |
-| GET | `/api/loans/clearance/detail` | Auth | Rincian barang yang belum kembali dan riwayat pengembalian satu peminjam |
-| POST | `/api/loans/clearance/download` | Admin/Asisten | Menerbitkan surat PDF dari data peminjaman: surat bebas labor bila semua barang sudah kembali, atau surat keterangan tanggungan bila masih ada `borrowed`/`pending` |
+| GET | `/api/loans/clearance/borrowers` | Auth | Daftar mahasiswa (sumber sama dengan Data Mahasiswa) + status bebas labor, `has_loans`, dan `letter_status`; search nama/NIM/email |
+| GET | `/api/loans/clearance/detail` | Auth | Rincian barang yang belum kembali dan riwayat pengembalian satu peminjam (identitas dari data mahasiswa bila terdaftar) |
+| POST | `/api/loans/clearance/download` | Admin/Asisten | Menerbitkan surat PDF: surat bebas labor bila tidak ada tanggungan (termasuk peminjam yang belum pernah meminjam), surat keterangan tanggungan bila masih ada `borrowed`/`pending` |
+| POST | `/api/loans/clearance/print` | Admin/Asisten | Menghasilkan dokumen HTML untuk cetak satuan / cetak masal; berlaku untuk semua peminjam bebas labor, termasuk yang belum pernah meminjam (ditolak 422 bila masih memiliki tanggungan) |
+
 | POST | `/api/loans/official/download` | Admin/Asisten | Membuat peminjaman skala besar dan mengunduh surat resmi PDF |
 | GET | `/api/loans/code/{code}` | Admin/Asisten | Lookup melalui kode peminjaman |
 | POST | `/api/loans` | Admin/Asisten | Membuat transaksi dan mengurangi stok |

@@ -1,9 +1,17 @@
-import { useEffect, useState } from 'react'
-import { Mail, Pencil, Phone, Plus, Search, Trash2, UserRound, Upload } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Mail, Pencil, Phone, Plus, RefreshCw, Search, Trash2, UserRound, Upload } from 'lucide-react'
 import api from '../api/axios'
 import ImportStudentsModal from '../components/ImportStudentsModal'
 
 const emptyForm = { student_id: '', name: '', email: '', phone: '' }
+const SYNC_INTERVAL_SECONDS = 5 * 60
+
+function formatCountdown(seconds) {
+  const minutes = Math.floor(seconds / 60)
+  const remainder = seconds % 60
+
+  return `${minutes}:${String(remainder).padStart(2, '0')}`
+}
 
 function Students() {
   const [students, setStudents] = useState([])
@@ -15,6 +23,9 @@ function Students() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [showImportModal, setShowImportModal] = useState(false)
+  const [syncing, setSyncing] = useState(false)
+  const [syncCountdown, setSyncCountdown] = useState(SYNC_INTERVAL_SECONDS)
+  const syncingRef = useRef(false)
 
   const fetchStudents = async (searchValue = search) => {
     setLoading(true)
@@ -29,6 +40,76 @@ function Students() {
   }
 
   useEffect(() => { fetchStudents('') }, [])
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => fetchStudents(search), 300)
+
+    return () => window.clearTimeout(timeout)
+  }, [search])
+
+  const syncStudents = async (showError = false) => {
+    if (syncingRef.current) return
+
+    let csvUrl = localStorage.getItem('student_sync_csv_url')
+    if (!csvUrl) {
+      try {
+        const source = await api.get('/students/import/source')
+        csvUrl = source.data.url || ''
+        if (csvUrl) localStorage.setItem('student_sync_csv_url', csvUrl)
+      } catch {
+        if (showError) setError('URL spreadsheet belum dapat dimuat dari database.')
+        return
+      }
+    }
+
+    if (!csvUrl) {
+      if (showError) setError('Belum ada URL CSV spreadsheet. Impor data melalui tombol Impor Spreadsheet terlebih dahulu.')
+      return
+    }
+
+    syncingRef.current = true
+    setSyncing(true)
+    try {
+      const result = window.desktop?.importStudentsFromCsv
+        ? await window.desktop.importStudentsFromCsv(csvUrl)
+        : (await api.post('/students/import/csv-url', { url: csvUrl }, { timeout: 30000 })).data
+
+      if (!result.ok) {
+        if (showError) setError(result.message || 'Gagal menyinkronkan spreadsheet.')
+      } else {
+        fetchStudents()
+        if (showError) setSuccess(`Sinkronisasi selesai: ${result.imported || 0} baru, ${result.updated || 0} diperbarui.`)
+      }
+    } catch (requestError) {
+      if (showError) setError(requestError.response?.data?.message || requestError.message || 'Gagal menyinkronkan spreadsheet.')
+    } finally {
+      syncingRef.current = false
+      setSyncing(false)
+    }
+  }
+
+  useEffect(() => {
+    syncStudents()
+    const interval = window.setInterval(() => {
+      setSyncCountdown((current) => {
+        if (current <= 1) {
+          syncStudents()
+          return SYNC_INTERVAL_SECONDS
+        }
+
+        return current - 1
+      })
+    }, 1000)
+
+    return () => window.clearInterval(interval)
+  }, [])
+
+  const handleRefresh = async () => {
+    setSyncCountdown(SYNC_INTERVAL_SECONDS)
+    setError('')
+    setSuccess('')
+    await syncStudents(true)
+  }
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -92,14 +173,29 @@ function Students() {
           <h1 className="text-2xl font-bold text-slate-900">Data Mahasiswa</h1>
           <p className="mt-1 text-slate-500">Simpan data mahasiswa agar pengisian peminjaman lebih cepat.</p>
         </div>
-        <button
-          type="button"
-          onClick={() => setShowImportModal(true)}
-          className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-cyan-600 px-4 py-2.5 font-medium text-cyan-700 hover:bg-cyan-50"
-        >
-          <Upload className="h-4 w-4" />
-          Impor Spreadsheet
-        </button>
+        <div className="flex shrink-0 flex-col items-stretch gap-2 sm:items-end">
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={handleRefresh}
+              disabled={syncing}
+              title="Refresh data dari spreadsheet"
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2.5 font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            >
+              <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
+              {syncing ? 'Memuat...' : 'Refresh Data'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowImportModal(true)}
+              className="inline-flex items-center gap-2 rounded-lg border border-cyan-600 px-4 py-2.5 font-medium text-cyan-700 hover:bg-cyan-50"
+            >
+              <Upload className="h-4 w-4" />
+              Impor Spreadsheet
+            </button>
+          </div>
+          <span className="text-right text-xs text-slate-500">Refresh otomatis dalam {formatCountdown(syncCountdown)}</span>
+        </div>
       </div>
 
       <ImportStudentsModal

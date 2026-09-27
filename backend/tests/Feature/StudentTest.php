@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Student;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -95,6 +96,30 @@ class StudentTest extends TestCase
         $this->assertDatabaseHas('students', [
             'student_id' => '2211082002',
             'email' => 'siti@example.com',
+        ]);
+    }
+
+    public function test_petugas_dapat_mengimpor_mahasiswa_dari_csv_google_sheets_di_web(): void
+    {
+        Http::fake([
+            'https://docs.google.com/*' => Http::response(implode("\n", [
+                'NIM,Nama,Email,No. Telepon',
+                '2211082001,Budi Santoso,budi@example.com,081234567890',
+            ])),
+        ]);
+        Sanctum::actingAs($this->staff());
+
+        $response = $this->postJson('/api/students/import/csv-url', [
+            'url' => 'https://docs.google.com/spreadsheets/d/example/pubhtml',
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('ok', true)
+            ->assertJsonPath('imported', 1);
+        $this->assertDatabaseHas('students', ['student_id' => '2211082001']);
+        $this->assertDatabaseHas('app_settings', [
+            'key' => 'student_sync_csv_url',
+            'value' => 'https://docs.google.com/spreadsheets/d/example/pubhtml',
         ]);
     }
 

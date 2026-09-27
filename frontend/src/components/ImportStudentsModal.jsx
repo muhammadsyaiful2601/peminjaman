@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react'
-import { Download, FileSpreadsheet, FileUp, X } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Download, FileSpreadsheet, FileUp, RefreshCw, X } from 'lucide-react'
 import api from '../api/axios'
 import { downloadBlob } from '../utils/downloadBlob'
 
@@ -9,14 +9,43 @@ import { downloadBlob } from '../utils/downloadBlob'
 function ImportStudentsModal({ open, onClose, onImported }) {
   const fileInputRef = useRef(null)
   const [selectedFile, setSelectedFile] = useState(null)
+  const [source, setSource] = useState('file')
+  const [spreadsheet, setSpreadsheet] = useState('')
+  // const [range, setRange] = useState('')
   const [importing, setImporting] = useState(false)
   const [error, setError] = useState('')
   const [result, setResult] = useState(null)
+
+  useEffect(() => {
+    if (!open) return
+
+    const savedUrl = localStorage.getItem('student_sync_csv_url')
+    if (savedUrl) {
+      setSource('api')
+      setSpreadsheet(savedUrl)
+      return
+    }
+
+    api.get('/students/import/source')
+      .then((response) => {
+        const url = response.data.url || ''
+        if (!url) return
+        localStorage.setItem('student_sync_csv_url', url)
+        setSource('api')
+        setSpreadsheet(url)
+      })
+      .catch(() => {
+        // URL belum tersimpan atau server belum tersedia.
+      })
+  }, [open])
 
   if (!open) return null
 
   const reset = () => {
     setSelectedFile(null)
+    setSource('file')
+    setSpreadsheet('')
+    // setRange('')
     setError('')
     setResult(null)
     setImporting(false)
@@ -36,8 +65,12 @@ function ImportStudentsModal({ open, onClose, onImported }) {
   }
 
   const handleImport = async () => {
-    if (!selectedFile) {
+    if (source === 'file' && !selectedFile) {
       setError('Pilih file CSV terlebih dahulu.')
+      return
+    }
+    if (source === 'api' && !spreadsheet.trim()) {
+      setError('Masukkan URL CSV Google Sheets terlebih dahulu.')
       return
     }
 
@@ -45,20 +78,36 @@ function ImportStudentsModal({ open, onClose, onImported }) {
     setResult(null)
     setImporting(true)
     try {
-      const formData = new FormData()
-      formData.append('file', selectedFile)
+      let response
+      if (source === 'file') {
+        const formData = new FormData()
+        formData.append('file', selectedFile)
+        response = await api.post('/students/import', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        })
+      } else {
+        let result
+        if (window.desktop?.importStudentsFromCsv) {
+          result = await window.desktop.importStudentsFromCsv(spreadsheet.trim())
+        } else {
+          const webResponse = await api.post('/students/import/csv-url', { url: spreadsheet.trim() })
+          result = webResponse.data
+        }
+        if (!result.ok) throw new Error(result.message || 'Gagal mengimpor CSV Google Sheets.')
+        response = { data: result }
+      }
 
-      const response = await api.post('/students/import', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      })
-
+      if (source === 'api') localStorage.setItem('student_sync_csv_url', spreadsheet.trim())
+      if (source === 'api') {
+        await api.post('/students/import/source', { url: spreadsheet.trim() })
+      }
       setResult(response.data)
       setSelectedFile(null)
       if (fileInputRef.current) fileInputRef.current.value = ''
       onImported?.(response.data)
     } catch (requestError) {
       const data = requestError.response?.data
-      setError(data?.message || 'Gagal mengimpor data mahasiswa.')
+      setError(data?.message || requestError.message || 'Gagal mengimpor data mahasiswa.')
       if (data?.errors) setResult({ errors: data.errors })
     } finally {
       setImporting(false)
@@ -70,10 +119,13 @@ function ImportStudentsModal({ open, onClose, onImported }) {
       <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl" onClick={(event) => event.stopPropagation()}>
         <ModalHeader handleClose={handleClose} />
         <TemplateSection />
-        <FileSection fileInputRef={fileInputRef} handleFileChange={handleFileChange} />
+        <SourceTabs source={source} setSource={setSource} />
+        {source === 'file'
+          ? <FileSection fileInputRef={fileInputRef} handleFileChange={handleFileChange} />
+          : <ApiSection spreadsheet={spreadsheet} setSpreadsheet={setSpreadsheet} />}
         {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
         {result && <ResultSection result={result} />}
-        <Footer handleClose={handleClose} handleImport={handleImport} importing={importing} selectedFile={selectedFile} />
+        <Footer handleClose={handleClose} handleImport={handleImport} importing={importing} canImport={source === 'file' ? Boolean(selectedFile) : Boolean(spreadsheet.trim())} source={source} />
       </div>
     </div>
   )
@@ -86,7 +138,7 @@ function ModalHeader({ handleClose }) {
     <div className="mb-4 flex items-start justify-between">
       <div>
         <h2 className="text-lg font-bold text-slate-900">Impor Data Mahasiswa</h2>
-        <p className="mt-1 text-sm text-slate-500">Unggah file CSV hasil unduhan dari Google Sheets atau Excel.</p>
+        <p className="mt-1 text-sm text-slate-500">Impor dari file spreadsheet atau CSV Google Sheets yang sudah dipublikasikan.</p>
       </div>
       <button type="button" onClick={handleClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600" aria-label="Tutup">
         <X className="h-5 w-5" />
@@ -141,6 +193,19 @@ function TemplateButton() {
   )
 }
 
+function SourceTabs({ source, setSource }) {
+  return (
+    <div className="mb-4 grid grid-cols-2 gap-2 rounded-lg bg-slate-100 p-1">
+      <button type="button" onClick={() => setSource('file')} className={`rounded-md px-3 py-2 text-sm font-medium ${source === 'file' ? 'bg-white text-cyan-700 shadow-sm' : 'text-slate-500'}`}>
+        File Spreadsheet
+      </button>
+      <button type="button" onClick={() => setSource('api')} className={`inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium ${source === 'api' ? 'bg-white text-cyan-700 shadow-sm' : 'text-slate-500'}`}>
+        <RefreshCw className="h-3.5 w-3.5" /> Google Sheets CSV
+      </button>
+    </div>
+  )
+}
+
 function FileSection({ fileInputRef, handleFileChange }) {
   return (
     <div className="mb-4">
@@ -158,6 +223,18 @@ function FileSection({ fileInputRef, handleFileChange }) {
         <code className="rounded bg-slate-100 px-1">NIM/NIP</code>, <code className="rounded bg-slate-100 px-1">Nama</code>,{' '}
         <code className="rounded bg-slate-100 px-1">Email</code>. NIM yang sudah ada akan diperbarui.
       </p>
+    </div>
+  )
+}
+
+function ApiSection({ spreadsheet, setSpreadsheet }) {
+  return (
+    <div className="mb-4 space-y-3">
+      <label className="block text-sm font-medium text-slate-700">
+        URL CSV Google Sheets
+        <input value={spreadsheet} onChange={(event) => setSpreadsheet(event.target.value)} placeholder="https://docs.google.com/spreadsheets/d/.../pub?output=csv" className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500" />
+      </label>
+      <p className="text-xs text-slate-500">Di Google Sheets pilih File → Bagikan → Publikasikan ke web, pilih format CSV, lalu tempel URL hasil publikasi. Tidak memerlukan API key.</p>
     </div>
   )
 }
@@ -180,7 +257,7 @@ function ResultSection({ result }) {
   )
 }
 
-function Footer({ handleClose, handleImport, importing, selectedFile }) {
+function Footer({ handleClose, handleImport, importing, canImport, source }) {
   return (
     <div className="flex justify-end gap-2">
       <button type="button" onClick={handleClose} className="rounded-lg border border-slate-300 px-4 py-2.5 font-medium text-slate-600 hover:bg-slate-50">
@@ -189,11 +266,11 @@ function Footer({ handleClose, handleImport, importing, selectedFile }) {
       <button
         type="button"
         onClick={handleImport}
-        disabled={importing || !selectedFile}
+        disabled={importing || !canImport}
         className="inline-flex items-center gap-2 rounded-lg bg-cyan-600 px-4 py-2.5 font-medium text-white hover:bg-cyan-700 disabled:opacity-50"
       >
         <FileUp className="h-4 w-4" />
-        {importing ? 'Mengimpor...' : 'Impor Sekarang'}
+        {importing ? 'Mengimpor...' : source === 'api' ? 'Ambil & Impor' : 'Impor Sekarang'}
       </button>
     </div>
   )
