@@ -123,6 +123,39 @@ class StudentTest extends TestCase
         ]);
     }
 
+    public function test_aplikasi_desktop_dapat_mengimpor_csv_google_sheets_lewat_kunci_desktop(): void
+    {
+        config(['app.desktop_key' => 'test-desktop-key']);
+        Http::fake([
+            'https://docs.google.com/*' => Http::response(implode("\n", [
+                'NIM,Nama,Email,No. Telepon',
+                '2211082002,Siti Aminah,siti@example.com,081298765432',
+            ])),
+        ]);
+
+        $this->postJson('/api/desktop/students/import-csv-url', [
+            'url' => 'https://docs.google.com/spreadsheets/d/example/pubhtml',
+        ], ['X-Desktop-Key' => 'test-desktop-key'])
+            ->assertOk()
+            ->assertJsonPath('ok', true)
+            ->assertJsonPath('imported', 1);
+
+        $this->assertDatabaseHas('students', ['student_id' => '2211082002']);
+    }
+
+    public function test_impor_mahasiswa_dari_aplikasi_desktop_butuh_kunci_desktop(): void
+    {
+        config(['app.desktop_key' => 'test-desktop-key']);
+
+        $payload = ['url' => 'https://docs.google.com/spreadsheets/d/example/pubhtml'];
+
+        $this->postJson('/api/desktop/students/import-csv-url', $payload)->assertStatus(404);
+        $this->postJson('/api/desktop/students/import-csv-url', $payload, ['X-Desktop-Key' => 'salah'])
+            ->assertStatus(404);
+
+        $this->assertDatabaseCount('students', 0);
+    }
+
     public function test_impor_menerima_header_bahasa_indonesia_dan_memperbarui_nim_yang_sudah_ada(): void
     {
         Sanctum::actingAs($this->staff());

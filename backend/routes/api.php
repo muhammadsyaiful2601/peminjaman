@@ -121,6 +121,11 @@ Route::middleware('desktop.key')->prefix('hybrid')->group(function () {
 // ---------------------------------------------------------------------
 Route::middleware('desktop.key')->prefix('desktop')->group(function () {
     Route::post('/branding', [BrandingController::class, 'desktopUpdate']);
+
+    // Impor mahasiswa dari CSV terpublikasi (Google Sheets) oleh aplikasi
+    // desktop: main process Electron memanggil endpoint ini tanpa sesi
+    // Sanctum, jadi dilindungi X-Desktop-Key seperti endpoint desktop lain.
+    Route::post('/students/import-csv-url', [StudentController::class, 'importFromPublishedCsv']);
 });
 
 // ---------------------------------------------------------------------
