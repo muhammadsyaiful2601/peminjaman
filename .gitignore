@@ -30,4 +30,7 @@ Thumbs.db
 *.sql
 *.sql.gz
 
+# Log error runtime PHP desktop (dihasilkan php_errors.log dari php.ini)
+php_errors.log
+
 # Artefak framework (aman untuk di-ignore)

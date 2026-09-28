@@ -64,7 +64,9 @@ const PREFERRED_PORT = 8642;
 //  sehingga tiap backup punya nama sendiri dan tidak saling menimpa.
 //  1.4.3: seluruh konfigurasi (email/SMTP, hosting & sinkronisasi, pembaruan
 //  aplikasi) dipindahkan ke Pengaturan Sistem; tombol gear dihapus.
-const TEMPLATE_VERSION = '1.4.3';
+//  1.4.4: aktifkan ekstensi pdo_mysql pada runtime PHP desktop. Tanpa ini mode
+//  hybrid selalu gagal "could not find driver" karena hanya sqlite tersedia.
+const TEMPLATE_VERSION = '1.4.4';
 const isDev = !app.isPackaged;
 
 /* ------------------------------------------------------------------ paths */

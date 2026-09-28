@@ -150,6 +150,14 @@ aplikasi desktop), berisi:
   aplikasi desktop memicu pemeriksaan berkala (tiap 6 jam) dan backend menentukan sendiri
   apakah sudah jatuh tempo, sehingga aman bila komputer sempat mati.
 
+> **Prasyarat PHP:** mode hybrid butuh ekstensi `pdo_mysql` pada runtime PHP yang
+> dibundel aplikasi. Ekstensi ini **sudah aktif** lewat `desktop/assets/php.ini`.
+> Bila muncul `Gagal terhubung: could not find driver`, berarti `pdo_mysql` tidak
+> termuat — periksa baris `extension=pdo_mysql` pada `php.ini` di folder `php/`
+> yang dipakai aplikasi, lalu jalankan ulang aplikasi. Untuk memeriksanya manual:
+> `php -r "var_dump(PDO::getAvailableDrivers());"` — hasilnya harus memuat
+> `mysql`, bukan hanya `sqlite`.
+
 Aturan sinkronisasi (`php artisan hybrid:sync`):
 
 1. Tabel diproses sesuai urutan dependensi: `users` → `items` → `loans` → `loan_items` → `technicians`.
