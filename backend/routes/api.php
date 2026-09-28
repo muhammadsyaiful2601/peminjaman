@@ -77,6 +77,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware('role:admin')->group(function () {
         Route::get('/users', [UserController::class, 'index']);
         Route::get('/backups/status', [BackupController::class, 'status']);
+
+        // Urutan penting: rute khusus didaftarkan sebelum /backups/{type}
+        // agar "full" dan "restore" tidak tertangkap sebagai jenis backup.
+        Route::post('/backups/full', [BackupController::class, 'download'])->defaults('type', 'full');
+        Route::post('/backups/restore', [BackupController::class, 'restore']);
         Route::post('/backups/{type}', [BackupController::class, 'download']);
         Route::post('/users', [UserController::class, 'store']);
         Route::put('/users/{user}', [UserController::class, 'update']);

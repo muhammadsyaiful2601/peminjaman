@@ -3,34 +3,44 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Support\Hybrid;
+use App\Services\BackupService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
+use Symfony\Component\HttpFoundation\Response as HttpResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class BackupController extends Controller
 {
+    public function __construct(private readonly BackupService $backups)
+    {
+    }
+
     public function status()
     {
         $driver = (string) config('database.default');
-        $hybrid = Hybrid::readConfig();
-        $hybridAvailable = $hybrid !== null
-            && (bool) ($hybrid['enabled'] ?? false)
-            && Hybrid::isConfigured();
+        $hybridAvailable = $this->backups->isHybridAvailable();
 
         return response()->json([
             'driver' => $driver,
             'sqlite' => $driver === 'sqlite' || $hybridAvailable,
             'mysql' => $driver === 'mysql' || $hybridAvailable,
             'hybrid' => $hybridAvailable,
+            // Backup lengkap (database + seluruh foto) selalu tersedia.
+            'full' => true,
+            'photos' => $this->backups->photoStats(),
         ]);
     }
 
-    public function download(Request $request, string $type): StreamedResponse
+
+    /**
+     * Unduh backup: `sqlite`/`mysql` (database saja) atau `full`
+     * (arsip ZIP berisi database + seluruh foto).
+     */
+    public function download(Request $request, string $type): HttpResponse
     {
-        abort_unless(in_array($type, ['sqlite', 'mysql'], true), 404);
+        abort_unless(in_array($type, ['sqlite', 'mysql', 'full'], true), 404);
 
         $validated = $request->validate([
             'password' => ['required', 'string'],
@@ -41,22 +51,36 @@ class BackupController extends Controller
         }
 
         $driver = (string) config('database.default');
-        $hybrid = Hybrid::readConfig();
-        $hybridAvailable = $hybrid !== null
-            && (bool) ($hybrid['enabled'] ?? false)
-            && Hybrid::isConfigured();
+        $hybridAvailable = $this->backups->isHybridAvailable();
+
+        if ($type === 'full') {
+            $archivePath = tempnam(sys_get_temp_dir(), 'peminjaman-backup-').'.zip';
+
+            try {
+                $this->backups->createFullArchive($archivePath);
+            } catch (\Throwable $e) {
+                Log::error('Backup lengkap gagal dibuat: '.$e->getMessage());
+                @unlink($archivePath);
+
+                abort(500, $e->getMessage());
+            }
+
+            return response()->download(
+                $archivePath,
+                'backup-lengkap-'.now()->format('Y-m-d-His').'.zip',
+                ['Content-Type' => 'application/zip'],
+            )->deleteFileAfterSend(true);
+        }
 
         if ($type === 'sqlite') {
             abort_unless($driver === 'sqlite' || $hybridAvailable, 404, 'Backup SQLite tidak tersedia pada mode ini.');
 
-            $databasePath = (string) config('database.connections.sqlite.database');
-            abort_unless(is_file($databasePath), 404, 'File database SQLite tidak ditemukan.');
+            try {
+                $snapshotPath = $this->backups->sqliteSnapshot();
+            } catch (\Throwable $e) {
+                Log::error('SQLite backup snapshot failed: '.$e->getMessage());
 
-            // Copy the live database first so the download is a consistent snapshot.
-            $snapshotPath = tempnam(sys_get_temp_dir(), 'peminjaman-backup-');
-            if ($snapshotPath === false || ! copy($databasePath, $snapshotPath)) {
-                Log::error('SQLite backup snapshot failed.', ['database' => $databasePath]);
-                abort(500, 'Snapshot database SQLite gagal dibuat.');
+                abort(500, $e->getMessage());
             }
 
             return response()->download(
@@ -68,8 +92,7 @@ class BackupController extends Controller
 
         abort_unless($driver === 'mysql' || $hybridAvailable, 404, 'Backup MySQL tidak tersedia pada mode ini.');
 
-        $connection = $driver === 'mysql' ? 'mysql' : Hybrid::CONNECTION;
-        $content = $this->mysqlDump($connection);
+        $content = $this->backups->mysqlDump();
 
         return response()->streamDownload(
             static function () use ($content): void {
@@ -80,47 +103,68 @@ class BackupController extends Controller
         );
     }
 
-    private function mysqlDump(string $connection): string
+    /**
+     * Pulihkan database (dan foto bila arsip backup lengkap) dari berkas yang
+     * diunggah admin. Sebelum menimpa, sistem menyimpan salinan data saat ini
+     * di `storage/app/backups` agar masih dapat dikembalikan secara manual.
+     */
+    public function restore(Request $request): JsonResponse
     {
-        if ($connection === Hybrid::CONNECTION) {
-            Hybrid::applyConnection();
+        $validated = $request->validate([
+            'password' => ['required', 'string'],
+            'file' => ['required', 'file', 'max:1048576', 'mimes:zip,sqlite,sqlite3,db,sql'],
+        ]);
+
+        if (! Hash::check($validated['password'], (string) $request->user()->password)) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Password administrator salah. Pemulihan database dibatalkan.',
+            ], 422);
         }
 
-        $db = DB::connection($connection);
-        $schema = $db->getSchemaBuilder();
-        $tables = collect($schema->getTableListing());
-        $output = "-- Peminjaman Barang database backup\n-- Generated: ".now()->toIso8601String()."\n\nSET FOREIGN_KEY_CHECKS=0;\n\n";
+        $file = $request->file('file');
+        $extension = strtolower((string) $file->getClientOriginalExtension());
 
-        foreach ($tables as $table) {
-            $quotedTable = $this->quoteIdentifier($table);
-            $create = $db->selectOne("SHOW CREATE TABLE {$quotedTable}");
-            $createSql = (string) ($create->{'Create Table'} ?? $create->{'Create View'} ?? '');
+        try {
+            $result = $extension === 'zip'
+                ? $this->backups->restoreArchive((string) $file->getRealPath())
+                : $this->backups->restoreDatabaseOnly((string) $file->getRealPath(), $extension);
+        } catch (\Throwable $e) {
+            Log::warning('Pemulihan database gagal: '.$e->getMessage());
 
-            if ($createSql === '') {
-                continue;
-            }
-
-            $output .= "DROP TABLE IF EXISTS {$quotedTable};\n{$createSql};\n\n";
-            $rows = $db->table($table)->get();
-
-            foreach ($rows as $row) {
-                $values = collect((array) $row)
-                    ->map(fn ($value) => $value === null ? 'NULL' : $db->getPdo()->quote((string) $value))
-                    ->implode(', ');
-                $columns = collect(array_keys((array) $row))
-                    ->map(fn ($column) => $this->quoteIdentifier($column))
-                    ->implode(', ');
-                $output .= "INSERT INTO {$quotedTable} ({$columns}) VALUES ({$values});\n";
-            }
-
-            $output .= "\n";
+            return response()->json([
+                'ok' => false,
+                'message' => $e->getMessage(),
+            ], 422);
         }
 
-        return $output."SET FOREIGN_KEY_CHECKS=1;\n";
-    }
+        $photos = $result['photos']['files'] ?? null;
+        $message = 'Database berhasil dipulihkan.';
 
-    private function quoteIdentifier(string $identifier): string
-    {
-        return '`'.str_replace('`', '``', $identifier).'`';
+        if ($photos !== null) {
+            $message .= " {$photos} berkas foto ikut dipulihkan.";
+        }
+
+        if ($result['safety_backup'] !== null) {
+            $message .= " Salinan data sebelum pemulihan disimpan sebagai {$result['safety_backup']}.";
+        }
+
+        if ($this->backups->isHybridAvailable()) {
+            $message .= ' Mode hybrid aktif: jalankan "Sinkron Sekarang" agar data hosting menyesuaikan.';
+        }
+
+        Log::info('Database dipulihkan dari backup oleh '.$request->user()->email.'.', [
+            'database' => $result['database'],
+            'photos' => $photos,
+            'safety_backup' => $result['safety_backup'],
+        ]);
+
+        return response()->json([
+            'ok' => true,
+            'message' => $message,
+            'database' => $result['database'],
+            'photos' => $result['photos'],
+            'safety_backup' => $result['safety_backup'],
+        ]);
     }
 }

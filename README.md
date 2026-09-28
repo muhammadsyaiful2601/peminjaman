@@ -308,6 +308,37 @@ tidak dihitung sebagai peminjaman.
 Transaksi lama tanpa NIM milik orang yang sama tetap ikut dihitung agar surat tidak terbit saat barang
 masih ditahan.
 
+### Backup & Pemulihan Data
+
+Halaman **Pengaturan Sistem** (menu admin) menyediakan dua hal: mengunduh backup dan memulihkan
+(*restore*) data dari berkas backup.
+
+**Mengunduh backup** — semua tombol meminta password admin terlebih dahulu:
+
+| Tombol | Isi berkas | Kegunaan |
+| :--- | :--- | :--- |
+| **Backup Lengkap (Database + Foto)** | Arsip `.zip` berisi `database.sqlite`/`database.sql`, seluruh foto pada folder unggahan (`borrow-photos/`, `return-photos/`, `items/`, `branding/`), dan `manifest.json` | Cadangan menyeluruh; hasilnya dapat dipulihkan langsung dari aplikasi |
+| **Download SQLite** / **Download MySQL** | Berkas database saja (`.sqlite` / `.sql`) | Cadangan cepat atau pemakaian lanjutan (mis. dipulihkan lewat alat lain) |
+
+**Memulihkan data (Impor Database)** — bagian **Impor / Pulihkan Database** pada halaman yang sama:
+
+1. Pilih berkas backup (arsip `.zip` hasil Backup Lengkap, atau berkas `.sqlite`/`.sql`).
+2. Masukkan password admin, lalu tekan **Pulihkan Data Sekarang** dan setujui konfirmasi.
+3. Sistem memeriksa berkas terlebih dahulu (jenis database harus cocok dengan mode aplikasi, dan
+   berkas harus benar-benar database aplikasi ini — ditandai adanya tabel `users` dan `items`).
+   Bila tidak sesuai, pemulihan ditolak dan data lama tidak berubah.
+4. Sebelum menimpa, sistem menyimpan salinan otomatis data saat ini di
+   `storage/app/backups/sebelum-restore-<tanggal>.sqlite|.sql`, sehingga masih bisa dikembalikan
+   manual bila salah memilih berkas. Nama berkas itu ditampilkan pada pesan hasil pemulihan.
+5. Database diganti dalam satu transaksi (SQLite) sehingga aman walau aplikasi sedang dipakai;
+   foto dari arsip disalin ke folder unggahan (berkas dengan nama sama ditimpa, berkas lain tetap
+   dipertahankan). Halaman dimuat ulang setelah selesai dan Anda mungkin perlu login kembali.
+6. Bila mode hybrid aktif, jalankan **Sinkron Sekarang** di panel Hosting & Sinkronisasi agar data
+   hosting menyesuaikan hasil pemulihan.
+
+> Pemulihan hanya dapat dilakukan **admin** dan selalu memerlukan password admin. Batas unggah pada
+> aplikasi desktop sudah dinaikkan (1 GB) agar arsip backup berisi banyak foto tetap dapat dipulihkan.
+
 ## Alur Operasional
 
 1. Petugas login.
@@ -537,6 +568,16 @@ Semua endpoint berada di bawah prefix `/api`. Kecuali login dan download PDF QR,
 | POST | `/api/students/import/source` | Admin/Asisten | Menyimpan URL sumber sinkronisasi |
 | GET | `/api/students/import/template` | Admin/Asisten | Mengunduh template impor (`.xls`) |
 | POST | `/api/desktop/students/import-csv-url` | Kunci desktop | Sama dengan `import/csv-url`, dipakai aplikasi desktop lewat `X-Desktop-Key` |
+
+### Backup & Pemulihan
+
+| Method | Endpoint | Akses | Keterangan |
+| :--- | :--- | :--- | :--- |
+| GET | `/api/backups/status` | Admin | Mode database aktif, ketersediaan backup SQLite/MySQL/lengkap, dan jumlah + ukuran berkas foto |
+| POST | `/api/backups/full` | Admin | Mengunduh arsip `.zip` berisi database + seluruh foto + `manifest.json` (butuh `password` admin) |
+| POST | `/api/backups/sqlite` | Admin | Mengunduh berkas database SQLite saja (butuh `password` admin) |
+| POST | `/api/backups/mysql` | Admin | Mengunduh dump `.sql` MySQL saja (butuh `password` admin) |
+| POST | `/api/backups/restore` | Admin | Memulihkan database (+ foto bila arsip lengkap) dari unggahan `file`; wajib `password` admin; membalas `ok`, `database`, `photos`, `safety_backup` |
 
 ### Peminjaman
 
@@ -827,13 +868,25 @@ Email membutuhkan koneksi internet. Fitur inventaris dan transaksi tetap menggun
 
 ### Backup data desktop
 
+Cara paling praktis: gunakan **Backup Lengkap (Database + Foto)** pada **Pengaturan Sistem** →
+tersimpan satu berkas `.zip` yang memuat database dan seluruh foto, dan dapat dipulihkan kembali
+lewat bagian **Impor / Pulihkan Database** pada halaman yang sama (lihat
+[Backup & Pemulihan Data](#backup--pemulihan-data)).
+
+Cara manual (salin seluruh folder data):
+
 1. Tutup aplikasi.
 2. Buka File Explorer.
 3. Masukkan `%APPDATA%` pada baris alamat.
 4. Cari folder `Peminjaman Barang PNP`.
 5. Salin folder tersebut ke flash drive, hard disk eksternal, atau penyimpanan aman.
 
-Untuk memulihkan data, tutup aplikasi pada komputer tujuan lalu ganti folder data aplikasinya dengan salinan backup. Jangan mengedit file SQLite secara manual.
+Untuk memulihkan data secara manual, tutup aplikasi pada komputer tujuan lalu ganti folder data
+aplikasinya dengan salinan backup. Jangan mengedit file SQLite secara manual.
+
+Untuk deployment web/hosting, simpan salinan berkas backup lengkap di luar server; folder foto
+(`storage/app/public`) dan database (`storage/app/backups` untuk salinan sebelum pemulihan) juga
+perlu ikut terjaga.
 
 ## Publikasi ke GitHub
 

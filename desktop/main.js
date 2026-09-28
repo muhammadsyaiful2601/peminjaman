@@ -52,7 +52,9 @@ const PREFERRED_PORT = 8642;
 //  1.2.5: sertakan CA bundle untuk koneksi HTTPS PHP portable.
 //  1.2.6: sinkronisasi otomatis data mahasiswa mengikuti perubahan
 //  spreadsheet (kecocokan NIM/email, hitungan "unchanged", waktu sinkron).
-const TEMPLATE_VERSION = '1.2.6';
+//  1.3.0: backup lengkap database + foto, pemulihan (restore) dari berkas
+//  backup, simpan arsip lewat dialog, dan batas unggah PHP diperbesar.
+const TEMPLATE_VERSION = '1.3.0';
 const isDev = !app.isPackaged;
 
 /* ------------------------------------------------------------------ paths */
@@ -81,13 +83,20 @@ const phpCaBundle = isDev
   : path.join(process.resourcesPath, 'php', 'cacert.pem');
 
 function phpArgs(args) {
-  if (!fs.existsSync(phpCaBundle)) return args;
-
-  return [
-    '-d', `curl.cainfo=${phpCaBundle}`,
-    '-d', `openssl.cafile=${phpCaBundle}`,
-    ...args,
+  // Batas sumber daya PHP: backup lengkap (database + seluruh foto) berupa
+  // satu arsip ZIP yang harus dapat diunggah kembali saat memulihkan data.
+  const limits = [
+    '-d', 'upload_max_filesize=1024M',
+    '-d', 'post_max_size=1024M',
+    '-d', 'memory_limit=1024M',
+    '-d', 'max_execution_time=900',
   ];
+
+  const base = fs.existsSync(phpCaBundle)
+    ? ['-d', `curl.cainfo=${phpCaBundle}`, '-d', `openssl.cafile=${phpCaBundle}`, ...args]
+    : args;
+
+  return [...limits, ...base];
 }
 
 const userDataDir = app.getPath('userData');
@@ -1427,6 +1436,34 @@ function applyBrandingToWindows() {
 function registerIpc() {
   ipcMain.handle('students:import-published-csv', async (_event, csvUrl) => {
     return importStudentsFromPublishedCsv(csvUrl);
+  });
+
+  ipcMain.handle('file:save', async (_event, data) => {
+    try {
+      if (!data || !data.buffer || !data.filename) {
+        return { ok: false, message: 'Data file tidak valid.' };
+      }
+
+      const safeName = String(data.filename).replace(/[<>:"/\\|?*]/g, '-');
+      const extension = path.extname(safeName).replace('.', '').toLowerCase();
+      const filters = extension === 'pdf'
+        ? [{ name: 'Dokumen PDF', extensions: ['pdf'] }]
+        : extension === 'zip'
+          ? [{ name: 'Arsip ZIP', extensions: ['zip'] }]
+          : [{ name: 'Semua berkas', extensions: ['*'] }];
+
+      const result = await dialog.showSaveDialog({
+        title: extension === 'zip' ? 'Simpan arsip backup' : 'Simpan berkas',
+        defaultPath: path.join(app.getPath('downloads'), safeName),
+        filters,
+      });
+      if (result.canceled || !result.filePath) return { ok: false, canceled: true };
+
+      fs.writeFileSync(result.filePath, Buffer.from(data.buffer));
+      return { ok: true, filePath: result.filePath };
+    } catch (error) {
+      return { ok: false, message: String(error && error.message ? error.message : error) };
+    }
   });
 
   ipcMain.handle('file:save-pdf', async (_event, data) => {

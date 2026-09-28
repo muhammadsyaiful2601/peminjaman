@@ -1,4 +1,10 @@
 export async function downloadBlob(blob, filename) {
+  if (window.desktop?.isDesktop && window.desktop.saveFile) {
+    // ArrayBuffer dikirim lewat IPC (bukan array angka) supaya berkas besar
+    // seperti arsip backup ZIP tidak menghabiskan memori.
+    return window.desktop.saveFile(await blob.arrayBuffer(), filename)
+  }
+
   if (window.desktop?.isDesktop && window.desktop.savePdf) {
     return window.desktop.savePdf(new Uint8Array(await blob.arrayBuffer()), filename)
   }
