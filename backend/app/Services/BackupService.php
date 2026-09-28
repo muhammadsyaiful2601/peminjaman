@@ -472,7 +472,13 @@ class BackupService
             $name = (string) $zip->getNameIndex($i);
 
             if (str_starts_with($name, self::ARCHIVE_PHOTOS_DIR.'/') && ! str_ends_with($name, '/')) {
-                $entries[] = $name;
+                // Hanya path relatif yang aman (tanpa `..`, drive, atau path absolut)
+                // agar arsip backup tidak dapat menulis berkas di luar folder unggahan.
+                if ($this->isSafeRelativePath(substr($name, strlen(self::ARCHIVE_PHOTOS_DIR) + 1))) {
+                    $entries[] = $name;
+                } else {
+                    Log::warning('Entri foto pada arsip backup dilewati karena path tidak aman.', ['entry' => $name]);
+                }
             }
         }
 
@@ -705,6 +711,31 @@ class BackupService
         }
 
         @rmdir($directory);
+    }
+
+    /**
+     * Path relatif aman untuk ditulis ke dalam folder unggahan:
+     * tidak boleh kosong, absolut, memuat drive, atau naik ke folder atas.
+     */
+    private function isSafeRelativePath(string $path): bool
+    {
+        if ($path === '' || str_contains($path, "\0")) {
+            return false;
+        }
+
+        $normalized = str_replace('\\', '/', $path);
+
+        if (str_starts_with($normalized, '/') || preg_match('/^[A-Za-z]:/', $normalized) === 1) {
+            return false;
+        }
+
+        foreach (explode('/', $normalized) as $segment) {
+            if ($segment === '' || $segment === '.' || $segment === '..') {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private function makeTemporaryDirectory(): string

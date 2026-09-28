@@ -228,6 +228,74 @@ class BackupTest extends TestCase
         $this->deletePath($source);
     }
 
+    public function test_pemulihan_menolak_berkas_dengan_format_tidak_didukung(): void
+    {
+        Sanctum::actingAs($this->admin());
+
+        $scriptPath = $this->temporaryPath('skrip', 'php');
+        file_put_contents($scriptPath, '<?php echo "bukan backup";');
+
+        $response = $this->post('/api/backups/restore', [
+            'password' => 'rahasia',
+            'file' => new UploadedFile($scriptPath, 'bukan-backup.php', 'text/x-php', null, true),
+        ]);
+
+        $response->assertStatus(422)->assertJsonPath('ok', false);
+        $this->assertStringContainsString('Format berkas tidak didukung', (string) $response->json('message'));
+
+        $this->deletePath($scriptPath);
+    }
+
+    public function test_berkas_dump_sql_diterima_validasi_hanya_ditolak_karena_mode_database(): void
+    {
+        Sanctum::actingAs($this->admin());
+
+        $dumpPath = $this->temporaryPath('dump', 'sql');
+        file_put_contents($dumpPath, "CREATE TABLE users (id INT);\n");
+
+        // Dump .sql terdeteksi sebagai teks biasa oleh penebakan MIME, sehingga
+        // pemeriksaan format harus memakai ekstensi nama berkas, bukan isi berkas.
+        $response = $this->post('/api/backups/restore', [
+            'password' => 'rahasia',
+            'file' => new UploadedFile($dumpPath, 'backup-mysql.sql', 'text/plain', null, true),
+        ]);
+
+        $response->assertStatus(422)->assertJsonPath('ok', false);
+        $this->assertStringContainsString('hanya dapat dipulihkan bila aplikasi memakai MySQL', (string) $response->json('message'));
+
+        $this->deletePath($dumpPath);
+    }
+
+    public function test_pemulihan_melewati_entri_foto_dengan_path_berbahaya(): void
+    {
+        Sanctum::actingAs($this->admin());
+
+        $source = $this->temporaryPath('aman', 'sqlite');
+        $this->createSqliteDatabase($source, ['Rina-source']);
+
+        $archivePath = $this->temporaryPath('jahat', 'zip');
+        $zip = new ZipArchive();
+        $zip->open($archivePath, ZipArchive::CREATE | ZipArchive::OVERWRITE);
+        $zip->addFile($source, 'database.sqlite');
+        $zip->addFromString('uploads/borrow-photos/aman.jpg', 'foto-aman');
+        $zip->addFromString('uploads/../../escaped.txt', 'harus-dilewati');
+        $zip->close();
+
+        $response = $this->post('/api/backups/restore', [
+            'password' => 'rahasia',
+            'file' => new UploadedFile($archivePath, 'backup-lengkap.zip', 'application/zip', null, true),
+        ]);
+
+        $response->assertOk()->assertJsonPath('ok', true);
+
+        $this->assertSame('foto-aman', file_get_contents($this->uploadsPath.'/borrow-photos/aman.jpg'));
+        $this->assertFileDoesNotExist(dirname($this->uploadsPath).DIRECTORY_SEPARATOR.'escaped.txt');
+
+        @unlink(storage_path('app/backups/'.(string) $response->json('safety_backup')));
+        $this->deletePath($source);
+        $this->deletePath($archivePath);
+    }
+
     /* --------------------------------------------------------------- helper */
 
     private function admin(): User

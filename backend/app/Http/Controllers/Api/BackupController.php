@@ -13,6 +13,9 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class BackupController extends Controller
 {
+    /** Format berkas yang boleh diunggah untuk pemulihan data. */
+    private const RESTORE_EXTENSIONS = ['zip', 'sqlite', 'sqlite3', 'db', 'sql'];
+
     public function __construct(private readonly BackupService $backups)
     {
     }
@@ -110,10 +113,23 @@ class BackupController extends Controller
      */
     public function restore(Request $request): JsonResponse
     {
+        // Allowlist dicek dari ekstensi nama berkas, bukan dari tebakan MIME
+        // isi berkas: dump .sql terdeteksi sebagai teks biasa sehingga aturan
+        // `mimes` akan menolaknya berulang kali.
         $validated = $request->validate([
             'password' => ['required', 'string'],
-            'file' => ['required', 'file', 'max:1048576', 'mimes:zip,sqlite,sqlite3,db,sql'],
+            'file' => ['required', 'file', 'max:1048576'],
         ]);
+
+        $file = $request->file('file');
+        $extension = strtolower((string) $file->getClientOriginalExtension());
+
+        if (! in_array($extension, self::RESTORE_EXTENSIONS, true)) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Format berkas tidak didukung. Gunakan arsip .zip hasil Backup Lengkap, atau berkas .sqlite/.db/.sql.',
+            ], 422);
+        }
 
         if (! Hash::check($validated['password'], (string) $request->user()->password)) {
             return response()->json([
@@ -121,9 +137,6 @@ class BackupController extends Controller
                 'message' => 'Password administrator salah. Pemulihan database dibatalkan.',
             ], 422);
         }
-
-        $file = $request->file('file');
-        $extension = strtolower((string) $file->getClientOriginalExtension());
 
         try {
             $result = $extension === 'zip'

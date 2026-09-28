@@ -54,7 +54,9 @@ const PREFERRED_PORT = 8642;
 //  spreadsheet (kecocokan NIM/email, hitungan "unchanged", waktu sinkron).
 //  1.3.0: backup lengkap database + foto, pemulihan (restore) dari berkas
 //  backup, simpan arsip lewat dialog, dan batas unggah PHP diperbesar.
-const TEMPLATE_VERSION = '1.3.0';
+//  1.3.1: perbaikan pemulihan berkas .sql (validasi format memakai ekstensi
+//  nama berkas) dan penolakan entri foto berpath berbahaya pada arsip backup.
+const TEMPLATE_VERSION = '1.3.1';
 const isDev = !app.isPackaged;
 
 /* ------------------------------------------------------------------ paths */
