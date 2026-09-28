@@ -320,6 +320,13 @@ Halaman **Pengaturan Sistem** (menu admin) menyediakan dua hal: mengunduh backup
 | **Backup Lengkap (Database + Foto)** | Arsip `.zip` berisi `database.sqlite`/`database.sql`, seluruh foto pada folder unggahan (`borrow-photos/`, `return-photos/`, `items/`, `branding/`), dan `manifest.json` | Cadangan menyeluruh; hasilnya dapat dipulihkan langsung dari aplikasi |
 | **Download SQLite** / **Download MySQL** | Berkas database saja (`.sqlite` / `.sql`) | Cadangan cepat atau pemakaian lanjutan (mis. dipulihkan lewat alat lain) |
 
+Semua nama berkas unduhan **memuat tanggal dan jam** backup, misalnya
+`backup-lengkap-2026-09-28-142530.zip` (format `YYYY-MM-DD-HHmmss`). Dengan begitu:
+
+- tidak ada lagi nama statis yang saling menimpa — setiap backup menjadi arsip tersendiri;
+- mudah diurutkan dari yang terlama ke yang terbaru, dan langsung terbaca kapan backup dibuat;
+- di aplikasi desktop, dialog simpan berkas sudah menyarankan nama itu sebagai bawaan.
+
 **Memulihkan data (Impor Database)** — bagian **Impor / Pulihkan Database** pada halaman yang sama:
 
 1. Pilih berkas backup (arsip `.zip` hasil Backup Lengkap, atau berkas `.sqlite`/`.sql`).

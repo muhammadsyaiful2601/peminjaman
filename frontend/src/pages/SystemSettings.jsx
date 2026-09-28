@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { DatabaseBackup, Download, Image, KeyRound, Save, Settings2, Upload, X } from 'lucide-react'
 import api from '../api/axios'
 import { useBranding } from '../context/BrandingContext'
-import { downloadBlob } from '../utils/downloadBlob'
+import { downloadBlob, filenameFromResponse, timestampedFilename } from '../utils/downloadBlob'
 
 const textFields = [
   ['app_name', 'Nama aplikasi'],
@@ -88,8 +88,14 @@ function SystemSettings() {
     setError('')
     try {
       const response = await api.post(`/backups/${type}`, { password: backupPassword }, { responseType: 'blob' })
-      const fallbackName = type === 'full' ? 'backup-lengkap.zip' : type === 'mysql' ? 'backup-mysql.sql' : 'backup-sqlite.sqlite'
-      const result = await downloadBlob(response.data, fallbackName)
+      // Nama berkas mengikuti backend (sudah berisi tanggal & jam), mis.
+      // backup-lengkap-2026-09-28-142530.zip, agar tiap backup punya nama
+      // sendiri dan tidak saling menimpa.
+      const fallbackName = timestampedFilename(
+        type === 'full' ? 'backup-lengkap' : type === 'mysql' ? 'backup-mysql' : 'backup-sqlite',
+        type === 'full' ? 'zip' : type === 'mysql' ? 'sql' : 'sqlite',
+      )
+      const result = await downloadBlob(response.data, filenameFromResponse(response, fallbackName))
       if (result && !result.ok && !result.canceled) setError(result.message || 'Backup gagal disimpan.')
       if (!result || result.ok || result.canceled) {
         setBackupType('')

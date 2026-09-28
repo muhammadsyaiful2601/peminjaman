@@ -60,7 +60,9 @@ const PREFERRED_PORT = 8642;
 //  pilihan backup sekarang / nanti / buka pengaturan dengan password admin).
 //  1.4.1: rapikan teks antarmuka - hapus catatan panjang pada form pemulihan
 //  database dan penyederhanaan placeholder kolom Username di halaman login.
-const TEMPLATE_VERSION = '1.4.1';
+//  1.4.2: nama berkas backup ikut tanggal & jam (backup-lengkap-YYYY-MM-DD-HHmmss.zip)
+//  sehingga tiap backup punya nama sendiri dan tidak saling menimpa.
+const TEMPLATE_VERSION = '1.4.2';
 const isDev = !app.isPackaged;
 
 /* ------------------------------------------------------------------ paths */

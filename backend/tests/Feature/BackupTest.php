@@ -104,6 +104,30 @@ class BackupTest extends TestCase
         $this->deletePath($snapshotPath);
     }
 
+    public function test_nama_berkas_backup_memuat_tanggal_dan_jam(): void
+    {
+        Sanctum::actingAs($this->admin());
+
+        // Nama unduhan harus unik per backup (mengandung tanggal & jam) agar
+        // arsip lama tidak tertimpa oleh backup berikutnya.
+        // Format: backup-lengkap-YYYY-MM-DD-HHmmss.zip
+        $cases = [
+            '/api/backups/full' => '/backup-lengkap-\d{4}-\d{2}-\d{2}-\d{6}\.zip/',
+            '/api/backups/sqlite' => '/backup-sqlite-\d{4}-\d{2}-\d{2}-\d{6}\.sqlite/',
+        ];
+
+        foreach ($cases as $url => $pattern) {
+            $response = $this->postJson($url, ['password' => 'rahasia']);
+            $response->assertOk();
+
+            $disposition = (string) $response->headers->get('content-disposition');
+            $this->assertMatchesRegularExpression($pattern, $disposition, "Nama berkas pada {$url} harus berisi tanggal & jam.");
+
+            $file = $response->baseResponse->getFile();
+            $this->deletePath($file->getPathname());
+        }
+    }
+
     public function test_password_salah_tidak_membuat_backup(): void
     {
         Sanctum::actingAs($this->admin());

@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { CalendarClock, DatabaseBackup, KeyRound, Loader2, ShieldCheck, X } from 'lucide-react'
 import api from '../api/axios'
 import { useAuth } from '../context/AuthContext'
-import { downloadBlob } from '../utils/downloadBlob'
+import { downloadBlob, filenameFromResponse, timestampedFilename } from '../utils/downloadBlob'
 
 /**
  * Pengingat backup mingguan.
@@ -92,7 +92,12 @@ function WeeklyBackupReminder() {
 
     try {
       const response = await api.post('/backups/full', { password }, { responseType: 'blob', timeout: 15 * 60 * 1000 })
-      const result = await downloadBlob(response.data, 'backup-lengkap.zip')
+      // Nama berkas mengikuti backend (berisi tanggal & jam backup), mis.
+      // backup-lengkap-2026-09-28-142530.zip.
+      const result = await downloadBlob(
+        response.data,
+        filenameFromResponse(response, timestampedFilename('backup-lengkap', 'zip')),
+      )
 
       if (result && !result.ok && !result.canceled) {
         setFeedback({ ok: false, message: result.message || 'Backup gagal disimpan.' })
