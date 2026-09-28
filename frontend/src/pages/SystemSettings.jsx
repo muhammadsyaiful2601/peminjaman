@@ -76,6 +76,10 @@ function SystemSettings() {
   const [restoring, setRestoring] = useState(false)
   const [restoreMessage, setRestoreMessage] = useState('')
   const [restoreError, setRestoreError] = useState('')
+  // Peringatan pemulihan (mis. foto tidak ikut dipulihkan) dipisahkan dari
+  // pesan sukses agar mudah dikenali dan tidak dianggap "semuanya beres".
+  const [restoreWarnings, setRestoreWarnings] = useState([])
+  const [finalizing, setFinalizing] = useState(false)
   const restoreInputRef = useRef(null)
 
   // Tab khusus desktop disembunyikan di web; bila tab aktif tidak tersedia
@@ -145,6 +149,7 @@ function SystemSettings() {
     event.preventDefault()
     setRestoreMessage('')
     setRestoreError('')
+    setRestoreWarnings([])
 
     if (!restoreFile) {
       setRestoreError('Pilih berkas backup (.zip/.sqlite/.sql) terlebih dahulu.')
@@ -171,19 +176,62 @@ function SystemSettings() {
       const response = await api.post('/backups/restore', payload, { timeout: 15 * 60 * 1000 })
 
       setRestoreMessage(response.data?.message || 'Database berhasil dipulihkan.')
+      setRestoreWarnings(response.data?.warnings || [])
       setRestorePassword('')
       setRestoreFile(null)
       if (restoreInputRef.current) restoreInputRef.current.value = ''
 
-      // Seluruh isi aplikasi berganti: muat ulang agar tampilan memakai data
-      // hasil pemulihan (dan login ulang bila akun ikut berubah).
-      window.setTimeout(() => window.location.reload(), 3000)
+      setRestoring(false)
+      await finalizeRestore()
     } catch (err) {
       const data = err.response?.data
       setRestoreError(data?.errors ? Object.values(data.errors).flat().join(', ') : data?.message || 'Pemulihan database gagal.')
-    } finally {
       setRestoring(false)
     }
+  }
+
+  /**
+   * Selesaikan pemulihan: rapikan skema lalu muat ulang halaman.
+   *
+   * Data hasil backup bisa berasal dari versi aplikasi yang lebih lama, sehingga
+   * tabel/kolom baru belum ada. Aplikasi desktop menjalankan migrasi hanya saat
+   * boot, jadi tanpa langkah ini beberapa halaman tetap bermasalah sampai
+   * aplikasi ditutup dan dibuka ulang. Di aplikasi desktop, migrasi +
+   * restart server dijalankan lewat jembatan desktop (window.desktop).
+   */
+  const finalizeRestore = async () => {
+    setFinalizing(true)
+    setRestoreMessage((current) => current || 'Memuat ulang aplikasi...')
+
+    if (isDesktop && typeof window.desktop?.afterRestore === 'function') {
+      let failure = null
+
+      try {
+        const result = await window.desktop.afterRestore()
+        if (result && result.ok === false) {
+          failure = result.message || 'Migrasi setelah pemulihan belum selesai.'
+        }
+      } catch {
+        // Jembatan desktop tidak tersedia: lanjutkan seperti mode web.
+        failure = null
+      }
+
+      if (failure !== null) {
+        // Penyiapan gagal: jangan paksa muat ulang karena gejalanya persis
+        // "halaman tidak berfungsi" — tampilkan peringatan + tombol manual.
+        setRestoreWarnings((current) => [
+          ...current,
+          failure,
+        ])
+        setFinalizing(false)
+
+        return
+      }
+    }
+
+    // Seluruh isi aplikasi berganti: muat ulang agar tampilan memakai data
+    // hasil pemulihan (dan login ulang bila akun ikut berubah).
+    window.location.reload()
   }
 
   const handleSubmit = async (event) => {
@@ -371,6 +419,7 @@ function SystemSettings() {
                 setRestoreFile(event.target.files?.[0] || null)
                 setRestoreMessage('')
                 setRestoreError('')
+                setRestoreWarnings([])
               }}
               className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-slate-700 hover:file:bg-slate-200"
             />
@@ -387,20 +436,43 @@ function SystemSettings() {
           </label>
         </div>
 
-        {restoreMessage && <p className="mt-4 rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{restoreMessage}</p>}
+        {restoreMessage && (
+          <div className="mt-4 rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+            <p>{restoreMessage}</p>
+            {restoreWarnings.map((warning) => (
+              <p key={warning} className="mt-2 rounded-md bg-amber-50 px-3 py-2 text-amber-800">
+                <strong className="font-semibold">Perhatian: </strong>
+                {warning}
+              </p>
+            ))}
+            {finalizing ? (
+              <p className="mt-2 text-xs text-emerald-700">Menyiapkan aplikasi lalu memuat ulang halaman...</p>
+            ) : (
+              <button
+                type="button"
+                onClick={finalizeRestore}
+                className="mt-2 rounded-md border border-emerald-300 px-3 py-1.5 text-xs font-semibold text-emerald-800 hover:bg-emerald-100"
+              >
+                Muat ulang sekarang
+              </button>
+            )}
+          </div>
+        )}
         {restoreError && <p className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{restoreError}</p>}
 
         <button
           type="submit"
-          disabled={restoring}
+          disabled={restoring || finalizing}
           className="mt-5 inline-flex items-center gap-2 rounded-lg bg-amber-600 px-5 py-2.5 font-semibold text-white hover:bg-amber-700 disabled:opacity-50"
         >
           <Upload className={`h-4 w-4 ${restoring ? 'animate-pulse' : ''}`} />
           {restoring ? 'Memulihkan data...' : 'Pulihkan Data Sekarang'}
         </button>
-        {restoring && (
+        {(restoring || finalizing) && (
           <p className="mt-2 text-xs text-slate-500">
-            Proses ini dapat memakan waktu beberapa menit bila arsip memuat banyak foto. Jangan tutup jendela aplikasi.
+            {restoring
+              ? 'Proses ini dapat memakan waktu beberapa menit bila arsip memuat banyak foto. Jangan tutup jendela aplikasi.'
+              : 'Menjalankan migrasi database lalu memuat ulang aplikasi...'}
           </p>
         )}
       </form>

@@ -55,4 +55,49 @@ class DesktopRuntimeTest extends TestCase
             );
         }
     }
+
+    /**
+     * Setelah pemulihan database, skema harus langsung dilengkapi.
+     *
+     * `php artisan migrate` hanya dijalankan saat aplikasi dinyalakan
+     * (main.js -> boot()). Kalau pemulihan tidak memanggilnya lagi, data dari
+     * backup versi lama membuat tabel/kolom baru tidak pernah ada dan
+     * beberapa halaman tidak berfungsi sampai aplikasi direstart.
+     */
+    public function test_pemulihan_database_meminta_migrasi_lalu_restart_backend(): void
+    {
+        $main = (string) file_get_contents($this->desktopMain());
+        $preload = (string) file_get_contents($this->desktopPreload());
+
+        $this->assertStringContainsString(
+            "ipcMain.handle('app:after-restore'",
+            $main,
+            'Jembatan setelah pemulihan harus tetap ada di main process.',
+        );
+
+        $handler = substr($main, (int) strpos($main, "ipcMain.handle('app:after-restore'"));
+        $handler = substr($handler, 0, (int) strpos($handler, '});') ?: null);
+
+        $this->assertStringContainsString(
+            "runArtisan(['migrate', '--force'])",
+            (string) $handler,
+            'Setelah pemulihan, migrasi wajib dijalankan (data backup bisa versi lama).',
+        );
+        $this->assertStringContainsString('restartBackend()', (string) $handler);
+        $this->assertStringContainsString(
+            'afterRestore:',
+            $preload,
+            'preload harus membridge-kan afterRestore ke halaman.',
+        );
+    }
+
+    private function desktopMain(): string
+    {
+        return dirname(__DIR__, 3).'/desktop/main.js';
+    }
+
+    private function desktopPreload(): string
+    {
+        return dirname(__DIR__, 3).'/desktop/preload.js';
+    }
 }

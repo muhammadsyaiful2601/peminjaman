@@ -21,6 +21,9 @@ contextBridge.exposeInMainWorld('desktop', {
   saveMailSettings: (payload) => ipcRenderer.invoke('mail:save', payload),
   testMailSettings: (payload) => ipcRenderer.invoke('mail:test', payload),
   getDesktopKey: () => ipcRenderer.invoke('desktop:get-key'),
+  // Dipanggil setelah pemulihan database: migrate + restart server backend
+  // agar skema database versi lama langsung dilengkapi tanpa restart aplikasi.
+  afterRestore: () => ipcRenderer.invoke('app:after-restore'),
   importStudentsFromCsv: (csvUrl) => ipcRenderer.invoke('students:import-published-csv', csvUrl),
   getUpdateState: () => ipcRenderer.invoke('update:get-state'),
   checkForUpdates: () => ipcRenderer.invoke('update:check'),

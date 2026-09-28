@@ -66,7 +66,13 @@ const PREFERRED_PORT = 8642;
 //  aplikasi) dipindahkan ke Pengaturan Sistem; tombol gear dihapus.
 //  1.4.4: aktifkan ekstensi pdo_mysql pada runtime PHP desktop. Tanpa ini mode
 //  hybrid selalu gagal "could not find driver" karena hanya sqlite tersedia.
-const TEMPLATE_VERSION = '1.4.4';
+//  1.4.5: perbaikan pemulihan (restore) database — salin tabel lewat tabel
+//  sementara (backup versi lama punya tabel yang belum ada di aplikasi sekarang
+//  sehingga penggantian tabel gagal "no such table"), path foto versi lama
+//  dirapikan, jumlah foto yang hilang dilaporkan, salinan pengaman dibuat
+//  sebelum database ditimpa, dan setelah pemulihan otomatis migrate + restart
+//  backend (perbaikan "foto tak terbaca" & "halaman macet sampai restart").
+const TEMPLATE_VERSION = '1.4.5';
 const isDev = !app.isPackaged;
 
 /* ------------------------------------------------------------------ paths */
@@ -1703,6 +1709,31 @@ function registerIpc() {
 
   // Mode hybrid: kunci X-Desktop-Key untuk request /api/hybrid/* dari SPA.
   ipcMain.handle('desktop:get-key', () => config.desktopKey || '');
+
+  /**
+   * Penyipan setelah pemulihan database.
+   *
+   * Migrasi hanya dijalankan saat aplikasi dinyalakan, sedangkan pemulihan
+   * bisa mengembalikan database dari versi aplikasi yang lebih lama. Tanpa
+   * migrate di sini, tabel/kolom baru tidak pernah dibuat dan beberapa
+   * halaman tidak berfungsi sampai aplikasi ditutup lalu dibuka ulang.
+   */
+  ipcMain.handle('app:after-restore', async () => {
+    try {
+      restartingBackend = true;
+      await runArtisan(['migrate', '--force']);
+      await restartBackend();
+      return { ok: true };
+    } catch (e) {
+      return {
+        ok: false,
+        message: 'Migrasi setelah pemulihan belum selesai (' + String((e && e.message) || e)
+          + '). Tutup lalu buka aplikasi agar skema database lengkap.',
+      };
+    } finally {
+      restartingBackend = false;
+    }
+  });
 }
 
 /* ------------------------------------------------------------------ menu */

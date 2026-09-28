@@ -191,7 +191,12 @@ class BackupTest extends TestCase
             'file' => new UploadedFile($source, 'backup.sqlite', 'application/octet-stream', null, true),
         ]);
 
-        $response->assertOk()->assertJsonPath('ok', true);
+        // Berkas database saja tidak memuat berkas foto, dan hasil pemulihan
+        // harus menyatakan itu secara eksplisit (bukan diam-diam sukses).
+        $response->assertOk()
+            ->assertJsonPath('ok', true)
+            ->assertJsonPath('photos.included', false)
+            ->assertJsonPath('photos.files', 0);
 
         $pdo = new PDO('sqlite:'.$this->databasePath);
         $this->assertSame(['Hendra Pratama'], $pdo->query('SELECT name FROM students')->fetchAll(PDO::FETCH_COLUMN));
@@ -323,6 +328,118 @@ class BackupTest extends TestCase
         $this->deletePath($archivePath);
     }
 
+    /* ------------------------------------------- regresi: foto & skema data */
+
+    /**
+     * Backup versi lama menyimpan path foto dengan prefiks `storage/`.
+     * Migrasi perbaikannya tidak akan terulang saat pemulihan (tabel
+     * `migrations` ikut kembali), jadi pemulihan harus merapikannya sendiri.
+     */
+    public function test_pemulihan_memperbaiki_path_foto_lama_dari_backup_versi_lama(): void
+    {
+        Sanctum::actingAs($this->admin());
+
+        $this->putPhoto('items/lama.jpg', 'foto-lama');
+        $this->putPhoto('borrow-photos/pinjam.jpg', 'foto-peminjam');
+        $this->putPhoto('items/tambahan.jpg', 'foto-tambahan');
+
+        $source = $this->temporaryPath('lama', 'sqlite');
+        $this->createLegacyPhotoDatabase($source, [
+            'items' => 'storage/items/lama.jpg',
+            'loans' => '/storage/borrow-photos/pinjam.jpg',
+            'item_images' => 'public/storage/items/tambahan.jpg',
+        ]);
+
+        $archivePath = $this->temporaryPath('lama', 'zip');
+        $zip = new ZipArchive();
+        $zip->open($archivePath, ZipArchive::CREATE | ZipArchive::OVERWRITE);
+        $zip->addFile($source, 'database.sqlite');
+        $zip->close();
+
+        $response = $this->post('/api/backups/restore', [
+            'password' => 'rahasia',
+            'file' => new UploadedFile($archivePath, 'backup-lengkap.zip', 'application/zip', null, true),
+        ]);
+
+        // Setelah dirapikan semua path ada berkasnya -> tidak ada foto hilang.
+        $response->assertOk()
+            ->assertJsonPath('ok', true)
+            ->assertJsonPath('photos.missing', 0)
+            ->assertJsonPath('photos.referenced', 3)
+            ->assertJsonPath('warnings', []);
+
+        $pdo = new PDO('sqlite:'.$this->databasePath);
+        $this->assertSame('items/lama.jpg', $pdo->query('SELECT image FROM items')->fetchColumn());
+        $this->assertSame('borrow-photos/pinjam.jpg', $pdo->query('SELECT borrow_photo FROM loans')->fetchColumn());
+        $this->assertSame('items/tambahan.jpg', $pdo->query('SELECT path FROM item_images')->fetchColumn());
+
+        @unlink(storage_path('app/backups/'.(string) $response->json('safety_backup')));
+        $this->deletePath($source);
+        $this->deletePath($archivePath);
+    }
+
+    /**
+     * Kalau foto dirujuk database tapi berkasnya tidak ada, pengguna harus
+     * diberi tahu (dulu aplikasi hanya menampilkan "berhasil dipulihkan").
+     */
+    public function test_pemulihan_memberi_peringatan_tentang_foto_yang_tidak_ada(): void
+    {
+        Sanctum::actingAs($this->admin());
+
+        $source = $this->temporaryPath('hilang', 'sqlite');
+        $this->createLegacyPhotoDatabase($source, ['items' => 'items/hilang.jpg']);
+
+        $response = $this->post('/api/backups/restore', [
+            'password' => 'rahasia',
+            'file' => new UploadedFile($source, 'backup.sqlite', 'application/octet-stream', null, true),
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('ok', true)
+            ->assertJsonPath('photos.missing', 1)
+            ->assertJsonPath('photos.sample.0', 'items/hilang.jpg');
+
+        $warnings = implode(' ', (array) $response->json('warnings'));
+        $this->assertStringContainsString('tanpa berkas foto', $warnings);
+        $this->assertStringContainsString('items/hilang.jpg', $warnings);
+
+        @unlink(storage_path('app/backups/'.(string) $response->json('safety_backup')));
+        $this->deletePath($source);
+    }
+
+    /**
+     * Salinan pengaman harus berisi data SEBELUM pemulihan. Dahulu salinan
+     * dibuat setelah database ditimpa, sehingga isinya justru data hasil
+     * pemulihan dan tidak bisa dipakai membatalkan kesalahan.
+     */
+    public function test_salinan_pengaman_menyimpan_data_sebelum_pemulihan(): void
+    {
+        Sanctum::actingAs($this->admin());
+
+        $source = $this->temporaryPath('safety', 'sqlite');
+        $this->createSqliteDatabase($source, ['Siti Aminah']);
+
+        $response = $this->post('/api/backups/restore', [
+            'password' => 'rahasia',
+            'file' => new UploadedFile($source, 'backup.sqlite', 'application/octet-stream', null, true),
+        ]);
+
+        $response->assertOk()->assertJsonPath('ok', true);
+
+        $safetyPath = storage_path('app/backups/'.(string) $response->json('safety_backup'));
+        $this->assertFileExists($safetyPath);
+
+        $pdo = new PDO('sqlite:'.$safetyPath);
+        $this->assertSame(
+            ['Budi Santoso'],
+            $pdo->query('SELECT name FROM students')->fetchAll(PDO::FETCH_COLUMN),
+            'Salinan pengaman harus memuat data sebelum pemulihan, bukan sesudahnya.',
+        );
+
+        @unlink($safetyPath);
+        $this->deletePath($source);
+    }
+
     /* ------------------------------------------------------ backup mingguan */
 
     public function test_pengingat_muncul_bila_belum_pernah_backup(): void
@@ -437,6 +554,44 @@ class BackupTest extends TestCase
 
         foreach ($names as $name) {
             $statement->execute([$name]);
+        }
+    }
+
+    /**
+     * Database dengan bentuk versi lama: tabel foto memakai path berprefiks
+     * `storage/` persis seperti yang ditulis versi aplikasi sebelumnya.
+     *
+     * @param  array<string, string>  $photos  Nama tabel => path foto pada tabel itu.
+     */
+    private function createLegacyPhotoDatabase(string $path, array $photos): void
+    {
+        $this->deletePath($path);
+
+        $pdo = new PDO('sqlite:'.$path, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+        $pdo->exec('CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, email VARCHAR NOT NULL)');
+        $pdo->exec('CREATE TABLE students (id INTEGER PRIMARY KEY AUTOINCREMENT, name VARCHAR NOT NULL, email VARCHAR NOT NULL DEFAULT "")');
+        $pdo->exec('CREATE TABLE app_settings (id INTEGER PRIMARY KEY AUTOINCREMENT, key VARCHAR NOT NULL UNIQUE, value TEXT NULL, created_at DATETIME NULL, updated_at DATETIME NULL)');
+        $pdo->exec('INSERT INTO users (email) VALUES ("admin@example.com")');
+
+        if (isset($photos['items'])) {
+            $pdo->exec('CREATE TABLE items (id INTEGER PRIMARY KEY AUTOINCREMENT, name VARCHAR NOT NULL, image VARCHAR NULL)');
+            $pdo->exec('INSERT INTO items (name, image) VALUES ("Barang uji", '.$pdo->quote($photos['items']).')');
+        } else {
+            $pdo->exec('CREATE TABLE items (id INTEGER PRIMARY KEY AUTOINCREMENT, name VARCHAR NOT NULL, image VARCHAR NULL)');
+        }
+
+        if (isset($photos['loans'])) {
+            $pdo->exec('CREATE TABLE loans (id INTEGER PRIMARY KEY AUTOINCREMENT, borrow_photo VARCHAR NULL, return_photo VARCHAR NULL)');
+            $pdo->exec('INSERT INTO loans (borrow_photo) VALUES ('.$pdo->quote($photos['loans']).')');
+        } else {
+            $pdo->exec('CREATE TABLE loans (id INTEGER PRIMARY KEY AUTOINCREMENT, borrow_photo VARCHAR NULL, return_photo VARCHAR NULL)');
+        }
+
+        if (isset($photos['item_images'])) {
+            $pdo->exec('CREATE TABLE item_images (id INTEGER PRIMARY KEY AUTOINCREMENT, item_id INTEGER NOT NULL, path VARCHAR NOT NULL)');
+            $pdo->exec('INSERT INTO item_images (item_id, path) VALUES (1, '.$pdo->quote($photos['item_images']).')');
+        } else {
+            $pdo->exec('CREATE TABLE item_images (id INTEGER PRIMARY KEY AUTOINCREMENT, item_id INTEGER NOT NULL, path VARCHAR NOT NULL)');
         }
     }
 

@@ -181,11 +181,25 @@ class BackupController extends Controller
             ], 422);
         }
 
-        $photos = $result['photos']['files'] ?? null;
+        $photos = $result['photos'];
         $message = 'Database berhasil dipulihkan.';
+        $warnings = [];
 
-        if ($photos !== null) {
-            $message .= " {$photos} berkas foto ikut dipulihkan.";
+        if ($photos['included']) {
+            $message .= " {$photos['files']} berkas foto ikut dipulihkan.";
+        } else {
+            // Berkas .sqlite/.sql memang tidak memuat berkas foto. Sebutkan
+            // eksplisit supaya pengguna tidak mengira semua foto ikut pulih:
+            // hasil pemulihan tetap menunjuk foto yang sudah ada di folder
+            // unggahan, tetapi tidak menambahkan berkas foto baru.
+            $warnings[] = 'Berkas yang dipulihkan hanya berisi database, tanpa berkas foto. '
+                .'Untuk memulihkan foto sekalian, gunakan arsip .zip hasil "Backup Lengkap".';
+        }
+
+        if ($photos['missing'] > 0) {
+            $warnings[] = "{$photos['missing']} dari {$photos['referenced']} foto yang dirujuk database tidak ditemukan di folder unggahan"
+                .($photos['sample'] ? ' (contoh: '.implode(', ', $photos['sample']).')' : '')
+                .'. Foto tersebut akan tampil kosong; salin berkas fotonya ke folder unggahan atau pulihkan dari arsip .zip.';
         }
 
         if ($result['safety_backup'] !== null) {
@@ -199,14 +213,18 @@ class BackupController extends Controller
         Log::info('Database dipulihkan dari backup oleh '.$request->user()->email.'.', [
             'database' => $result['database'],
             'photos' => $photos,
+            'warnings' => $warnings,
             'safety_backup' => $result['safety_backup'],
         ]);
 
         return response()->json([
             'ok' => true,
             'message' => $message,
+            // Peringatan dipisah dari `message` supaya antarmuka bisa
+            // menampilkannya sebagai kotak perhatian (kuning/merah).
+            'warnings' => $warnings,
             'database' => $result['database'],
-            'photos' => $result['photos'],
+            'photos' => $photos,
             'safety_backup' => $result['safety_backup'],
         ]);
     }

@@ -7,6 +7,7 @@ use App\Support\Hybrid;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use PDO;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
@@ -358,7 +359,7 @@ class BackupService
     /**
      * Pulihkan database + foto dari arsip backup lengkap (ZIP).
      *
-     * @return array{ database: array, photos: ?array, safety_backup: ?string }
+     * @return array{ database: array, photos: array, safety_backup: ?string }
      */
     public function restoreArchive(string $archivePath): array
     {
@@ -378,30 +379,38 @@ class BackupService
     /**
      * Pulihkan berkas database saja (tanpa arsip): .sqlite/.db atau dump .sql.
      *
-     * @return array{ database: array, photos: ?array, safety_backup: ?string }
+     * Berkas seperti ini TIDAK memuat foto, jadi hasil pemulihannya selalu
+     * disertai audit foto (lihat describeRestorePhotos()).
+     *
+     * @return array{ database: array, photos: array, safety_backup: ?string }
      */
     public function restoreDatabaseOnly(string $path, string $extension): array
     {
+        // Salinan pengaman harus dibuat SEBELUM database ditimpa. Dahulu
+        // salinan dibuat sesudah, sehingga "salinan sebelum pemulihan"
+        // berisi data hasil pemulihan dan tidak bisa membatalkan kesalahan.
+        $safety = $this->safetyCopy();
+
         if (in_array($extension, ['sqlite', 'sqlite3', 'db'], true)) {
             if ($this->driver() !== 'sqlite') {
                 throw new RuntimeException('Berkas SQLite hanya dapat dipulihkan bila aplikasi memakai SQLite.');
             }
 
-            return [
-                'database' => $this->restoreSqliteFile($path),
-                'photos' => null,
-                'safety_backup' => $this->safetyCopy(),
-            ];
+            $database = $this->restoreSqliteFile($path);
+        } else {
+            if ($this->driver() !== 'mysql' && ! $this->isHybridAvailable()) {
+                throw new RuntimeException('Berkas dump .sql hanya dapat dipulihkan bila aplikasi memakai MySQL.');
+            }
+
+            $database = $this->restoreSqlDump((string) file_get_contents($path));
         }
 
-        if ($this->driver() !== 'mysql' && ! $this->isHybridAvailable()) {
-            throw new RuntimeException('Berkas dump .sql hanya dapat dipulihkan bila aplikasi memakai MySQL.');
-        }
+        $this->repairPhotoReferences();
 
         return [
-            'database' => $this->restoreSqlDump((string) file_get_contents($path)),
-            'photos' => null,
-            'safety_backup' => $this->safetyCopy(),
+            'database' => $database,
+            'photos' => $this->describeRestorePhotos(false),
+            'safety_backup' => $safety,
         ];
     }
 
@@ -463,6 +472,12 @@ class BackupService
 
         $safety = $this->safetyCopy();
 
+        // Foto diekstrak lebih dulu, baru database ditimpa. Urutan ini penting:
+        // bila ekstraksi foto gagal, database lama masih utuh. Kalau dibalik,
+        // database hasil pemulihan bisa menunjuk foto yang belum pernah ditulis
+        // sehingga seluruh foto di halaman menjadi rusak.
+        $photos = $this->extractPhotos($zip);
+
         if ($hasSqliteArchive) {
             $temporaryDirectory = $this->makeTemporaryDirectory();
             $temporary = $temporaryDirectory.DIRECTORY_SEPARATOR.self::ARCHIVE_DATABASE_SQLITE;
@@ -477,9 +492,11 @@ class BackupService
             $database = $this->restoreSqlDump((string) $zip->getFromName(self::ARCHIVE_DATABASE_SQL));
         }
 
+        $this->repairPhotoReferences();
+
         return [
             'database' => $database,
-            'photos' => $this->extractPhotos($zip),
+            'photos' => $this->describeRestorePhotos(true, $photos),
             'safety_backup' => $safety,
         ];
     }
@@ -508,6 +525,7 @@ class BackupService
 
         $tables = [];
         $indexes = [];
+        $staged = [];
 
         try {
             $tables = $pdo->query("SELECT name, sql FROM restored_backup.sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")
@@ -515,21 +533,38 @@ class BackupService
             $indexes = $pdo->query("SELECT sql FROM restored_backup.sqlite_master WHERE type = 'index' AND sql IS NOT NULL")
                 ->fetchAll(PDO::FETCH_COLUMN);
 
+            // Tahap 1: salin isi backup ke tabel sementara (tabel `main` belum
+            // disentuh sama sekali). Urutan ini wajib: begitu tabel dengan nama
+            // sama dibuat di `main`, SQLite berhenti dapat membaca
+            // `restored_backup.<nama>` dan query salin gagal dengan
+            // "no such table". Backup versi lama justru punya tabel yang belum
+            // ada di aplikasi sekarang (mis. `item_images`), jadi kasus ini
+            // selalu terjadi saat memulihkan backup versi lama.
+            foreach (array_keys($tables) as $position) {
+                $stage = 'laravel_restore_stage_'.$position;
+
+                $pdo->exec('DROP TABLE IF EXISTS temp."'.$stage.'"');
+                $pdo->exec(
+                    'CREATE TEMP TABLE "'.$stage.'" AS SELECT * FROM restored_backup.'
+                    .$this->quoteSqliteIdentifier((string) $tables[$position]['name']),
+                );
+                $staged[$position] = $stage;
+            }
+
             $pdo->beginTransaction();
 
             try {
-                foreach ($tables as $table) {
+                // Tahap 2: ganti tabel di `main`, lalu isi dari tabel sementara
+                // (bukan dari arsip) supaya tidak ada konflik nama.
+                foreach ($tables as $position => $table) {
                     $name = $this->quoteSqliteIdentifier((string) $table['name']);
                     $pdo->exec("DROP TABLE IF EXISTS {$name}");
 
                     if (trim((string) $table['sql']) !== '') {
                         $pdo->exec((string) $table['sql']);
                     }
-                }
 
-                foreach ($tables as $table) {
-                    $name = $this->quoteSqliteIdentifier((string) $table['name']);
-                    $pdo->exec("INSERT INTO {$name} SELECT * FROM restored_backup.{$name}");
+                    $pdo->exec('INSERT INTO '.$name.' SELECT * FROM temp."'.$staged[$position].'"');
                 }
 
                 foreach ($indexes as $indexSql) {
@@ -547,6 +582,10 @@ class BackupService
         } catch (Throwable $e) {
             throw new RuntimeException('Database gagal dipulihkan: '.$e->getMessage());
         } finally {
+            foreach ($staged as $stage) {
+                $pdo->exec('DROP TABLE IF EXISTS temp."'.$stage.'"');
+            }
+
             $pdo->exec('DETACH DATABASE restored_backup');
             $pdo->exec('PRAGMA foreign_keys = ON');
         }
@@ -619,6 +658,101 @@ class BackupService
         return ['files' => $copied];
     }
 
+    /**
+     * Ringkasan kondisi foto setelah pemulihan: berapa berkas yang ikut pulih
+     * dan berapa path foto pada database yang berkasnya benar-benar tidak ada.
+     *
+     * @param  array{ files: int }|null  $extracted  Hasil extractPhotos() (null bila arsip tidak memuat foto).
+     * @return array{ included: bool, files: int, referenced: int, missing: int, sample: array<int, string> }
+     */
+    private function describeRestorePhotos(bool $archive, ?array $extracted = null): array
+    {
+        $audit = $this->auditPhotoReferences();
+
+        return [
+            // false = berkas yang dipulihkan memang tidak membawa foto.
+            'included' => $archive,
+            'files' => (int) ($extracted['files'] ?? 0),
+            'referenced' => $audit['referenced'],
+            'missing' => $audit['missing'],
+            'sample' => $audit['sample'],
+        ];
+    }
+
+    /**
+     * Daftar kolom yang menyimpan path foto pada database.
+     *
+     * Tabel/kolom diperiksa satu per satu karena hasil pemulihan bisa berasal
+     * dari versi aplikasi lama (mis. tanpa tabel `item_images`).
+     *
+     * @return array<int, array{0: string, 1: string}>
+     */
+    private function photoReferenceColumns(): array
+    {
+        return [
+            ['items', 'image'],
+            ['item_images', 'path'],
+            ['loans', 'borrow_photo'],
+            ['loans', 'return_photo'],
+        ];
+    }
+
+    /**
+     * Rapikan path foto hasil pemulihan (khususnya data versi lama).
+     *
+     * Backup versi lama menyimpan path dengan prefiks `storage/` atau
+     * `public/storage/`, sedangkan frontend kini meminta `/storage/<path>`.
+     * Migrasi `fix_photo_paths_in_loans_table` pernah membetulkan kolom
+     * `loans`, tetapi saat pemulihan tabel `migrations` ikut kembali ke versi
+     * lama sehingga migrasi itu dianggap sudah berjalan dan TIDAK diulang —
+     * foto hasil pemulihan lalu gagal dimuat. Perbaikan diulang di sini,
+     * berlaku untuk semua kolom foto dan aman bila tabel/kolom belum ada.
+     */
+    private function repairPhotoReferences(): int
+    {
+        $fixed = 0;
+
+        foreach ($this->photoReferenceColumns() as [$table, $column]) {
+            if (! $this->hasPhotoColumn($table, $column)) {
+                continue;
+            }
+
+            try {
+                foreach ($this->photoRows($table, $column) as $key => $value) {
+                    if (! is_string($value)) {
+                        continue;
+                    }
+
+                    $path = $this->normalizePhotoPath($value);
+
+                    if ($path === null || $path === $value) {
+                        continue;
+                    }
+
+                    $query = DB::connection($this->restoreConnection())->table($table);
+
+                    if (is_int($key)) {
+                        $query->where('id', $key);
+                    }
+
+                    $query->update([$column => $path]);
+                    $fixed++;
+                }
+            } catch (Throwable $e) {
+                Log::warning('Path foto hasil pemulihan tidak dapat dirapikan: '.$e->getMessage(), [
+                    'table' => $table,
+                    'column' => $column,
+                ]);
+            }
+        }
+
+        if ($fixed > 0) {
+            Log::info("{$fixed} path foto hasil pemulihan dirapikan ke format folder unggahan.");
+        }
+
+        return $fixed;
+    }
+
     private function extractEntry(ZipArchive $zip, string $entry, string $target): void
     {
         $stream = $zip->getStream($entry);
@@ -638,6 +772,125 @@ class BackupService
         stream_copy_to_stream($stream, $output);
         fclose($stream);
         fclose($output);
+    }
+
+    /**
+     * Hitung path foto pada database yang berkasnya tidak ada di folder unggahan.
+     *
+     * @return array{ referenced: int, missing: int, sample: array<int, string> }
+     */
+    private function auditPhotoReferences(): array
+    {
+        $paths = [];
+
+        foreach ($this->photoReferenceColumns() as [$table, $column]) {
+            if (! $this->hasPhotoColumn($table, $column)) {
+                continue;
+            }
+
+            try {
+                $rows = $this->photoRows($table, $column);
+            } catch (Throwable $e) {
+                Log::warning('Audit foto setelah pemulihan dilewati: '.$e->getMessage(), [
+                    'table' => $table,
+                    'column' => $column,
+                ]);
+
+                continue;
+            }
+
+            foreach ($rows as $value) {
+                if (! is_string($value)) {
+                    continue;
+                }
+
+                $path = $this->normalizePhotoPath($value);
+
+                if ($path !== null) {
+                    $paths[$path] = true;
+                }
+            }
+        }
+
+        $root = rtrim($this->uploadsRoot(), '\\/');
+        $missing = [];
+
+        foreach (array_keys($paths) as $path) {
+            if (! @is_file($root.DIRECTORY_SEPARATOR.str_replace('/', DIRECTORY_SEPARATOR, $path))) {
+                $missing[] = $path;
+            }
+        }
+
+        return [
+            'referenced' => count($paths),
+            'missing' => count($missing),
+            'sample' => array_slice($missing, 0, 3),
+        ];
+    }
+
+    /**
+     * Ambil seluruh nilai path foto pada satu kolom.
+     *
+     * Dikembalikan sebagai [id => path] bila kolom kunci `id` tersedia, agar
+     * pembaruan menunjuk tepat satu baris tanpa membaca kolom lain.
+     *
+     * @return array<int|string, mixed>
+     */
+    private function photoRows(string $table, string $column): array
+    {
+        $query = DB::connection($this->restoreConnection())->table($table)->whereNotNull($column);
+
+        return $this->hasPhotoColumn($table, 'id')
+            ? $query->pluck($column, 'id')->all()
+            : $query->pluck($column)->all();
+    }
+
+    /** Koneksi database yang sama dengan yang dipakai proses pemulihan. */
+    private function restoreConnection(): string
+    {
+        return match ($this->driver()) {
+            'sqlite' => 'sqlite',
+            'mysql' => 'mysql',
+            default => Hybrid::CONNECTION,
+        };
+    }
+
+    /** True bila tabel & kolom ada pada koneksi pemulihan. */
+    private function hasPhotoColumn(string $table, string $column): bool
+    {
+        try {
+            $schema = Schema::connection($this->restoreConnection());
+
+            return $schema->hasTable($table) && $schema->hasColumn($table, $column);
+        } catch (Throwable) {
+            return false;
+        }
+    }
+
+    /**
+     * Ubah path foto apa pun menjadi path relatif di dalam folder unggahan.
+     *
+     * Menangani format lama (`storage/...`, `/storage/...`,
+     * `public/storage/...`) maupun URL lengkap, karena frontend selalu
+     * meminta `/storage/<path>`.
+     */
+    private function normalizePhotoPath(?string $value): ?string
+    {
+        $path = trim((string) $value);
+
+        if ($path === '') {
+            return null;
+        }
+
+        $path = str_replace('\\', '/', $path);
+        // Buang skema + host bila path tersimpan sebagai URL lengkap.
+        $path = preg_replace('#^https?://[^/]+/#i', '', $path) ?? $path;
+        $path = ltrim($path, '/');
+        // Buang prefiks symlink klasik yang dipakai versi lama.
+        $path = preg_replace('#^(?:public/)?storage/#', '', $path) ?? $path;
+        $path = trim($path, '/');
+
+        return $path === '' ? null : $path;
     }
 
     /* -------------------------------------------------------------- internal */

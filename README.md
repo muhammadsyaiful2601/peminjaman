@@ -364,10 +364,20 @@ Semua nama berkas unduhan **memuat tanggal dan jam** backup, misalnya
 4. Sebelum menimpa, sistem menyimpan salinan otomatis data saat ini di
    `storage/app/backups/sebelum-restore-<tanggal>.sqlite|.sql`, sehingga masih bisa dikembalikan
    manual bila salah memilih berkas. Nama berkas itu ditampilkan pada pesan hasil pemulihan.
-5. Database diganti dalam satu transaksi (SQLite) sehingga aman walau aplikasi sedang dipakai;
-   foto dari arsip disalin ke folder unggahan (berkas dengan nama sama ditimpa, berkas lain tetap
-   dipertahankan). Halaman dimuat ulang setelah selesai dan Anda mungkin perlu login kembali.
-6. Bila mode hybrid aktif, jalankan **Sinkron Sekarang** di tab **Hosting & Sinkronisasi** agar data
+5. Foto dari arsip disalin ke folder unggahan **lebih dulu**, baru database diganti dalam satu
+   transaksi (SQLite) sehingga aman walau aplikasi sedang dipakai (berkas dengan nama sama
+   ditimpa, berkas lain tetap dipertahankan).
+6. Path foto hasil pemulihan dirapikan ke format folder unggahan. Backup versi lama menulis path
+   berawalan `storage/` dan migrasi perbaikannya tidak akan terulang (tabel `migrations` ikut
+   dikembalikan), sehingga tanpa langkah ini foto tidak terbaca.
+7. Setelah pemulihan, sistem memeriksa setiap foto yang dirujuk database dan memberi tahu bila
+   ada yang berkasnya tidak ada. Pemulihan dari berkas `.sqlite`/`.sql` memang tidak membawa
+   foto — gunakan arsip `.zip` hasil **Backup Lengkap** bila foto ikut dipulihkan.
+8. Di aplikasi desktop, skema database langsung dilengkapi (`php artisan migrate`) lalu server
+   backend direstart, karena data dari backup versi lama belum tentu punya tabel/kolom baru.
+   Tidak perlu menutup dan membuka aplikasi lagi. Halaman dimuat ulang setelah selesai dan Anda
+   mungkin perlu login kembali.
+9. Bila mode hybrid aktif, jalankan **Sinkron Sekarang** di tab **Hosting & Sinkronisasi** agar data
    hosting menyesuaikan hasil pemulihan.
 
 > Pemulihan hanya dapat dilakukan **admin** dan selalu memerlukan password admin. Batas unggah pada
