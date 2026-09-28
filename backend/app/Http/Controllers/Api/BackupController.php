@@ -24,6 +24,7 @@ class BackupController extends Controller
     {
         $driver = (string) config('database.default');
         $hybridAvailable = $this->backups->isHybridAvailable();
+        $reminder = $this->backups->reminder();
 
         return response()->json([
             'driver' => $driver,
@@ -33,6 +34,29 @@ class BackupController extends Controller
             // Backup lengkap (database + seluruh foto) selalu tersedia.
             'full' => true,
             'photos' => $this->backups->photoStats(),
+            // Pengingat backup mingguan (lihat service BackupService::reminder()).
+            'reminder' => $reminder,
+            'last_backup_at' => $reminder['last_backup_at'],
+        ]);
+    }
+
+    /**
+     * Tunda pengingat backup mingguan (tombol "Nanti" pada dialog pengingat).
+     * Default: satu siklus mingguan (7 hari).
+     */
+    public function snoozeReminder(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'days' => ['nullable', 'integer', 'min:1', 'max:60'],
+        ]);
+
+        $days = (int) ($validated['days'] ?? BackupService::REMINDER_INTERVAL_DAYS);
+        $until = $this->backups->snoozeReminder($days);
+
+        return response()->json([
+            'ok' => true,
+            'message' => 'Pengingat backup ditunda sampai '.$until->translatedFormat('l, j F Y').'.',
+            'reminder' => $this->backups->reminder(),
         ]);
     }
 
@@ -68,6 +92,9 @@ class BackupController extends Controller
                 abort(500, $e->getMessage());
             }
 
+            // Arsip siap: pengingat mingguan dihitung ulang dari sekarang.
+            $this->backups->markBackupCreated();
+
             return response()->download(
                 $archivePath,
                 'backup-lengkap-'.now()->format('Y-m-d-His').'.zip',
@@ -86,6 +113,8 @@ class BackupController extends Controller
                 abort(500, $e->getMessage());
             }
 
+            $this->backups->markBackupCreated();
+
             return response()->download(
                 $snapshotPath,
                 'backup-sqlite-'.now()->format('Y-m-d-His').'.sqlite',
@@ -96,6 +125,7 @@ class BackupController extends Controller
         abort_unless($driver === 'mysql' || $hybridAvailable, 404, 'Backup MySQL tidak tersedia pada mode ini.');
 
         $content = $this->backups->mysqlDump();
+        $this->backups->markBackupCreated();
 
         return response()->streamDownload(
             static function () use ($content): void {

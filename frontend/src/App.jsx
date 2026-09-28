@@ -4,6 +4,7 @@ import { BrandingProvider } from './context/BrandingContext'
 import useIdleTimeout from './hooks/useIdleTimeout'
 import Layout from './components/Layout'
 import HybridSettings from './components/HybridSettings'
+import WeeklyBackupReminder from './components/WeeklyBackupReminder'
 import Login from './pages/Login'
 import ForgotPassword from './pages/ForgotPassword'
 import ResetPassword from './pages/ResetPassword'
@@ -68,6 +69,8 @@ function App() {
     <BrandingProvider>
       <IdleTimeoutHandler />
       <HybridSettings />
+      {/* Pengingat backup mingguan: muncul otomatis saat aplikasi dibuka. */}
+      <WeeklyBackupReminder />
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />

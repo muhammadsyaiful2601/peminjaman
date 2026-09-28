@@ -20,6 +20,15 @@ const fileFields = [
   ['letterhead_logo', 'Logo kop surat', 'letterhead_logo_path', 'Logo yang tampil pada laporan dan surat PDF.'],
 ]
 
+function formatDateTime(value) {
+  if (!value) return '-'
+  try {
+    return new Date(value).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })
+  } catch {
+    return value
+  }
+}
+
 // Ukuran berkas ramah-baca untuk keterangan backup lengkap.
 function formatBytes(bytes) {
   if (!bytes) return '0 B'
@@ -254,6 +263,16 @@ function SystemSettings() {
           {backupStatus?.photos && (
             <p className="mt-1 text-xs text-slate-500">
               Backup lengkap berisi {backupStatus.photos.files} berkas foto/gambar ({formatBytes(backupStatus.photos.bytes)}) dan dapat dipulihkan lewat bagian <strong>Impor / Pulihkan Database</strong> di bawah.
+            </p>
+          )}
+          {backupStatus?.reminder && (
+            <p className="mt-1 text-xs text-slate-500">
+              {backupStatus.reminder.last_backup_at
+                ? `Backup terakhir dibuat ${formatDateTime(backupStatus.reminder.last_backup_at)}.`
+                : 'Belum pernah membuat backup.'}{' '}
+              {backupStatus.reminder.due
+                ? 'Pengingat otomatis akan muncul lagi saat aplikasi dibuka.'
+                : `Pengingat otomatis muncul lagi ${backupStatus.reminder.interval_days} hari setelah backup terakhir.`}
             </p>
           )}
         </section>

@@ -56,7 +56,9 @@ const PREFERRED_PORT = 8642;
 //  backup, simpan arsip lewat dialog, dan batas unggah PHP diperbesar.
 //  1.3.1: perbaikan pemulihan berkas .sql (validasi format memakai ekstensi
 //  nama berkas) dan penolakan entri foto berpath berbahaya pada arsip backup.
-const TEMPLATE_VERSION = '1.3.1';
+//  1.4.0: pengingat backup mingguan otomatis saat aplikasi dibuka (dialog
+//  pilihan backup sekarang / nanti / buka pengaturan dengan password admin).
+const TEMPLATE_VERSION = '1.4.0';
 const isDev = !app.isPackaged;
 
 /* ------------------------------------------------------------------ paths */

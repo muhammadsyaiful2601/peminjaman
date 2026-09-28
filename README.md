@@ -339,6 +339,26 @@ Halaman **Pengaturan Sistem** (menu admin) menyediakan dua hal: mengunduh backup
 > Pemulihan hanya dapat dilakukan **admin** dan selalu memerlukan password admin. Batas unggah pada
 > aplikasi desktop sudah dinaikkan (1 GB) agar arsip backup berisi banyak foto tetap dapat dipulihkan.
 
+### Pengingat Backup Mingguan (otomatis)
+
+Backup bersifat rutin mingguan dan berjalan **otomatis** tanpa perlu dijadwalkan manual:
+
+- Saat aplikasi dibuka, sistem memeriksa kapan backup terakhir dibuat (disimpan pada tabel `app_settings`).
+- Bila sudah lebih dari **7 hari** — misalnya aplikasi baru dibuka hari **Senin** dan backup terakhir masih
+  dari minggu lalu — muncul dialog **Pengingat Backup Mingguan** yang menawarkan pilihan:
+  - **Backup Sekarang** — masukkan password admin, arsip lengkap (database + foto) langsung diunduh dan
+    disimpan lewat dialog simpan berkas (di desktop) atau folder unduhan (di peramban).
+  - **Nanti, Minggu Depan** — memilih tidak backup; pengingat ditunda 7 hari sehingga tidak muncul lagi
+    pada siklus tersebut.
+  - **Buka Pengaturan** — menutup dialog lalu membawa Anda ke **Pengaturan Sistem** untuk melakukan
+    backup di sana.
+- Setelah backup berhasil dibuat, waktu backup terakhir diperbarui dan siklus 7 hari dimulai ulang, jadi
+  dialog tidak akan muncul lagi sampai siklus berikutnya.
+- Dialog hanya muncul untuk akun **admin** (backup memang hak khusus admin) dan tidak pernah muncul bila
+  backup dihitung sudah beres. Halaman **Pengaturan Sistem** menampilkan kapan backup terakhir dibuat.
+- State ini tersimpan di server (`app_settings`), sehingga konsisten di semua komputer yang memakai instalasi
+  yang sama.
+
 ## Alur Operasional
 
 1. Petugas login.
@@ -573,11 +593,12 @@ Semua endpoint berada di bawah prefix `/api`. Kecuali login dan download PDF QR,
 
 | Method | Endpoint | Akses | Keterangan |
 | :--- | :--- | :--- | :--- |
-| GET | `/api/backups/status` | Admin | Mode database aktif, ketersediaan backup SQLite/MySQL/lengkap, dan jumlah + ukuran berkas foto |
+| GET | `/api/backups/status` | Admin | Mode database aktif, ketersediaan backup SQLite/MySQL/lengkap, jumlah + ukuran berkas foto, dan `reminder` (kapan backup terakhir, apakah sudah jatuh tempo) |
 | POST | `/api/backups/full` | Admin | Mengunduh arsip `.zip` berisi database + seluruh foto + `manifest.json` (butuh `password` admin) |
 | POST | `/api/backups/sqlite` | Admin | Mengunduh berkas database SQLite saja (butuh `password` admin) |
 | POST | `/api/backups/mysql` | Admin | Mengunduh dump `.sql` MySQL saja (butuh `password` admin) |
 | POST | `/api/backups/restore` | Admin | Memulihkan database (+ foto bila arsip lengkap) dari unggahan `file`; wajib `password` admin; membalas `ok`, `database`, `photos`, `safety_backup` |
+| POST | `/api/backups/reminder/snooze` | Admin | Menunda pengingat backup mingguan (tombol "Nanti"); opsional `days` (1–60, default 7) |
 
 ### Peminjaman
 

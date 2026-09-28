@@ -82,6 +82,7 @@ Route::middleware('auth:sanctum')->group(function () {
         // agar "full" dan "restore" tidak tertangkap sebagai jenis backup.
         Route::post('/backups/full', [BackupController::class, 'download'])->defaults('type', 'full');
         Route::post('/backups/restore', [BackupController::class, 'restore']);
+        Route::post('/backups/reminder/snooze', [BackupController::class, 'snoozeReminder']);
         Route::post('/backups/{type}', [BackupController::class, 'download']);
         Route::post('/users', [UserController::class, 'store']);
         Route::put('/users/{user}', [UserController::class, 'update']);

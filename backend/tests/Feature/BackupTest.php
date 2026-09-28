@@ -20,6 +20,9 @@ use ZipArchive;
  */
 class BackupTest extends TestCase
 {
+    /** Titik waktu tetap (Senin pagi) untuk menguji siklus backup mingguan. */
+    private const SENIN_PAGI = '2026-09-28 08:00:00';
+
     private string $databasePath;
 
     private string $uploadsPath;
@@ -296,6 +299,83 @@ class BackupTest extends TestCase
         $this->deletePath($archivePath);
     }
 
+    /* ------------------------------------------------------ backup mingguan */
+
+    public function test_pengingat_muncul_bila_belum_pernah_backup(): void
+    {
+        Sanctum::actingAs($this->admin());
+
+        $this->getJson('/api/backups/status')
+            ->assertOk()
+            ->assertJsonPath('reminder.due', true)
+            ->assertJsonPath('reminder.last_backup_at', null)
+            ->assertJsonPath('reminder.interval_days', 7);
+    }
+
+    public function test_pengingat_tidak_muncul_seusai_backup_baru(): void
+    {
+        Sanctum::actingAs($this->admin());
+
+        $this->postJson('/api/backups/sqlite', ['password' => 'rahasia'])->assertOk();
+
+        $this->getJson('/api/backups/status')
+            ->assertOk()
+            ->assertJsonPath('reminder.due', false)
+            ->assertJsonPath('reminder.days_since_backup', 0);
+    }
+
+    public function test_pengingat_muncul_kembali_setelah_satu_minggu(): void
+    {
+        Sanctum::actingAs($this->admin());
+
+        // Waktu awal dikunci (Senin) agar tes tidak bergantung hari saat dijalankan.
+        $this->travelTo(self::SENIN_PAGI);
+        $this->postJson('/api/backups/sqlite', ['password' => 'rahasia'])->assertOk();
+
+        $this->travel(6)->days();
+        $this->getJson('/api/backups/status')->assertJsonPath('reminder.due', false);
+
+        // Senin berikutnya: tepat satu siklus berlalu, pengingat muncul lagi.
+        $this->travel(1)->day();
+        $this->getJson('/api/backups/status')
+            ->assertJsonPath('reminder.due', true)
+            ->assertJsonPath('reminder.days_since_backup', 7);
+    }
+
+    public function test_pilihan_nanti_menunda_pengingat_hingga_minggu_depan(): void
+    {
+        Sanctum::actingAs($this->admin());
+
+        $this->travelTo(self::SENIN_PAGI);
+
+        $this->postJson('/api/backups/reminder/snooze')
+            ->assertOk()
+            ->assertJsonPath('ok', true)
+            ->assertJsonPath('reminder.due', false);
+
+        // Masih minggu yang sama: tidak boleh muncul lagi.
+        $this->travel(2)->days();
+        $this->getJson('/api/backups/status')->assertJsonPath('reminder.due', false);
+
+        // Setelah satu siklus (7 hari) muncul kembali.
+        $this->travel(5)->days();
+        $this->getJson('/api/backups/status')->assertJsonPath('reminder.due', true);
+    }
+
+    public function test_menunda_pengingat_hanya_untuk_admin(): void
+    {
+        Sanctum::actingAs($this->user('assistant'));
+
+        $this->postJson('/api/backups/reminder/snooze')->assertForbidden();
+    }
+
+    public function test_pengingat_dan_status_backup_hanya_untuk_admin(): void
+    {
+        Sanctum::actingAs($this->user('assistant'));
+
+        $this->getJson('/api/backups/status')->assertForbidden();
+    }
+
     /* --------------------------------------------------------------- helper */
 
     private function admin(): User
@@ -326,6 +406,8 @@ class BackupTest extends TestCase
         $pdo->exec('CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, email VARCHAR NOT NULL)');
         $pdo->exec('CREATE TABLE items (id INTEGER PRIMARY KEY AUTOINCREMENT, name VARCHAR NOT NULL)');
         $pdo->exec('CREATE TABLE students (id INTEGER PRIMARY KEY AUTOINCREMENT, name VARCHAR NOT NULL, email VARCHAR NOT NULL DEFAULT "")');
+        // Tabel state aplikasi (dipakai pengingat backup mingguan).
+        $pdo->exec('CREATE TABLE app_settings (id INTEGER PRIMARY KEY AUTOINCREMENT, key VARCHAR NOT NULL UNIQUE, value TEXT NULL, created_at DATETIME NULL, updated_at DATETIME NULL)');
 
         $statement = $pdo->prepare('INSERT INTO students (name) VALUES (?)');
 

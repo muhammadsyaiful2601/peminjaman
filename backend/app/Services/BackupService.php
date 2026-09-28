@@ -2,7 +2,9 @@
 
 namespace App\Services;
 
+use App\Models\AppSetting;
 use App\Support\Hybrid;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use PDO;
@@ -31,6 +33,18 @@ class BackupService
     public const ARCHIVE_PHOTOS_DIR = 'uploads';
 
     public const SAFETY_DIR = 'backups';
+
+    /** Kunci state pengingat backup mingguan pada tabel `app_settings`. */
+    public const SETTING_LAST_BACKUP = 'backup_last_at';
+
+    public const SETTING_REMINDER_SNOOZE = 'backup_reminder_snoozed_at';
+
+    /**
+     * Jarak antar backup (hari). Pengingat muncul saat aplikasi dibuka bila
+     * backup terakhir sudah lebih tua dari jarak ini, sehinggarutinitas
+     * mingguan berjalan otomatis tanpa perlu mengatur ulang apa pun.
+     */
+    public const REMINDER_INTERVAL_DAYS = 7;
 
     private const SQLITE_HEADER = 'SQLite format 3';
 
@@ -119,6 +133,110 @@ class BackupService
             'laravel_version' => app()->version(),
             'photos' => $this->photoStats(),
         ];
+    }
+
+    /* -------------------------------------------------------------- reminder */
+
+    /**
+     * State pengingat backup mingguan.
+     *
+     * Pengingat bersifat otomatis: begitu aplikasi dibuka dan backup terakhir
+     * sudah lebih dari REMINDER_INTERVAL_DAYS hari (atau belum pernah sama
+     * sekali), status `due` menjadi true sehingga antarmuka dapat menawarkan
+     * backup. Bila belum pernah backup, hari Senin pertama aplikasi dibuka
+     * menjadi awal siklus pertama.
+     */
+    public function reminder(): array
+    {
+        $now = now();
+        $last = $this->lastBackupAt();
+        $snoozedUntil = $this->reminderSnoozedUntil();
+        $interval = self::REMINDER_INTERVAL_DAYS;
+
+        $dueAt = $last instanceof Carbon ? $last->copy()->addDays($interval) : $now->copy();
+        $isDue = $last === null || $now->greaterThanOrEqualTo($dueAt);
+        $isSnoozed = $snoozedUntil instanceof Carbon && $now->lessThan($snoozedUntil);
+
+        return [
+            'due' => $isDue && ! $isSnoozed,
+            'last_backup_at' => $last?->toIso8601String(),
+            'days_since_backup' => $last instanceof Carbon
+                ? max(0, (int) $now->diffInDays($last, absolute: true))
+                : null,
+            'interval_days' => $interval,
+            'due_at' => $dueAt->toIso8601String(),
+            'snoozed_until' => $snoozedUntil?->toIso8601String(),
+        ];
+    }
+
+    /**
+     * Waktu backup terakhir yang berhasil dibuat (null bila belum pernah).
+     */
+    public function lastBackupAt(): ?Carbon
+    {
+        return $this->settingDate(self::SETTING_LAST_BACKUP);
+    }
+
+    /**
+     * Catat bahwa backup baru saja dibuat, sehingga pengingat mingguan diulang
+     * dari titik ini (dan penundaan sebelumnya dibatalkan).
+     */
+    public function markBackupCreated(): void
+    {
+        $this->putSetting(self::SETTING_LAST_BACKUP, now()->toIso8601String());
+        $this->putSetting(self::SETTING_REMINDER_SNOOZE, null);
+    }
+
+    /**
+     * Tunda pengingat (dipakai saat pengguna memilih "Nanti" / backup lain kali).
+     */
+    public function snoozeReminder(int $days = self::REMINDER_INTERVAL_DAYS): Carbon
+    {
+        $until = now()->addDays(max(1, min(self::REMINDER_INTERVAL_DAYS * 8, $days)));
+
+        $this->putSetting(self::SETTING_REMINDER_SNOOZE, $until->toIso8601String());
+
+        return $until;
+    }
+
+    private function reminderSnoozedUntil(): ?Carbon
+    {
+        return $this->settingDate(self::SETTING_REMINDER_SNOOZE);
+    }
+
+    private function settingDate(string $key): ?Carbon
+    {
+        $value = $this->setting($key);
+
+        if ($value === null || trim($value) === '') {
+            return null;
+        }
+
+        try {
+            return Carbon::parse($value);
+        } catch (Throwable $e) {
+            return null;
+        }
+    }
+
+    private function setting(string $key): ?string
+    {
+        try {
+            return AppSetting::getValue($key);
+        } catch (Throwable $e) {
+            // Tabel app_settings belum tersedia pada instalasi lama: pengingat
+            // diperlakukan sebagai belum pernah backup, bukan sebagai error.
+            return null;
+        }
+    }
+
+    private function putSetting(string $key, ?string $value): void
+    {
+        try {
+            AppSetting::setValue($key, $value);
+        } catch (Throwable $e) {
+            Log::warning('State pengingat backup gagal disimpan: '.$e->getMessage());
+        }
     }
 
     /* ---------------------------------------------------------------- backup */
