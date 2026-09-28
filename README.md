@@ -138,11 +138,11 @@ Aplikasi desktop dapat dijalankan dalam **mode hybrid**: SQLite lokal tetap menj
 utama (agar aplikasi tetap jalan offline), sementara salinannya dicerminkan ke database
 **MySQL di hosting** dan disinkronkan dua arah secara berkala.
 
-Pengaturan berada di **tombol gear ⚙ di sudut kiri bawah** aplikasi desktop (khusus desktop),
-yang membuka popup "Hosting & Sinkronisasi" berisi:
+Pengaturan berada di **Manajemen -> Pengaturan Sistem**, tab **Hosting & Sinkronisasi** (khusus
+aplikasi desktop), berisi:
 
 - Form koneksi hosting: **Host/Link, Port, Nama Database, Username, Password** MySQL.
-- **Simpan & Tes Koneksi** — menyimpan konfigurasi lalu menguji koneksi ke MySQL hosting.
+- **Simpan Konfigurasi** / **Tes Koneksi** — menyimpan konfigurasi, atau menguji koneksi ke MySQL hosting.
 - **Migrasi Data ke Hosting** — membuat skema di MySQL (menjalankan migrasi Laravel pada
   koneksi hosting) lalu menyalin seluruh data lokal sebagai sinkronisasi awal.
 - **Sinkron Sekarang** — sinkronisasi dua arah manual kapan saja.
@@ -308,6 +308,25 @@ tidak dihitung sebagai peminjaman.
 Transaksi lama tanpa NIM milik orang yang sama tetap ikut dihitung agar surat tidak terbit saat barang
 masih ditahan.
 
+### Pengaturan Sistem
+
+Semua konfigurasi aplikasi dikumpulkan di satu halaman: **Manajemen → Pengaturan Sistem**.
+Halaman ini memakai tab, dan bagian khusus desktop otomatis disembunyikan pada versi website.
+
+| Tab | Isi | Berlaku di |
+| :--- | :--- | :--- |
+| **Identitas Aplikasi** | Nama aplikasi, baris kop surat, nama instansi, deskripsi login, logo & foto halaman depan | Desktop & web |
+| **Email (SMTP)** | Host, port, username, password, email & nama pengirim, plus **Kirim Email Tes** | Desktop (web: diatur lewat `.env`) |
+| **Hosting & Sinkronisasi** | Koneksi MySQL hosting, migrasi, sinkron manual, sinkron otomatis | Desktop saja |
+| **Backup & Pemulihan** | Unduh backup (lengkap / SQLite / MySQL) dan pemulihan data | Desktop & web |
+| **Tentang & Pembaruan** | Versi aplikasi, kanal Stabil/Beta, periksa & pasang pembaruan | Desktop saja |
+
+> Dulu pengaturan email hanya bisa diisi lewat jendela wizard terpisah saat pemasangan
+> pertama, sehingga mudah terlewat bila wizard ditutup. Sekarang semuanya ada di tab
+> **Email (SMTP)** yang sama dengan konfigurasi lain. Password SMTP yang tersimpan tidak
+> pernah dikirim ke antarmuka — kolom password yang dikosongkan berarti password lama
+> dipertahankan.
+
 ### Backup & Pemulihan Data
 
 Halaman **Pengaturan Sistem** (menu admin) menyediakan dua hal: mengunduh backup dan memulihkan
@@ -340,7 +359,7 @@ Semua nama berkas unduhan **memuat tanggal dan jam** backup, misalnya
 5. Database diganti dalam satu transaksi (SQLite) sehingga aman walau aplikasi sedang dipakai;
    foto dari arsip disalin ke folder unggahan (berkas dengan nama sama ditimpa, berkas lain tetap
    dipertahankan). Halaman dimuat ulang setelah selesai dan Anda mungkin perlu login kembali.
-6. Bila mode hybrid aktif, jalankan **Sinkron Sekarang** di panel Hosting & Sinkronisasi agar data
+6. Bila mode hybrid aktif, jalankan **Sinkron Sekarang** di tab **Hosting & Sinkronisasi** agar data
    hosting menyesuaikan hasil pemulihan.
 
 > Pemulihan hanya dapat dilakukan **admin** dan selalu memerlukan password admin. Batas unggah pada
@@ -1032,7 +1051,7 @@ pembaruan dari GitHub Releases tanpa perlu install ulang manual:
 | **Stabil** (default) | rilis final, mis. `1.2.3` (`latest.yml`) | seluruh petugas — versi paling teruji |
 | **Beta** | rilis prarilis, mis. `1.2.4-beta.1` (`beta.yml`) | uji coba fitur baru lebih awal |
 
-Kanal diubah lewat panel **Pengaturan** (tombol gear) → bagian **Pembaruan Aplikasi** →
+Kanal diubah lewat **Manajemen → Pengaturan Sistem** → tab **Tentang & Pembaruan** →
 tombol **Stabil/Beta**, atau menu **Aplikasi → Kanal Pembaruan**. Pilihan disimpan pada
 `desktop-config.json` (`updateChannel`). Aplikasi yang memakai kanal **Stabil tidak pernah**
 menerima rilis beta; aplikasi yang memilih kanal **Beta** tetap menerima rilis stabil

@@ -98,7 +98,7 @@ release `v{versi}` secara otomatis.
   (`EP_PRE_RELEASE=true`); bila menerbitkan dari komputer sendiri, set variabel
   itu lebih dulu.
 
-Pengguna berpindah kanal melalui panel **Pengaturan** (gear) → *Pembaruan Aplikasi* →
+Pengguna berpindah kanal melalui **Pengaturan Sistem** (tab *Tentang & Pembaruan*) →
 tombol **Stabil/Beta**, atau menu **Aplikasi → Kanal Pembaruan** (tersimpan sebagai
 `updateChannel` pada `desktop-config.json`). Installer beta yang dipasang otomatis
 mengikuti kanal beta; aplikasi kanal stabil tidak pernah ikut menerima rilis beta.

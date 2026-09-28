@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { DatabaseBackup, Download, Image, KeyRound, Save, Settings2, Upload, X } from 'lucide-react'
+import { DatabaseBackup, Download, Image, Info, KeyRound, Mail, Save, Server, Settings2, Upload, X } from 'lucide-react'
 import api from '../api/axios'
 import { useBranding } from '../context/BrandingContext'
 import { downloadBlob, filenameFromResponse, timestampedFilename } from '../utils/downloadBlob'
+import HybridSyncSection from '../components/settings/HybridSyncSection'
+import EmailSettingsSection from '../components/settings/EmailSettingsSection'
+import UpdateSettingsSection from '../components/settings/UpdateSettingsSection'
 
 const textFields = [
   ['app_name', 'Nama aplikasi'],
@@ -18,6 +21,16 @@ const fileFields = [
   ['app_logo', 'Logo aplikasi', 'app_logo_path', 'Logo yang tampil di login dan menu aplikasi.'],
   ['landing_photo', 'Foto halaman depan', 'landing_photo_path', 'Foto yang tampil di sisi kiri halaman login.'],
   ['letterhead_logo', 'Logo kop surat', 'letterhead_logo_path', 'Logo yang tampil pada laporan dan surat PDF.'],
+]
+
+// Semua konfigurasi aplikasi dikumpulkan di satu halaman. Bagian khusus
+// desktop (Hosting & Sinkronisasi, Tentang & Pembaruan) disembunyikan di web.
+const SECTIONS = [
+  { key: 'identity', label: 'Identitas Aplikasi', icon: Settings2, desktopOnly: false },
+  { key: 'email', label: 'Email (SMTP)', icon: Mail, desktopOnly: false },
+  { key: 'sync', label: 'Hosting & Sinkronisasi', icon: Server, desktopOnly: true },
+  { key: 'backup', label: 'Backup & Pemulihan', icon: DatabaseBackup, desktopOnly: false },
+  { key: 'about', label: 'Tentang & Pembaruan', icon: Info, desktopOnly: true },
 ]
 
 function formatDateTime(value) {
@@ -47,6 +60,8 @@ function formatBytes(bytes) {
 
 function SystemSettings() {
   const branding = useBranding()
+  const isDesktop = Boolean(window.desktop?.isDesktop)
+  const [tab, setTab] = useState('identity')
   const [form, setForm] = useState(branding)
   const [files, setFiles] = useState({})
   const [saving, setSaving] = useState(false)
@@ -62,6 +77,11 @@ function SystemSettings() {
   const [restoreMessage, setRestoreMessage] = useState('')
   const [restoreError, setRestoreError] = useState('')
   const restoreInputRef = useRef(null)
+
+  // Tab khusus desktop disembunyikan di web; bila tab aktif tidak tersedia
+  // (mis. jendela dibuka di versi web), kembali ke tab pertama.
+  const visibleSections = SECTIONS.filter((section) => !section.desktopOnly || isDesktop)
+  const activeTab = visibleSections.some((section) => section.key === tab) ? tab : 'identity'
 
   useEffect(() => {
     setForm(branding)
@@ -195,10 +215,36 @@ function SystemSettings() {
       <div>
         <p className="text-sm font-semibold text-cyan-700">Administrasi aplikasi</p>
         <h1 className="mt-1 text-2xl font-bold text-slate-900">Pengaturan Sistem</h1>
-        <p className="mt-2 text-sm text-slate-500">Sesuaikan identitas aplikasi untuk setiap organisasi atau pelanggan.</p>
+        <p className="mt-2 text-sm text-slate-500">Kelola identitas aplikasi, email, hosting, backup, dan pembaruan dalam satu halaman.</p>
       </div>
 
+      {/* NAVIGASI TAB - semua konfigurasi aplikasi dikumpulkan di satu halaman */}
+      <nav className="flex flex-wrap gap-2 border-b border-slate-200">
+        {visibleSections.map((section) => {
+          const Icon = section.icon
+          const active = activeTab === section.key
+
+          return (
+            <button
+              key={section.key}
+              type="button"
+              onClick={() => setTab(section.key)}
+              className={`-mb-px inline-flex items-center gap-1.5 border-b-2 px-3.5 py-2.5 text-sm font-semibold transition ${
+                active
+                  ? 'border-cyan-600 text-cyan-700'
+                  : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700'
+              }`}
+            >
+              <Icon className="h-4 w-4" />
+              {section.label}
+            </button>
+          )
+        })}
+      </nav>
+
       <form onSubmit={handleSubmit} className="space-y-6">
+        {activeTab === 'identity' && (
+          <>
         <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="mb-5 flex items-center gap-3">
             <Settings2 className="h-5 w-5 text-cyan-600" />
@@ -234,7 +280,14 @@ function SystemSettings() {
             ))}
           </div>
         </section>
+          </>
+        )}
 
+        {activeTab === 'email' && <EmailSettingsSection />}
+
+        {activeTab === 'sync' && <HybridSyncSection />}
+
+        {activeTab === 'backup' && (
         <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="mb-5 flex items-center gap-3">
             <DatabaseBackup className="h-5 w-5 text-cyan-600" />
@@ -282,12 +335,18 @@ function SystemSettings() {
             </p>
           )}
         </section>
+        )}
 
-        {message && <p className="rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{message}</p>}
-        {error && <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
-        <button disabled={saving} className="inline-flex items-center gap-2 rounded-lg bg-cyan-600 px-5 py-2.5 font-semibold text-white hover:bg-cyan-700 disabled:opacity-50"><Save className="h-4 w-4" />{saving ? 'Menyimpan...' : 'Simpan pengaturan'}</button>
+        {activeTab === 'identity' && (
+          <>
+            {message && <p className="rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{message}</p>}
+            {error && <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
+            <button disabled={saving} className="inline-flex items-center gap-2 rounded-lg bg-cyan-600 px-5 py-2.5 font-semibold text-white hover:bg-cyan-700 disabled:opacity-50"><Save className="h-4 w-4" />{saving ? 'Menyimpan...' : 'Simpan pengaturan'}</button>
+          </>
+        )}
       </form>
 
+      {activeTab === 'backup' && (
       <form onSubmit={handleRestore} className="rounded-xl border border-amber-200 bg-white p-6 shadow-sm">
         <div className="mb-5 flex items-center gap-3">
           <Upload className="h-5 w-5 text-amber-600" />
@@ -345,6 +404,17 @@ function SystemSettings() {
           </p>
         )}
       </form>
+      )}
+
+      {activeTab === 'about' && (
+        <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="mb-5">
+            <h2 className="font-semibold text-slate-900">Tentang Aplikasi</h2>
+            <p className="text-sm text-slate-500">Versi, kanal rilis, dan pemutakhiran aplikasi desktop.</p>
+          </div>
+          <UpdateSettingsSection />
+        </section>
+      )}
 
       {backupType && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">

@@ -62,7 +62,9 @@ const PREFERRED_PORT = 8642;
 //  database dan penyederhanaan placeholder kolom Username di halaman login.
 //  1.4.2: nama berkas backup ikut tanggal & jam (backup-lengkap-YYYY-MM-DD-HHmmss.zip)
 //  sehingga tiap backup punya nama sendiri dan tidak saling menimpa.
-const TEMPLATE_VERSION = '1.4.2';
+//  1.4.3: seluruh konfigurasi (email/SMTP, hosting & sinkronisasi, pembaruan
+//  aplikasi) dipindahkan ke Pengaturan Sistem; tombol gear dihapus.
+const TEMPLATE_VERSION = '1.4.3';
 const isDev = !app.isPackaged;
 
 /* ------------------------------------------------------------------ paths */
@@ -798,9 +800,9 @@ function stopTunnel() {
  *
  * Alur (manual, stil Play Store):
  *   1. Saat app dibuka, periksa versi baru di latar belakang (ulangi setiap 4 jam).
- *   2. Bila versi baru tersedia -> POPUP otomatis muncul + tampil di menu
- *      gear ("Pembaruan Aplikasi"). Bila tidak ada versi baru, popup tidak
- *      muncul sama sekali (senyap).
+ *   2. Bila versi baru tersedia -> POPUP otomatis muncul + tampil di
+ *      Pengaturan Sistem (tab "Tentang & Pembaruan"). Bila tidak ada versi
+ *      baru, popup tidak muncul sama sekali (senyap).
  *   3. Pengunduh HANYA berjalan setelah user klik "Pengunduh & Instal"
  *      (progress bar ditampilkan).
  *   4. Download selesai -> tunggu 6 detik -> quitAndInstall(true, true):
@@ -1602,7 +1604,79 @@ function registerIpc() {
     return { ok: true };
   });
 
-  // State pembaruan + kanal aktif (gear menampilkan versi sekaligus kanalnya).
+  // --------------------------------------------- pengaturan email (SMTP)
+  // Terpisah dari wizard `setup:*` supaya halaman Pengaturan Sistem bisa
+  // menyimpan konfigurasi email tanpa ikut menimpa nama & logo aplikasi.
+  ipcMain.handle('mail:get', async () => {
+    const env = readEnvFile(runtimeBackend);
+    const mail = config.mail || {};
+
+    return {
+      configured: Boolean(mail.useSmtp && mail.username),
+      // Password tidak pernah dikirim ke renderer, cukup penanda apakah
+      // password tersimpan. Bila kolomnya dikosongkan saat disimpan, password
+      // yang sudah ada tetap dipertahankan.
+      hasPassword: Boolean(mail.password || env.MAIL_PASSWORD),
+      host: mail.host || env.MAIL_HOST || '',
+      port: mail.port || env.MAIL_PORT || '587',
+      username: mail.username || env.MAIL_USERNAME || '',
+      fromAddress: mail.fromAddress || env.MAIL_FROM_ADDRESS || '',
+      fromName: mail.fromName || env.MAIL_FROM_NAME || '',
+    };
+  });
+
+  ipcMain.handle('mail:save', (_event, payload) => {
+    return (async () => {
+      try {
+        const previous = config.mail || {};
+
+        applyMailSettings({
+          useSmtp: true,
+          host: payload ? payload.host : '',
+          port: payload ? payload.port : '587',
+          username: payload ? payload.username : '',
+          password: (payload && payload.password) || previous.password || '',
+          fromAddress: payload ? payload.fromAddress : '',
+          fromName: payload ? payload.fromName : '',
+        });
+        await restartBackend();
+
+        return { ok: true, message: 'Pengaturan email disimpan dan server lokal sudah dimuat ulang.' };
+      } catch (e) {
+        return { ok: false, message: String(e && e.message ? e.message : e) };
+      }
+    })();
+  });
+
+  ipcMain.handle('mail:test', async (_event, payload) => {
+    try {
+      const previous = config.mail || {};
+
+      // Konfigurasi diuji dengan nilai yang diketik user, lalu disimpan supaya
+      // backend lokal memakai pengaturan yang sama persis dengan yang diuji.
+      applyMailSettings({
+        useSmtp: true,
+        host: payload ? payload.host : '',
+        port: payload ? payload.port : '587',
+        username: payload ? payload.username : '',
+        password: (payload && payload.password) || previous.password || '',
+        fromAddress: payload ? payload.fromAddress : '',
+        fromName: payload ? payload.fromName : '',
+      });
+      await restartBackend();
+
+      const { json } = await postJson('/api/desktop/mail-test', { to: payload.testTo });
+      return {
+        ok: Boolean(json && json.ok),
+        message: json && json.message ? json.message : 'Respons tidak dikenal.',
+      };
+    } catch (e) {
+      return { ok: false, message: String(e && e.message ? e.message : e) };
+    }
+  });
+
+  // State pembaruan + kanal aktif (Pengaturan Sistem menampilkan versi
+  // sekaligus kanalnya lewat tab "Tentang & Pembaruan").
   ipcMain.handle('update:get-state', () => ({ ...updateState, channel: resolveUpdateChannel() }));
   ipcMain.handle('update:check', () => {
     checkForUpdates({ manual: true });
