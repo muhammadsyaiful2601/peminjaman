@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\AppSetting;
 use App\Models\Student;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -318,6 +319,167 @@ class StudentTest extends TestCase
         ])->assertStatus(422);
 
         $this->assertDatabaseCount('students', 0);
+    }
+
+    public function test_sinkronisasi_otomatis_mengikuti_perubahan_spreadsheet(): void
+    {
+        Sanctum::actingAs($this->staff());
+
+        // Respons pertama = isi spreadsheet awal, respons kedua = spreadsheet
+        // setelah diubah petugas.
+        Http::fake([
+            'https://docs.google.com/*' => Http::sequence()
+                ->push(implode("\n", [
+                    'NIM,Nama,Email,No. Telepon',
+                    '2211082001,Budi Santoso,budi@example.com,081234567890',
+                ]))
+                ->push(implode("\n", [
+                    'NIM,Nama,Email,No. Telepon',
+                    '2211082001,Budi Santoso Baru,budi@example.com,081200000000',
+                ])),
+        ]);
+
+        $url = 'https://docs.google.com/spreadsheets/d/example/pub?output=csv';
+
+        $this->postJson('/api/students/import/csv-url', ['url' => $url])
+            ->assertOk()
+            ->assertJsonPath('imported', 1);
+
+        // Petugas mengubah nama & nomor telepon pada spreadsheet; siklus
+        // sinkronisasi otomatis berikutnya wajib mengikuti perubahan itu.
+        $this->postJson('/api/students/import/csv-url', ['url' => $url])
+            ->assertOk()
+            ->assertJsonPath('ok', true)
+            ->assertJsonPath('updated', 1)
+            ->assertJsonPath('unchanged', 0);
+
+        $this->assertDatabaseCount('students', 1);
+        $this->assertDatabaseHas('students', [
+            'student_id' => '2211082001',
+            'name' => 'Budi Santoso Baru',
+            'phone' => '081200000000',
+        ]);
+
+        // Waktu sinkronisasi terakhir tersimpan agar halaman Data Mahasiswa
+        // dapat menampilkannya setelah dimuat ulang.
+        $this->assertNotNull(AppSetting::getValue('student_sync_last_at'));
+        $this->assertNotNull($this->getJson('/api/students/import/source')->json('last_synced_at'));
+    }
+
+    public function test_sinkronisasi_ulang_tanpa_perubahan_tidak_dihitung_sebagai_perubahan(): void
+    {
+        Sanctum::actingAs($this->staff());
+
+        Student::create([
+            'student_id' => '2211082001',
+            'name' => 'Budi Santoso',
+            'email' => 'budi@example.com',
+            'phone' => '081234567890',
+        ]);
+        Student::create([
+            'student_id' => '2211082002',
+            'name' => 'Siti Aminah',
+            'email' => 'siti@example.com',
+        ]);
+
+        $csv = implode("\n", [
+            'NIM,Nama,Email,No. Telepon',
+            '2211082001,Budi Santoso,budi@example.com,081234567890',
+            '2211082002,Siti Aminah,siti@example.com,',
+        ]);
+
+        $this->post('/api/students/import', [
+            'file' => $this->fakeCsvUpload($csv, 'mahasiswa.csv'),
+        ])->assertOk()
+            ->assertJsonPath('ok', true)
+            ->assertJsonPath('imported', 0)
+            ->assertJsonPath('updated', 0)
+            ->assertJsonPath('unchanged', 2);
+
+        $this->assertDatabaseCount('students', 2);
+    }
+
+    public function test_sinkronisasi_mengikuti_perbaikan_nim_di_spreadsheet(): void
+    {
+        Sanctum::actingAs($this->staff());
+
+        Student::create([
+            'student_id' => '2211082001',
+            'name' => 'Budi Santoso',
+            'email' => 'budi@example.com',
+            'phone' => '081234567890',
+        ]);
+
+        // Petugas memperbaiki NIM pada spreadsheet (email tetap sama).
+        $csv = implode("\n", [
+            'NIM,Nama,Email,No. Telepon',
+            '2211082999,Budi Santoso,budi@example.com,081234567890',
+        ]);
+
+        $this->post('/api/students/import', [
+            'file' => $this->fakeCsvUpload($csv, 'mahasiswa.csv'),
+        ])->assertOk()
+            ->assertJsonPath('imported', 0)
+            ->assertJsonPath('updated', 1)
+            ->assertJsonPath('errors', []);
+
+        // NIM ikut berubah tanpa membuat data ganda.
+        $this->assertDatabaseCount('students', 1);
+        $this->assertDatabaseHas('students', [
+            'student_id' => '2211082999',
+            'email' => 'budi@example.com',
+        ]);
+        $this->assertDatabaseMissing('students', ['student_id' => '2211082001']);
+    }
+
+    public function test_sinkronisasi_menolak_email_yang_dipakai_mahasiswa_lain(): void
+    {
+        Sanctum::actingAs($this->staff());
+
+        Student::create(['student_id' => '2211082001', 'name' => 'Budi Santoso', 'email' => 'budi@example.com']);
+        Student::create(['student_id' => '2211082002', 'name' => 'Siti Aminah', 'email' => 'siti@example.com']);
+
+        $csv = implode("\n", [
+            'NIM,Nama,Email,No. Telepon',
+            '2211082001,Budi Santoso,siti@example.com,',
+        ]);
+
+        $response = $this->post('/api/students/import', [
+            'file' => $this->fakeCsvUpload($csv, 'mahasiswa.csv'),
+        ]);
+
+        $response->assertStatus(422)->assertJsonCount(1, 'errors');
+
+        // Data kedua mahasiswa tidak tertukar.
+        $this->assertDatabaseHas('students', ['student_id' => '2211082001', 'email' => 'budi@example.com']);
+        $this->assertDatabaseHas('students', ['student_id' => '2211082002', 'email' => 'siti@example.com']);
+    }
+
+    public function test_sinkronisasi_memakai_tab_spreadsheet_yang_dipilih_dan_tanpa_cache(): void
+    {
+        Sanctum::actingAs($this->staff());
+
+        Http::fake([
+            'https://docs.google.com/*' => Http::response(implode("\n", [
+                'NIM,Nama,Email',
+                '2211082001,Budi Santoso,budi@example.com',
+            ])),
+        ]);
+
+        // URL yang disalin dari address bar menyimpan tab pada fragment
+        // (#gid=...). Tanpa gid, Google mengekspor tab pertama sehingga
+        // perubahan pada tab yang dipakai petugas tidak ikut tersinkron.
+        $this->postJson('/api/students/import/csv-url', [
+            'url' => 'https://docs.google.com/spreadsheets/d/example/edit?usp=sharing#gid=12345',
+        ])->assertOk();
+
+        Http::assertSent(function ($request) {
+            return str_contains($request->url(), '/export')
+                && str_contains($request->url(), 'format=csv')
+                && str_contains($request->url(), 'gid=12345')
+                // Cache-buster agar Google tidak mengirim CSV lama.
+                && str_contains($request->url(), '_sync=');
+        });
     }
 
     private function fakeCsvUpload(string $content, string $filename): \Illuminate\Http\UploadedFile

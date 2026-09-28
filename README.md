@@ -218,6 +218,32 @@ nomor telepon, dan NIM/NIP otomatis terisi pada form. Pengisian manual tetap ter
 untuk peminjam yang belum terdaftar. Data yang dikirim ke transaksi disimpan sebagai
 snapshot, sehingga perubahan data mahasiswa tidak mengubah riwayat peminjaman.
 
+Data mahasiswa juga dapat diimpor dari **spreadsheet** melalui tombol **Impor
+Spreadsheet**: berkas CSV/XLSX/XLS, atau **CSV Google Sheets yang sudah dipublikasikan**
+(*File → Bagikan → Publikasikan ke web*, format CSV). NIM/NIP dipakai sebagai kunci
+utama dan email sebagai kunci cadangan, sehingga:
+
+- baris dengan NIM yang sudah ada di sistem **diperbarui** (nama, email, telepon);
+- perbaikan NIM pada spreadsheet (email tetap sama) ikut terpakai tanpa membuat data
+  ganda;
+- baris baru **ditambahkan**; baris yang isinya sama persis tidak dihitung sebagai
+  perubahan (`unchanged`).
+
+Selama halaman **Data Mahasiswa** terbuka, sistem menyinkronkan ulang sumber
+spreadsheet secara otomatis setiap 5 menit (penghitung **Refresh otomatis dalam
+m:ss** dan **Sinkron terakhir hh:mm** tampil di kanan judul halaman). Perubahan yang
+dilakukan pada spreadsheet — nama, email, telepon, sampai NIM — langsung terpakai di
+sistem, dan tabel diperbarui tanpa menampilkan ulang status "Memuat". Tombol
+**Refresh Data** menjalankan sinkronisasi segera, sedangkan kegagalan sinkronisasi
+(mis. sheet tidak lagi dipublikasikan, tab salah, atau jaringan mati) **ditampilkan
+sebagai pesan kesalahan** agar data yang belum berubah selalu punya penjelasan.
+Sumber tersimpan di database (`student_sync_csv_url`) beserta waktu sinkron terakhir
+(`student_sync_last_at`).
+
+Baris yang **dihapus** dari spreadsheet tidak menghapus data mahasiswa di sistem
+(agar riwayat peminjaman/surat bebas labor tetap utuh); hapus data lewat tombol hapus
+pada tabel.
+
 ### Bebas Labor
 
 Halaman `/clearance` (menu **Bebas Labor**) dipakai petugas untuk menerbitkan **Surat Keterangan Bebas
@@ -505,6 +531,12 @@ Semua endpoint berada di bawah prefix `/api`. Kecuali login dan download PDF QR,
 | POST | `/api/students` | Admin/Asisten | Menambahkan data mahasiswa |
 | PUT | `/api/students/{student}` | Admin/Asisten | Memperbarui data mahasiswa |
 | DELETE | `/api/students/{student}` | Admin/Asisten | Menghapus data mahasiswa |
+| POST | `/api/students/import` | Admin/Asisten | Impor berkas CSV/XLSX/XLS (NIM kunci utama, email kunci cadangan) |
+| POST | `/api/students/import/csv-url` | Admin/Asisten | Sinkronisasi sumber CSV Google Sheets terpublikasi; membalas `ok`, `imported`, `updated`, `unchanged`, `synced_at`, `errors` |
+| GET | `/api/students/import/source` | Auth | URL sumber sinkronisasi tersimpan + `last_synced_at` |
+| POST | `/api/students/import/source` | Admin/Asisten | Menyimpan URL sumber sinkronisasi |
+| GET | `/api/students/import/template` | Admin/Asisten | Mengunduh template impor (`.xls`) |
+| POST | `/api/desktop/students/import-csv-url` | Kunci desktop | Sama dengan `import/csv-url`, dipakai aplikasi desktop lewat `X-Desktop-Key` |
 
 ### Peminjaman
 

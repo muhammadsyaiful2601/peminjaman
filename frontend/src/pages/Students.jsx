@@ -1,16 +1,29 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Mail, Pencil, Phone, Plus, RefreshCw, Search, Trash2, UserRound, Upload } from 'lucide-react'
 import api from '../api/axios'
 import ImportStudentsModal from '../components/ImportStudentsModal'
 
 const emptyForm = { student_id: '', name: '', email: '', phone: '' }
 const SYNC_INTERVAL_SECONDS = 5 * 60
+// URL CSV Google Sheets terpublikasi yang menjadi sumber sinkronisasi otomatis.
+const SYNC_URL_KEY = 'student_sync_csv_url'
 
 function formatCountdown(seconds) {
   const minutes = Math.floor(seconds / 60)
   const remainder = seconds % 60
 
   return `${minutes}:${String(remainder).padStart(2, '0')}`
+}
+
+// Waktu sinkronisasi terakhir (jam:menit) untuk ditampilkan ke petugas.
+function formatClock(value) {
+  if (!value) return ''
+
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) return ''
+
+  return date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
 }
 
 function Students() {
@@ -26,89 +39,178 @@ function Students() {
   const [syncing, setSyncing] = useState(false)
   const [syncCountdown, setSyncCountdown] = useState(SYNC_INTERVAL_SECONDS)
   const syncingRef = useRef(false)
+  // Ref berikut membuat timer otomatis selalu memakai versi terbaru dari
+  // fungsi/data terkait, sehingga interval tidak perlu dibuat ulang tiap render
+  // dan tidak memakai nilai lama (mis. kata kunci pencarian yang sudah berubah).
+  const syncRef = useRef(null)
+  const countdownRef = useRef(SYNC_INTERVAL_SECONDS)
+  const searchRef = useRef('')
+  const modalOpenRef = useRef(false)
+  const [lastSyncedAt, setLastSyncedAt] = useState('')
 
-  const fetchStudents = async (searchValue = search) => {
-    setLoading(true)
+  useEffect(() => { searchRef.current = search }, [search])
+  useEffect(() => { modalOpenRef.current = showImportModal }, [showImportModal])
+
+  const fetchStudents = useCallback(async (searchValue, silent = false) => {
+    const term = String(searchValue ?? searchRef.current ?? '').trim()
+
+    if (!silent) setLoading(true)
+
     try {
-      const response = await api.get('/students', { params: searchValue.trim() ? { search: searchValue.trim() } : {} })
+      const response = await api.get('/students', { params: term ? { search: term } : {} })
       setStudents(response.data.data || [])
     } catch (requestError) {
       setError(requestError.response?.data?.message || 'Gagal memuat data mahasiswa.')
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
-  }
+  }, [])
 
-  useEffect(() => { fetchStudents('') }, [])
+  const syncStudents = useCallback(async (showFeedback = false) => {
+    if (syncingRef.current) return false
+
+    syncingRef.current = true
+    setSyncing(true)
+
+    try {
+      let csvUrl = (localStorage.getItem(SYNC_URL_KEY) || '').trim()
+
+      if (!csvUrl) {
+        try {
+          const source = await api.get('/students/import/source')
+          csvUrl = String(source.data?.url || '').trim()
+          if (csvUrl) localStorage.setItem(SYNC_URL_KEY, csvUrl)
+        } catch {
+          if (showFeedback) setError('URL spreadsheet belum dapat dimuat dari database.')
+
+          return false
+        }
+      }
+
+      if (!csvUrl) {
+        // Sumber belum pernah diatur: bukan kegagalan, jadi tidak dipesan
+        // berulang setiap siklus. Pesan hanya muncul saat refresh manual.
+        if (showFeedback) setError('Belum ada URL CSV spreadsheet. Impor data melalui tombol Impor Spreadsheet terlebih dahulu.')
+
+        return false
+      }
+
+      const result = window.desktop?.importStudentsFromCsv
+        ? await window.desktop.importStudentsFromCsv(csvUrl)
+        : (await api.post('/students/import/csv-url', { url: csvUrl }, { timeout: 30000 })).data
+
+      if (!result?.ok) {
+        // Kegagalan sinkronisasi otomatis wajib terlihat petugas. Bila dibisukan,
+        // perubahan di spreadsheet tampak "tidak mau masuk" ke sistem tanpa sebab.
+        setError(result?.message || 'Gagal menyinkronkan spreadsheet. Periksa URL/publikasi CSV.')
+
+        return false
+      }
+
+      setError('')
+      setLastSyncedAt(result.synced_at || new Date().toISOString())
+
+      // Muat ulang daftar tanpa efek "Memuat..." agar tabel tidak berkedip
+      // setiap siklus sinkronisasi, dan tetap mengikuti filter pencarian aktif.
+      await fetchStudents(undefined, true)
+
+      // Baris yang dilewati (mis. email bentrok/tidak valid) tetap
+      // diberitahukan agar data yang tidak ikut masuk punya penjelasan.
+      if (result.errors?.length) {
+        setError(`${result.errors.length} baris spreadsheet dilewati saat sinkronisasi. ${result.errors[0]}`)
+      }
+
+      if (showFeedback) {
+        const detail = [`${result.imported || 0} baru`, `${result.updated || 0} diperbarui`]
+
+        if (result.unchanged) detail.push(`${result.unchanged} tanpa perubahan`)
+
+        setSuccess(`Sinkronisasi selesai: ${detail.join(', ')}.`)
+      }
+
+      return true
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || requestError.message || 'Gagal menyinkronkan spreadsheet.')
+
+      return false
+    } finally {
+      syncingRef.current = false
+      setSyncing(false)
+    }
+  }, [fetchStudents])
+
+  // Daftar mahasiswa diambil sekali saat halaman dibuka, lalu dimuat ulang
+  // (dengan jeda singkat) setiap kata kunci pencarian berubah.
+  useEffect(() => { fetchStudents('') }, [fetchStudents])
 
   useEffect(() => {
     const timeout = window.setTimeout(() => fetchStudents(search), 300)
 
     return () => window.clearTimeout(timeout)
-  }, [search])
+  }, [search, fetchStudents])
 
-  const syncStudents = async (showError = false) => {
-    if (syncingRef.current) return
-
-    let csvUrl = localStorage.getItem('student_sync_csv_url')
-    if (!csvUrl) {
-      try {
-        const source = await api.get('/students/import/source')
-        csvUrl = source.data.url || ''
-        if (csvUrl) localStorage.setItem('student_sync_csv_url', csvUrl)
-      } catch {
-        if (showError) setError('URL spreadsheet belum dapat dimuat dari database.')
-        return
-      }
-    }
-
-    if (!csvUrl) {
-      if (showError) setError('Belum ada URL CSV spreadsheet. Impor data melalui tombol Impor Spreadsheet terlebih dahulu.')
-      return
-    }
-
-    syncingRef.current = true
-    setSyncing(true)
-    try {
-      const result = window.desktop?.importStudentsFromCsv
-        ? await window.desktop.importStudentsFromCsv(csvUrl)
-        : (await api.post('/students/import/csv-url', { url: csvUrl }, { timeout: 30000 })).data
-
-      if (!result.ok) {
-        if (showError) setError(result.message || 'Gagal menyinkronkan spreadsheet.')
-      } else {
-        fetchStudents()
-        if (showError) setSuccess(`Sinkronisasi selesai: ${result.imported || 0} baru, ${result.updated || 0} diperbarui.`)
-      }
-    } catch (requestError) {
-      if (showError) setError(requestError.response?.data?.message || requestError.message || 'Gagal menyinkronkan spreadsheet.')
-    } finally {
-      syncingRef.current = false
-      setSyncing(false)
-    }
-  }
+  // Versi terbaru syncStudents disimpan di ref agar timer otomatis di bawah
+  // selalu memakai logika & data terbaru (tanpa membuat interval baru).
+  useEffect(() => { syncRef.current = syncStudents }, [syncStudents])
 
   useEffect(() => {
-    syncStudents()
-    const interval = window.setInterval(() => {
-      setSyncCountdown((current) => {
-        if (current <= 1) {
-          syncStudents()
-          return SYNC_INTERVAL_SECONDS
-        }
+    let cancelled = false
 
-        return current - 1
+    // Sinkronisasi terakhir (tersimpan di database) ditampilkan sejak awal,
+    // walaupun halaman baru dimuat ulang oleh petugas.
+    api.get('/students/import/source')
+      .then((response) => {
+        if (cancelled) return
+
+        const url = String(response.data?.url || '').trim()
+        if (url) localStorage.setItem(SYNC_URL_KEY, url)
+        if (response.data?.last_synced_at) setLastSyncedAt(response.data.last_synced_at)
       })
+      .catch(() => {
+        // URL belum tersimpan atau server belum tersedia.
+      })
+
+    return () => { cancelled = true }
+  }, [])
+
+  useEffect(() => {
+    // Sinkronisasi pertama saat halaman dibuka, lalu diulang setiap
+    // SYNC_INTERVAL_SECONDS selama halaman Data Mahasiswa terbuka. Perubahan
+    // isi spreadsheet (nama, email, telepon, NIM) langsung ikut terbarui.
+    syncRef.current?.()
+
+    const interval = window.setInterval(() => {
+      if (countdownRef.current > 1) {
+        countdownRef.current -= 1
+        setSyncCountdown(countdownRef.current)
+
+        return
+      }
+
+      // Modal impor sedang terbuka: tunda satu siklus agar URL sumber yang
+      // sedang diubah tidak tersinkron setengah jalan.
+      if (modalOpenRef.current) return
+
+      countdownRef.current = SYNC_INTERVAL_SECONDS
+      setSyncCountdown(SYNC_INTERVAL_SECONDS)
+      syncRef.current?.()
     }, 1000)
 
     return () => window.clearInterval(interval)
   }, [])
 
   const handleRefresh = async () => {
+    countdownRef.current = SYNC_INTERVAL_SECONDS
     setSyncCountdown(SYNC_INTERVAL_SECONDS)
     setError('')
     setSuccess('')
     await syncStudents(true)
+  }
+
+  const handleImported = (result) => {
+    setError('')
+    if (result?.synced_at) setLastSyncedAt(result.synced_at)
+    fetchStudents()
   }
 
   const handleSubmit = async (event) => {
@@ -194,14 +296,19 @@ function Students() {
               Impor Spreadsheet
             </button>
           </div>
-          <span className="text-right text-xs text-slate-500">Refresh otomatis dalam {formatCountdown(syncCountdown)}</span>
+          <span className="text-right text-xs text-slate-500">
+            <span>Refresh otomatis dalam {formatCountdown(syncCountdown)}</span>
+            {lastSyncedAt && (
+              <span className="block text-slate-400">Sinkron terakhir {formatClock(lastSyncedAt)}</span>
+            )}
+          </span>
         </div>
       </div>
 
       <ImportStudentsModal
         open={showImportModal}
         onClose={() => setShowImportModal(false)}
-        onImported={() => fetchStudents()}
+        onImported={handleImported}
       />
 
       {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}

@@ -50,7 +50,9 @@ const PREFERRED_PORT = 8642;
 //  CSV/link terpublikasi — instalasi lama menyalin ulang view suratnya.
 //  1.2.4: tangani kegagalan koneksi CSV Google Sheets tanpa HTTP 500.
 //  1.2.5: sertakan CA bundle untuk koneksi HTTPS PHP portable.
-const TEMPLATE_VERSION = '1.2.5';
+//  1.2.6: sinkronisasi otomatis data mahasiswa mengikuti perubahan
+//  spreadsheet (kecocokan NIM/email, hitungan "unchanged", waktu sinkron).
+const TEMPLATE_VERSION = '1.2.6';
 const isDev = !app.isPackaged;
 
 /* ------------------------------------------------------------------ paths */
@@ -201,6 +203,8 @@ async function importStudentsFromPublishedCsv(csvUrl) {
     message: (data && data.message) || 'Impor selesai.',
     imported: (data && data.imported) || 0,
     updated: (data && data.updated) || 0,
+    unchanged: (data && data.unchanged) || 0,
+    synced_at: (data && data.synced_at) || new Date().toISOString(),
     errors: (data && data.errors) || [],
   };
 }

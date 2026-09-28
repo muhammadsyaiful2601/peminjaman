@@ -70,6 +70,10 @@ class StudentController extends Controller
     {
         return response()->json([
             'url' => AppSetting::getValue('student_sync_csv_url', ''),
+            // Waktu sinkronisasi otomatis terakhir yang berhasil, agar halaman
+            // Data Mahasiswa dapat menampilkan "sinkron terakhir" walaupun
+            // halaman baru dibuka/dimuat ulang.
+            'last_synced_at' => AppSetting::getValue('student_sync_last_at'),
         ]);
     }
 
@@ -147,6 +151,7 @@ class StudentController extends Controller
 
         if ($result->getStatusCode() < 300) {
             AppSetting::setValue('student_sync_csv_url', $validated['url']);
+            AppSetting::setValue('student_sync_last_at', now()->toIso8601String());
         }
 
         return $result;
@@ -179,6 +184,7 @@ class StudentController extends Controller
 
         $imported = 0;
         $updated = 0;
+        $unchanged = 0;
         $errors = [];
         $seenStudentIds = [];
         $seenEmails = [];
@@ -229,14 +235,16 @@ class StudentController extends Controller
                 continue;
             }
 
-            // Cek bentrok dengan data yang sudah ada di database.
-            $conflict = Student::where(function ($query) use ($data) {
-                $query->where('student_id', $data['student_id'])
-                    ->orWhere('email', $data['email']);
-            })->first();
+            // Cocokkan baris spreadsheet dengan data yang sudah tersimpan:
+            // NIM dipakai sebagai kunci utama, email sebagai kunci cadangan.
+            // Dengan begitu perbaikan NIM pada spreadsheet ikut terpakai
+            // (bukan ditolak sebagai bentrok) sebagaimana perubahan data lain.
+            $byStudentId = Student::where('student_id', $data['student_id'])->first();
+            $byEmail = Student::where('email', $data['email'])->first();
 
-            if ($conflict && $conflict->student_id !== $data['student_id']) {
-                $errors[] = "Baris {$rowNumber}: Email {$data['email']} sudah dipakai NIM {$conflict->student_id}.";
+            // Email/NIM milik dua mahasiswa berbeda = bentrok sungguhan.
+            if ($byStudentId && $byEmail && $byStudentId->id !== $byEmail->id) {
+                $errors[] = "Baris {$rowNumber}: Email {$data['email']} sudah dipakai NIM {$byEmail->student_id}.";
 
                 continue;
             }
@@ -244,7 +252,7 @@ class StudentController extends Controller
             $seenStudentIds[$data['student_id']] = true;
             $seenEmails[$data['email']] = true;
 
-            $existing = $conflict;
+            $existing = $byStudentId ?? $byEmail;
             $payload = [
                 'student_id' => $data['student_id'],
                 'name' => $data['name'],
@@ -252,31 +260,57 @@ class StudentController extends Controller
                 'phone' => $data['phone'] !== '' ? $data['phone'] : null,
             ];
 
-            if ($existing) {
-                $existing->update($payload);
-                $updated++;
-            } else {
+            if (! $existing) {
                 Student::create($payload);
                 $imported++;
+
+                continue;
             }
+
+            $existing->fill($payload);
+
+            // Sinkronisasi otomatis menulis ulang seluruh isi spreadsheet
+            // secara berkala. Baris yang isinya sama tidak perlu disimpan dan
+            // tidak dihitung sebagai perubahan, sehingga angka "diperbarui"
+            // benar-benar hanya berisi baris yang berubah di spreadsheet.
+            if (! $existing->isDirty()) {
+                $unchanged++;
+
+                continue;
+            }
+
+            $existing->save();
+            $updated++;
         }
 
-        if ($imported === 0 && $updated === 0) {
+        $syncedAt = now()->toIso8601String();
+
+        if ($imported === 0 && $updated === 0 && $unchanged === 0) {
             return response()->json([
                 'message' => 'Tidak ada data yang diimpor. Periksa kembali isi file.',
                 'ok' => false,
                 'imported' => 0,
                 'updated' => 0,
+                'unchanged' => 0,
+                'synced_at' => null,
                 'errors' => $errors,
             ], 422);
         }
 
+        $summary = ["{$imported} mahasiswa baru ditambahkan", "{$updated} diperbarui"];
+
+        if ($unchanged > 0) {
+            $summary[] = "{$unchanged} tanpa perubahan";
+        }
+
         return response()->json([
             'ok' => true,
-            'message' => "Impor selesai: {$imported} mahasiswa baru ditambahkan, {$updated} diperbarui."
+            'message' => 'Impor selesai: '.implode(', ', $summary).'.'
                 . (count($errors) > 0 ? ' ' . count($errors) . ' baris dilewati.' : ''),
             'imported' => $imported,
             'updated' => $updated,
+            'unchanged' => $unchanged,
+            'synced_at' => $syncedAt,
             'errors' => $errors,
         ]);
     }
@@ -400,8 +434,22 @@ class StudentController extends Controller
         $path = $parts['path'] ?? '';
         parse_str($parts['query'] ?? '', $query);
 
+        // Tab/sheet aktif bisa ditulis di query (?gid=123&single=true) atau di
+        // fragment (#gid=123) seperti pada URL yang disalin dari address bar.
+        // Tanpa gid, Google mengekspor tab pertama sehingga perubahan pada tab
+        // yang sedang dipakai petugas tidak ikut tersinkron.
+        if (! isset($query['gid']) && isset($parts['fragment'])) {
+            parse_str($parts['fragment'], $fragment);
+
+            if (isset($fragment['gid'])) {
+                $query['gid'] = $fragment['gid'];
+            }
+        }
+
         if (str_ends_with($path, '/pubhtml')) {
             $path = substr($path, 0, -8).'/pub';
+            $query['output'] = 'csv';
+        } elseif (str_ends_with($path, '/pub')) {
             $query['output'] = 'csv';
         } elseif (str_ends_with($path, '/edit')) {
             $path = substr($path, 0, -5).'/export';
