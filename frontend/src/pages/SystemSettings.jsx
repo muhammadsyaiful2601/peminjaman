@@ -295,12 +295,6 @@ function SystemSettings() {
           </div>
         </div>
 
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          Seluruh data yang ada sekarang akan <strong>digantikan</strong> oleh isi berkas backup. Sistem otomatis menyimpan salinan data
-          sebelum pemulihan di folder <code className="rounded bg-amber-100 px-1">storage/app/backups</code>, sehingga masih bisa
-          dikembalikan bila salah memilih berkas. Setelah pemulihan selesai halaman dimuat ulang dan Anda mungkin perlu login kembali.
-        </div>
-
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           <label className="text-sm font-medium text-slate-700">
             Berkas backup

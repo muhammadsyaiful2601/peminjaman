@@ -58,7 +58,9 @@ const PREFERRED_PORT = 8642;
 //  nama berkas) dan penolakan entri foto berpath berbahaya pada arsip backup.
 //  1.4.0: pengingat backup mingguan otomatis saat aplikasi dibuka (dialog
 //  pilihan backup sekarang / nanti / buka pengaturan dengan password admin).
-const TEMPLATE_VERSION = '1.4.0';
+//  1.4.1: rapikan teks antarmuka - hapus catatan panjang pada form pemulihan
+//  database dan penyederhanaan placeholder kolom Username di halaman login.
+const TEMPLATE_VERSION = '1.4.1';
 const isDev = !app.isPackaged;
 
 /* ------------------------------------------------------------------ paths */
