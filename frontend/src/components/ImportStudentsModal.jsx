@@ -1,12 +1,36 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Download, FileSpreadsheet, FileUp, RefreshCw, X } from 'lucide-react'
 import api from '../api/axios'
 import { downloadBlob } from '../utils/downloadBlob'
+import {
+  DEFAULT_BORROWER_TYPE,
+  SPREADSHEET_BORROWER_TYPES,
+  borrowerTypeLabel,
+  hasSpreadsheetSupport,
+  normalizeBorrowerType,
+  syncStorageKey,
+} from '../utils/borrowerTypes'
 
 // Template berisi judul, petunjuk, header berformat, dan contoh baris.
 // Diunduh dari backend lalu bisa dibuka di Excel / diunggah ke Google Sheets.
 
-function ImportStudentsModal({ open, onClose, onImported }) {
+/**
+ * Modal impor data peminjam.
+ *
+ * Mahasiswa, tendik, dan dosen punya spreadsheet Google Sheets masing-masing
+ * dengan alur yang sama persis: pilih jenis -> tempel URL CSV terpublikasi ->
+ * impor (dan seterusnya ikut tersinkron otomatis setiap 5 menit).
+ *
+ * @param {object}   props
+ * @param {boolean}  props.open            Modal terbuka atau tidak.
+ * @param {Function} props.onClose          Dipanggil saat modal ditutup.
+ * @param {Function} [props.onImported]    Dipanggil dengan hasil impor.
+ * @param {string}   [props.initialType]   Jenis yang dipakai saat modal dibuka
+ *                                         (default: tab yang sedang aktif).
+ * @param {object}   [props.sources]       Sumber spreadsheet per jenis dari halaman induk.
+ * @param {Function} [props.onSourcesChange] Dipanggil saat URL jenis terpilih berubah.
+ */
+function ImportStudentsModal({ open, onClose, onImported, initialType, sources, onSourcesChange }) {
   const fileInputRef = useRef(null)
   const [selectedFile, setSelectedFile] = useState(null)
   const [source, setSource] = useState('file')
@@ -15,29 +39,38 @@ function ImportStudentsModal({ open, onClose, onImported }) {
   const [importing, setImporting] = useState(false)
   const [error, setError] = useState('')
   const [result, setResult] = useState(null)
+  const [type, setType] = useState(DEFAULT_BORROWER_TYPE)
+
+  // URL milik sebuah jenis, dibaca dari cache browser lalu halaman induk.
+  // Dibuat stabil dengan useCallback supaya aman dipakai di dalam useEffect.
+  const urlFor = useCallback(
+    (value) => localStorage.getItem(syncStorageKey(value)) || sources?.[value]?.url || '',
+    [sources],
+  )
 
   useEffect(() => {
     if (!open) return
 
-    const savedUrl = localStorage.getItem('student_sync_csv_url')
-    if (savedUrl) {
-      setSource('api')
-      setSpreadsheet(savedUrl)
-      return
-    }
+    // Modal dibuka pada tab yang sedang aktif bila tab itu punya spreadsheet.
+    const wanted = hasSpreadsheetSupport(initialType) ? normalizeBorrowerType(initialType) : DEFAULT_BORROWER_TYPE
+    const savedUrl = urlFor(wanted)
 
-    api.get('/students/import/source')
-      .then((response) => {
-        const url = response.data.url || ''
-        if (!url) return
-        localStorage.setItem('student_sync_csv_url', url)
-        setSource('api')
-        setSpreadsheet(url)
-      })
-      .catch(() => {
-        // URL belum tersimpan atau server belum tersedia.
-      })
-  }, [open])
+    setType(wanted)
+    setSpreadsheet(savedUrl)
+    setSource(savedUrl ? 'api' : 'file')
+  }, [open, initialType, urlFor])
+
+  // Ganti jenis -> muat URL milik jenis itu (kalau ada).
+  const handleTypeChange = (next) => {
+    const value = normalizeBorrowerType(next)
+    const savedUrl = urlFor(value)
+
+    setType(value)
+    setError('')
+    setResult(null)
+    setSpreadsheet(savedUrl)
+    setSource(savedUrl ? 'api' : 'file')
+  }
 
   if (!open) return null
 
@@ -82,29 +115,42 @@ function ImportStudentsModal({ open, onClose, onImported }) {
       if (source === 'file') {
         const formData = new FormData()
         formData.append('file', selectedFile)
+        // Seluruh baris file dipaksa menjadi jenis yang dipilih, jadi file
+        // tendik/dosen tidak wajib punya kolom "Jenis".
+        formData.append('type', type)
         response = await api.post('/students/import', formData, {
           headers: { 'Content-Type': 'multipart/form-data' },
         })
       } else {
         let result
         if (window.desktop?.importStudentsFromCsv) {
-          result = await window.desktop.importStudentsFromCsv(spreadsheet.trim())
+          result = await window.desktop.importStudentsFromCsv(spreadsheet.trim(), type)
         } else {
-          const webResponse = await api.post('/students/import/csv-url', { url: spreadsheet.trim() })
+          const webResponse = await api.post('/students/import/csv-url', { url: spreadsheet.trim(), type })
           result = webResponse.data
         }
         if (!result.ok) throw new Error(result.message || 'Gagal mengimpor CSV Google Sheets.')
         response = { data: result }
       }
 
-      if (source === 'api') localStorage.setItem('student_sync_csv_url', spreadsheet.trim())
       if (source === 'api') {
-        await api.post('/students/import/source', { url: spreadsheet.trim() })
+        // URL disimpan pada kunci milik jenis ini supaya sinkronisasi
+        // otomatis berikutnya memakai spreadsheet yang sama.
+        localStorage.setItem(syncStorageKey(type), spreadsheet.trim())
+        await api.post('/students/import/source', { url: spreadsheet.trim(), type })
+        onSourcesChange?.((current) => ({
+          ...current,
+          [type]: {
+            ...(current?.[type] || {}),
+            url: spreadsheet.trim(),
+            lastSyncedAt: result?.synced_at || current?.[type]?.lastSyncedAt || '',
+          },
+        }))
       }
       setResult(response.data)
       setSelectedFile(null)
       if (fileInputRef.current) fileInputRef.current.value = ''
-      onImported?.(response.data)
+      onImported?.({ ...response.data, type })
     } catch (requestError) {
       const data = requestError.response?.data
       setError(data?.message || requestError.message || 'Gagal mengimpor data peminjam.')
@@ -118,11 +164,12 @@ function ImportStudentsModal({ open, onClose, onImported }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" onClick={handleClose}>
       <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl" onClick={(event) => event.stopPropagation()}>
         <ModalHeader handleClose={handleClose} />
+        <TypeSection type={type} onChange={handleTypeChange} />
         <TemplateSection />
         <SourceTabs source={source} setSource={setSource} />
         {source === 'file'
           ? <FileSection fileInputRef={fileInputRef} handleFileChange={handleFileChange} />
-          : <ApiSection spreadsheet={spreadsheet} setSpreadsheet={setSpreadsheet} />}
+          : <ApiSection type={type} spreadsheet={spreadsheet} setSpreadsheet={setSpreadsheet} />}
         {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
         {result && <ResultSection result={result} />}
         <Footer handleClose={handleClose} handleImport={handleImport} importing={importing} canImport={source === 'file' ? Boolean(selectedFile) : Boolean(spreadsheet.trim())} source={source} />
@@ -132,6 +179,42 @@ function ImportStudentsModal({ open, onClose, onImported }) {
 }
 
 export default ImportStudentsModal
+
+/**
+ * Pemilih kelompok peminjam. Tiap kelompok punya spreadsheet Google Sheets
+ * sendiri dengan alur identik, jadi petugas cukup menautkan URL per kelompok.
+ */
+function TypeSection({ type, onChange }) {
+  return (
+    <div className="mb-4">
+      <p className="mb-2 text-sm font-medium text-slate-700">Data yang akan diimpor</p>
+      <div className="grid grid-cols-3 gap-2">
+        {SPREADSHEET_BORROWER_TYPES.map((item) => {
+          const active = type === item.value
+
+          return (
+            <button
+              key={item.value}
+              type="button"
+              onClick={() => onChange(item.value)}
+              className={`rounded-lg border px-3 py-2 text-sm font-medium transition ${
+                active
+                  ? 'border-cyan-600 bg-cyan-600 text-white'
+                  : 'border-slate-300 bg-white text-slate-600 hover:border-cyan-300 hover:bg-cyan-50'
+              }`}
+            >
+              {item.label}
+            </button>
+          )
+        })}
+      </div>
+      <p className="mt-2 text-xs text-slate-500">
+        Seluruh baris dari file atau URL ini akan disimpan sebagai
+        {' '}<strong>{borrowerTypeLabel(type)}</strong>, jadi kolom &ldquo;Jenis&rdquo; pada spreadsheet tidak wajib diisi.
+      </p>
+    </div>
+  )
+}
 
 function ModalHeader({ handleClose }) {
   return (
@@ -229,14 +312,20 @@ function FileSection({ fileInputRef, handleFileChange }) {
   )
 }
 
-function ApiSection({ spreadsheet, setSpreadsheet }) {
+function ApiSection({ type, spreadsheet, setSpreadsheet }) {
+  const label = borrowerTypeLabel(type)
+
   return (
     <div className="mb-4 space-y-3">
       <label className="block text-sm font-medium text-slate-700">
-        URL CSV Google Sheets
+        URL CSV Google Sheets — {label}
         <input value={spreadsheet} onChange={(event) => setSpreadsheet(event.target.value)} placeholder="https://docs.google.com/spreadsheets/d/.../pub?output=csv" className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500" />
       </label>
-      <p className="text-xs text-slate-500">Di Google Sheets pilih File → Bagikan → Publikasikan ke web, pilih format CSV, lalu tempel URL hasil publikasi. Tidak memerlukan API key.</p>
+      <p className="text-xs text-slate-500">
+        Di Google Sheets pilih <em>File → Bagikan → Publikasikan ke web</em>, pilih format CSV, lalu tempel URL hasil
+        publikasi. Tidak memerlukan API key. URL ini tersimpan terpisah untuk kelompok{' '}
+        <strong>{label}</strong> dan akan ditarik otomatis setiap 5 menit.
+      </p>
     </div>
   )
 }

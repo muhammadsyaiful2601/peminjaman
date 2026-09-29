@@ -145,6 +145,50 @@ disimpan diam-diam sebagai mahasiswa.
 Daftar istilah yang dikenali pada kolom `Jenis` ada di
 [`backend/app/Support/BorrowerType.php`](backend/app/Support/BorrowerType.php).
 
+### Spreadsheet per Kelompok (Google Sheets)
+
+Mahasiswa, **tendik**, dan **dosen** masing-masing punya spreadsheet Google
+Sheets sendiri dengan **logika yang persis sama** seperti mahasiswa: tautan
+CSV terpublikasi, impor otomatis saat aplikasi dibuka lalu diulang tiap
+5 menit, tombol **Refresh Data**, dan penanda waktu sinkron terakhir. Peminjam
+umum tidak memakai spreadsheet (dicatat manual lewat form).
+
+Cara memakai:
+
+1. Buat spreadsheet untuk tiap kelompok (**File → Bagikan → Publikasikan ke
+   web** → format CSV), lalu salin URL-nya.
+2. Buka **Data Peminjam → Impor Spreadsheet**, pilih kelompoknya
+   (Mahasiswa / Tendik / Dosen), lalu tempel URL tersebut.
+3. Desde itu tautan otomatis ditarik tiap 5 menit. Status tiap kelompok
+   terlihat di bawah tombol Refresh Data.
+
+Kolom yang dikenali di spreadsheet: `NIM/NIP`, `Nama`, `Email`,
+`No. Telepon` (wajib), serta `Jenis` dan `Jabatan / Unit Kerja` (opsional).
+**Begitu spreadsheet ditautkan ke suatu kelompok, seluruh barisnya otomatis
+disimpan sebagai kelompok itu** sehingga kolom `Jenis` tidak perlu diisi di
+file tendik/dosen.
+
+| Jenis | Kunci `app_settings` (URL) | Kunci (waktu sinkron) |
+| :--- | :--- | :--- |
+| Mahasiswa | `student_sync_csv_url` | `student_sync_last_at` |
+| Tendik | `tendik_sync_csv_url` | `tendik_sync_last_at` |
+| Dosen | `dosen_sync_csv_url` | `dosen_sync_last_at` |
+
+Kunci mahasiswa sengaja memakai nama lamanya, jadi spreadsheet yang sudah
+tertaut tidak perlu disetel ulang. Setiap kelompok berjalan berurutan (bukan
+bersamaan) supaya server tidak terbebani, dan hasilnya digabung jadi satu
+pesan — bila satu kelompok gagal, hasil kelompok lain tetap tersimpan dan
+petugas diberi tahu kelompok mana yang gagal.
+
+Endpoint yang memakai `type`:
+
+| Endpoint | Parameter | Keterangan |
+| :--- | :--- | :--- |
+| `GET /api/students/import/source` | `type` | URL + waktu sinkron kelompok tersebut. Tanpa `type` = mahasiswa. |
+| `POST /api/students/import/source` | `url`, `type` | Simpan URL kelompok tersebut. |
+| `POST /api/students/import/csv-url` | `url`, `type` | Tarik CSV, paksa jenis, lalu simpan URL-nya. |
+| `POST /api/students/import` | `file`, `type` | Impor berkas; `type` memaksa jenis seluruh baris. |
+
 ### Penomoran & Paginasi Tabel
 
 Seluruh tabel dan daftar data di aplikasi memakai aturan yang sama:

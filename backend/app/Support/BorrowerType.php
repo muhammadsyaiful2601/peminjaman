@@ -126,6 +126,57 @@ class BorrowerType
     }
 
     /**
+     * Kunci `app_settings` untuk URL CSV Google Sheets tiap jenis.
+     *
+     * Kunci mahasiswa sengaja memakai nama lama (`student_sync_csv_url`)
+     * supaya instalasi yang sudah menyimpan URL tidak kehilangan
+     * konfigurasinya saat fitur ini ditambahkan.
+     *
+     * @var array<string, string>
+     */
+    private const SYNC_URL_KEYS = [
+        self::MAHASISWA => 'student_sync_csv_url',
+        self::TENDIK => 'tendik_sync_csv_url',
+        self::DOSEN => 'dosen_sync_csv_url',
+    ];
+
+    /** @var array<string, string> */
+    private const SYNC_LAST_KEYS = [
+        self::MAHASISWA => 'student_sync_last_at',
+        self::TENDIK => 'tendik_sync_last_at',
+        self::DOSEN => 'dosen_sync_last_at',
+    ];
+
+    /**
+     * Jenis peminjam yang punya spreadsheet sinkronisasi sendiri.
+     *
+     * Peminjam umum tidak termasuk: jumlahnya sedikit dan biasanya dicatat
+     * manual, jadi tidak perlu tautan spreadsheet per kelompok.
+     */
+    public const SPREADSHEET_TYPES = [
+        self::MAHASISWA,
+        self::TENDIK,
+        self::DOSEN,
+    ];
+
+    /** Kunci `app_settings` untuk URL spreadsheet; null bila jenis ini tidak punya. */
+    public static function syncUrlKey(?string $type): ?string
+    {
+        return self::SYNC_URL_KEYS[self::clean($type)] ?? null;
+    }
+
+    /** Kunci `app_settings` untuk waktu sinkronisasi terakhir. */
+    public static function syncLastKey(?string $type): ?string
+    {
+        return self::SYNC_LAST_KEYS[self::clean($type)] ?? null;
+    }
+
+    public static function supportsSpreadsheet(?string $type): bool
+    {
+        return self::syncUrlKey($type) !== null;
+    }
+
+    /**
      * Daftar pilihan untuk dropdown/validasi, mis.
      * `Rule::in(array_keys(BorrowerType::options()))`.
      *

@@ -78,7 +78,11 @@ const PREFERRED_PORT = 8642;
 //  1.4.7: peminjam tidak lagi hanya mahasiswa — ditambah jenis tendik, dosen,
 //  dan umum (kolom `students.type` + `students.position` dan
 //  `loans.borrower_type`). Data lama otomatis menjadi jenis "mahasiswa".
-const TEMPLATE_VERSION = '1.4.7';
+//  1.4.8: sinkronisasi Google Sheets jadi per kelompok — tendik dan dosen punya
+//  spreadsheet sendiri dengan alur identik mahasiswa. Kunci app_settings tiap
+//  kelompok diatur lewat BorrowerType::syncUrlKey(), dan importer desktop
+//  meneruskan `type` ke backend.
+const TEMPLATE_VERSION = '1.4.8';
 const isDev = !app.isPackaged;
 
 /* ------------------------------------------------------------------ paths */
@@ -180,13 +184,16 @@ function saveConfig() {
 }
 
 /**
- * Impor data mahasiswa dari CSV Google Sheets terpublikasi.
+ * Impor data peminjam dari CSV Google Sheets terpublikasi.
  * Pengambilan CSV, validasi, dan penulisan database dilakukan backend lokal
  * lewat endpoint khusus desktop (`POST /api/desktop/students/import-csv-url`
  * dengan header X-Desktop-Key) supaya aturan impor hanya ada di satu tempat
  * (`Api\StudentController`) — main process hanya menjembatani permintaan.
+ *
+ * `type` menentukan kelompok peminjam (mahasiswa/tendik/dosen) dan diteruskan
+ * apa adanya ke backend agar spreadsheet tendik/dosen memakai aturan yang sama.
  */
-async function importStudentsFromPublishedCsv(csvUrl) {
+async function importStudentsFromPublishedCsv(csvUrl, type) {
   const url = String(csvUrl || '').trim();
 
   if (url === '') {
@@ -209,7 +216,7 @@ async function importStudentsFromPublishedCsv(csvUrl) {
         Accept: 'application/json',
         'X-Desktop-Key': config.desktopKey || '',
       },
-      body: JSON.stringify({ url }),
+      body: JSON.stringify({ url, type: type || 'mahasiswa' }),
       signal: AbortSignal.timeout(60000),
     });
   } catch (error) {
@@ -1458,8 +1465,8 @@ function applyBrandingToWindows() {
 }
 
 function registerIpc() {
-  ipcMain.handle('students:import-published-csv', async (_event, csvUrl) => {
-    return importStudentsFromPublishedCsv(csvUrl);
+  ipcMain.handle('students:import-published-csv', async (_event, csvUrl, type) => {
+    return importStudentsFromPublishedCsv(csvUrl, type);
   });
 
   ipcMain.handle('file:save', async (_event, data) => {

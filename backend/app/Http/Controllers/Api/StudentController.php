@@ -112,7 +112,7 @@ class StudentController extends Controller
         $student->update($this->validatedData($request, $student));
 
         return response()->json([
-            'message' => 'Data mahasiswa berhasil diperbarui.',
+            'message' => 'Data peminjam berhasil diperbarui.',
             'student' => $student->refresh(),
         ]);
     }
@@ -121,17 +121,40 @@ class StudentController extends Controller
     {
         $student->delete();
 
-        return response()->json(['message' => 'Data mahasiswa berhasil dihapus.']);
+        return response()->json(['message' => 'Data peminjam berhasil dihapus.']);
     }
 
-    public function importSource()
+    /**
+     * Baca URL spreadsheet & waktu sinkron terakhir untuk sebuah jenis
+     * peminjam.
+     *
+     * Tanpa parameter `type` (pemanggil lama) yang dibaca adalah
+     * spreadsheet mahasiswa, sehingga konfigurasi yang sudah tersimpan tetap
+     * dipakai apa adanya.
+     */
+    public function importSource(Request $request)
     {
+        $type = $this->resolveSpreadsheetType($request);
+        $urlKey = BorrowerType::syncUrlKey($type);
+
+        if ($urlKey === null) {
+            return response()->json([
+                'type' => $type,
+                'supported' => false,
+                'url' => '',
+                'last_synced_at' => null,
+                'message' => 'Jenis peminjam ini tidak memakai sinkronisasi spreadsheet.',
+            ]);
+        }
+
         return response()->json([
-            'url' => AppSetting::getValue('student_sync_csv_url', ''),
+            'type' => $type,
+            'supported' => true,
+            'url' => AppSetting::getValue($urlKey, ''),
             // Waktu sinkronisasi otomatis terakhir yang berhasil, agar halaman
-            // Data Mahasiswa dapat menampilkan "sinkron terakhir" walaupun
+            // Data Peminjam dapat menampilkan "sinkron terakhir" walaupun
             // halaman baru dibuka/dimuat ulang.
-            'last_synced_at' => AppSetting::getValue('student_sync_last_at'),
+            'last_synced_at' => AppSetting::getValue(BorrowerType::syncLastKey($type)),
         ]);
     }
 
@@ -139,25 +162,40 @@ class StudentController extends Controller
     {
         $validated = $request->validate([
             'url' => ['required', 'url', 'max:2000'],
+            'type' => ['nullable', 'string', Rule::in(BorrowerType::SPREADSHEET_TYPES)],
         ]);
 
-        AppSetting::setValue('student_sync_csv_url', $validated['url']);
+        $type = BorrowerType::clean($validated['type'] ?? null);
+        $urlKey = BorrowerType::syncUrlKey($type);
+
+        if ($urlKey === null) {
+            return response()->json([
+                'message' => 'Jenis peminjam ini tidak memakai sinkronisasi spreadsheet.',
+            ], 422);
+        }
+
+        AppSetting::setValue($urlKey, $validated['url']);
 
         return response()->json([
             'message' => 'URL spreadsheet berhasil disimpan.',
+            'type' => $type,
             'url' => $validated['url'],
         ]);
     }
 
     /**
-     * Impor data mahasiswa dari file spreadsheet (CSV hasil unduhan
-     * Google Sheets / Excel). Baris dengan NIM yang sudah ada akan
-     * diperbarui, baris baru akan ditambahkan.
+     * Impor data dari file spreadsheet (CSV hasil unduhan Google Sheets /
+     * Excel). Baris dengan NIM/NIP yang sudah ada akan diperbarui, baris baru
+     * akan ditambahkan.
+     *
+     * Parameter `type` memaksa seluruh baris menjadi jenis peminjam tertentu,
+     * jadi file tendik/dosen tidak wajib punya kolom "Jenis".
      */
     public function import(Request $request)
     {
-        $request->validate([
+        $validated = $request->validate([
             'file' => ['required', 'file', 'max:5120', 'mimes:csv,txt,xlsx,xls'],
+            'type' => ['nullable', 'string', Rule::in(BorrowerType::ALL)],
         ]);
 
         $rows = $this->readRows($request->file('file'));
@@ -168,18 +206,25 @@ class StudentController extends Controller
             ], 422);
         }
 
-        return $this->importRows($rows);
+        return $this->importRows($rows, $validated['type'] ?? null);
     }
 
     /**
+    /**
      * Ambil CSV Google Sheets yang sudah dipublikasikan untuk penggunaan web.
      * Tidak menggunakan Google Sheets API atau API key.
+     *
+     * Parameter `type` menentukan spreadsheet mana yang diambil sekaligus
+     * memaksa semua baris hasil impor menjadi jenis tersebut.
      */
     public function importFromPublishedCsv(Request $request)
     {
         $validated = $request->validate([
             'url' => ['required', 'url', 'max:2000'],
+            'type' => ['nullable', 'string', Rule::in(BorrowerType::SPREADSHEET_TYPES)],
         ]);
+
+        $type = BorrowerType::clean($validated['type'] ?? null);
 
         try {
             $response = Http::timeout(20)
@@ -205,17 +250,49 @@ class StudentController extends Controller
             ], 422);
         }
 
-        $result = $this->importRows($rows);
+        $result = $this->importRows($rows, $type);
 
         if ($result->getStatusCode() < 300) {
-            AppSetting::setValue('student_sync_csv_url', $validated['url']);
-            AppSetting::setValue('student_sync_last_at', now()->toIso8601String());
+            // URL & waktu sinkron disimpan pada kunci milik jenis tersebut,
+            // sehingga tiap kelompok punya spreadsheet sendiri.
+            $urlKey = BorrowerType::syncUrlKey($type);
+
+            if ($urlKey !== null) {
+                AppSetting::setValue($urlKey, $validated['url']);
+                AppSetting::setValue(BorrowerType::syncLastKey($type), now()->toIso8601String());
+            }
         }
 
         return $result;
     }
 
-    private function importRows(array $rows)
+    /**
+     * Tentukan jenis peminjam dari parameter `type`.
+     *
+     * Parameter kosong/tidak dikenal berarti mahasiswa supaya pemanggil lama
+     * yang tidak mengirim `type` tetap memakai spreadsheet mahasiswa.
+     */
+    private function resolveSpreadsheetType(Request $request): string
+    {
+        $raw = trim((string) $request->query('type', ''));
+
+        if ($raw === '') {
+            return BorrowerType::MAHASISWA;
+        }
+
+        $type = BorrowerType::fromText($raw);
+
+        return $type ?? BorrowerType::MAHASISWA;
+    }
+
+    /**
+     * @param  string|null  $forcedType  Bila diisi, seluruh baris dipaksa
+     *                                   menjadi jenis tersebut dan kolom
+     *                                   "Jenis" di spreadsheet diabaikan.
+     *                                   Dipakai saat petugas menautkan satu
+     *                                   spreadsheet khusus tendik/dosen.
+     */
+    private function importRows(array $rows, ?string $forcedType = null)
     {
 
         // Cari baris header di dalam file: template berisi baris judul &
@@ -268,7 +345,9 @@ class StudentController extends Controller
             // Kolom "Jenis" opsional: bila kosong, baris dianggap mahasiswa
             // supaya spreadsheet lama tanpa kolom ini tetap bisa diimpor.
             $rawType = isset($columnMap['type']) ? trim((string) ($row[$columnMap['type']] ?? '')) : '';
-            $type = $rawType === '' ? BorrowerType::MAHASISWA : BorrowerType::fromText($rawType);
+            $type = $forcedType !== null
+                ? BorrowerType::clean($forcedType)
+                : ($rawType === '' ? BorrowerType::MAHASISWA : BorrowerType::fromText($rawType));
 
             if ($data['student_id'] === '' && $data['name'] === '' && $data['email'] === '') {
                 continue;
@@ -276,7 +355,7 @@ class StudentController extends Controller
 
             // Jenis yang tidak dikenali Ditolak, bukan diam-diam disimpan
             // sebagai mahasiswa supaya salah kategori tidak sulit ditelusuri.
-            if ($rawType !== '' && $type === null) {
+            if ($forcedType === null && $rawType !== '' && $type === null) {
                 $errors[] = "Baris {$rowNumber}: Jenis peminjam \"{$rawType}\" tidak dikenal "
                     . '(pilihan: '.implode(', ', BorrowerType::options()).').';
 

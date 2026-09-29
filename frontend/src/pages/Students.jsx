@@ -1,17 +1,22 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Mail, Pencil, Phone, Plus, RefreshCw, Search, Trash2, UserRound, Upload } from 'lucide-react'
 import api from '../api/axios'
 import TablePagination from '../components/TablePagination'
 import ImportStudentsModal from '../components/ImportStudentsModal'
-import { BORROWER_TYPES, DEFAULT_BORROWER_TYPE, borrowerTypeBadgeClass, borrowerTypeLabel, identityLabel } from '../utils/borrowerTypes'
+import { BORROWER_TYPES, DEFAULT_BORROWER_TYPE, SPREADSHEET_BORROWER_TYPES, borrowerTypeBadgeClass, borrowerTypeLabel, identityLabel, normalizeBorrowerType, syncStorageKey } from '../utils/borrowerTypes'
 
 const emptyForm = { student_id: '', name: '', type: DEFAULT_BORROWER_TYPE, position: '', email: '', phone: '' }
 const SYNC_INTERVAL_SECONDS = 5 * 60
 // Jumlah baris per halaman pada tabel Data Peminjam. Setelah 10 data
 // muncul tombol "Berikutnya" supaya petugas bisa membuka halaman berikutnya.
 const PER_PAGE = 10
-// URL CSV Google Sheets terpublikasi yang menjadi sumber sinkronisasi otomatis.
-const SYNC_URL_KEY = 'student_sync_csv_url'
+// Status awal sumber sinkronisasi per jenis peminjam. Mahasiswa, tendik, dan
+// dosen masing-masing punya spreadsheet sendiri dengan logika yang sama.
+const emptySyncSources = () => SPREADSHEET_BORROWER_TYPES.reduce((acc, type) => {
+  acc[type.value] = { url: '', lastSyncedAt: '' }
+
+  return acc
+}, {})
 
 function formatCountdown(seconds) {
   const minutes = Math.floor(seconds / 60)
@@ -64,7 +69,8 @@ function Students() {
   const skipPageFetchRef = useRef(true)
   const skipTypeFetchRef = useRef(true)
   const modalOpenRef = useRef(false)
-  const [lastSyncedAt, setLastSyncedAt] = useState('')
+  // Sumber spreadsheet per jenis: { [type]: { url, lastSyncedAt } }.
+  const [syncSources, setSyncSources] = useState(emptySyncSources)
 
   useEffect(() => { searchRef.current = search }, [search])
   useEffect(() => { pageRef.current = page }, [page])
@@ -98,6 +104,59 @@ function Students() {
     }
   }, [])
 
+  /**
+   * Sinkronisasi satu jenis peminjam dari Google Sheets-nya. Logikanya sama
+   * persis dengan mahasiswa: baca URL (cache browser dulu, lalu database),
+   * tarik CSV terpublikasi, lalu hitung baris baru/diubah/tetap.
+   *
+   * @returns {Promise<{ok: boolean, skipped?: boolean, message?: string, label?: string, imported?: number, updated?: number, unchanged?: number, errors?: string[]}>}
+   */
+  const syncOneType = useCallback(async (type) => {
+    const label = borrowerTypeLabel(type)
+    const storageKey = syncStorageKey(type)
+    let csvUrl = (localStorage.getItem(storageKey) || '').trim()
+
+    if (!csvUrl) {
+      try {
+        const source = await api.get('/students/import/source', { params: { type } })
+        csvUrl = String(source.data?.url || '').trim()
+        if (csvUrl) localStorage.setItem(storageKey, csvUrl)
+      } catch {
+        return { ok: false, skipped: true, label, message: `URL spreadsheet ${label.toLowerCase()} belum dapat dimuat dari database.` }
+      }
+    }
+
+    if (!csvUrl) {
+      // Sumber belum pernah diatur: bukan kegagalan, jadi tidak dipesan
+      // berulang setiap siklus. Pesan hanya muncul saat refresh manual.
+      return { ok: false, skipped: true, label, message: `Belum ada URL CSV spreadsheet ${label.toLowerCase()}.` }
+    }
+
+    const result = window.desktop?.importStudentsFromCsv
+      ? await window.desktop.importStudentsFromCsv(csvUrl, type)
+      : (await api.post('/students/import/csv-url', { url: csvUrl, type }, { timeout: 30000 })).data
+
+    if (!result?.ok) {
+      return { ok: false, label, message: result?.message || `Gagal menyinkronkan spreadsheet ${label.toLowerCase()}.` }
+    }
+
+    return {
+      ok: true,
+      label,
+      imported: result.imported || 0,
+      updated: result.updated || 0,
+      unchanged: result.unchanged || 0,
+      errors: result.errors || [],
+      syncedAt: result.synced_at || new Date().toISOString(),
+      message: result.message,
+    }
+  }, [])
+
+  /**
+   * Sinkronisasi semua jenis yang spreadsheet-nya sudah ditautkan. Setiap jenis
+   * diproses berurutan supaya tidak membanjiri server, dan hasilnya
+   * digabungkan menjadi satu pesan untuk petugas.
+   */
   const syncStudents = useCallback(async (showFeedback = false) => {
     if (syncingRef.current) return false
 
@@ -105,59 +164,64 @@ function Students() {
     setSyncing(true)
 
     try {
-      let csvUrl = (localStorage.getItem(SYNC_URL_KEY) || '').trim()
+      const results = []
 
-      if (!csvUrl) {
-        try {
-          const source = await api.get('/students/import/source')
-          csvUrl = String(source.data?.url || '').trim()
-          if (csvUrl) localStorage.setItem(SYNC_URL_KEY, csvUrl)
-        } catch {
-          if (showFeedback) setError('URL spreadsheet belum dapat dimuat dari database.')
+      for (const type of SPREADSHEET_BORROWER_TYPES) {
+        results.push(await syncOneType(type.value))
+      }
 
-          return false
+      const done = results.filter((result) => result.ok)
+      const failed = results.filter((result) => !result.ok && !result.skipped)
+
+      if (done.length === 0) {
+        // Tidak ada satu pun spreadsheet yang ditautkan/diambil. Hanya gagal
+        // yang diberi pesan saat refresh manual agar tidak mengganggu.
+        const realFailure = failed[0]
+        if (showFeedback) {
+          setError(realFailure?.message || 'Belum ada URL CSV spreadsheet. Impor data melalui tombol Impor Spreadsheet terlebih dahulu.')
         }
-      }
-
-      if (!csvUrl) {
-        // Sumber belum pernah diatur: bukan kegagalan, jadi tidak dipesan
-        // berulang setiap siklus. Pesan hanya muncul saat refresh manual.
-        if (showFeedback) setError('Belum ada URL CSV spreadsheet. Impor data melalui tombol Impor Spreadsheet terlebih dahulu.')
-
-        return false
-      }
-
-      const result = window.desktop?.importStudentsFromCsv
-        ? await window.desktop.importStudentsFromCsv(csvUrl)
-        : (await api.post('/students/import/csv-url', { url: csvUrl }, { timeout: 30000 })).data
-
-      if (!result?.ok) {
-        // Kegagalan sinkronisasi otomatis wajib terlihat petugas. Bila dibisukan,
-        // perubahan di spreadsheet tampak "tidak mau masuk" ke sistem tanpa sebab.
-        setError(result?.message || 'Gagal menyinkronkan spreadsheet. Periksa URL/publikasi CSV.')
 
         return false
       }
 
       setError('')
-      setLastSyncedAt(result.synced_at || new Date().toISOString())
+
+      // Waktu sinkron terakhir per jenis disimpan terpisah supaya setiap tab
+      // bisa menampilkan waktunya sendiri.
+      setSyncSources((current) => {
+        const next = { ...current }
+        done.forEach((result) => {
+          const entry = SPREADSHEET_BORROWER_TYPES.find((type) => borrowerTypeLabel(type.value) === result.label)
+          const key = entry?.value || DEFAULT_BORROWER_TYPE
+          next[key] = { ...(next[key] || { url: '' }), lastSyncedAt: result.syncedAt }
+        })
+
+        return next
+      })
 
       // Muat ulang daftar tanpa efek "Memuat..." agar tabel tidak berkedip
       // setiap siklus sinkronisasi, dan tetap mengikuti filter pencarian aktif.
       await fetchStudents(undefined, true)
 
+      const imported = done.reduce((sum, result) => sum + result.imported, 0)
+      const updated = done.reduce((sum, result) => sum + result.updated, 0)
+      const unchanged = done.reduce((sum, result) => sum + result.unchanged, 0)
+      const skippedRows = done.flatMap((result) => result.errors || [])
+
       // Baris yang dilewati (mis. email bentrok/tidak valid) tetap
       // diberitahukan agar data yang tidak ikut masuk punya penjelasan.
-      if (result.errors?.length) {
-        setError(`${result.errors.length} baris spreadsheet dilewati saat sinkronisasi. ${result.errors[0]}`)
+      if (skippedRows.length) {
+        setError(`${skippedRows.length} baris spreadsheet dilewati saat sinkronisasi. ${skippedRows[0]}`)
+      } else if (failed.length) {
+        // Sebagian jenis gagal: successes-nya tetap dipakai, tapi petugas
+        // diberi tahu kelompok mana yang belum masuk.
+        setError(`${failed.map((result) => result.label).join(', ')} gagal disinkronkan. ${failed[0]?.message || ''}`.trim())
       }
 
       if (showFeedback) {
-        const detail = [`${result.imported || 0} baru`, `${result.updated || 0} diperbarui`]
-
-        if (result.unchanged) detail.push(`${result.unchanged} tanpa perubahan`)
-
-        setSuccess(`Sinkronisasi selesai: ${detail.join(', ')}.`)
+        const detail = [`${imported} baru`, `${updated} diperbarui`]
+        if (unchanged) detail.push(`${unchanged} tanpa perubahan`)
+        setSuccess(`Sinkronisasi selesai (${done.map((result) => result.label).join(', ')}): ${detail.join(', ')}.`)
       }
 
       return true
@@ -169,7 +233,7 @@ function Students() {
       syncingRef.current = false
       setSyncing(false)
     }
-  }, [fetchStudents])
+  }, [fetchStudents, syncOneType])
 
   // Daftar mahasiswa diambil sekali saat halaman dibuka.
   useEffect(() => { fetchStudents('') }, [fetchStudents])
@@ -223,22 +287,48 @@ function Students() {
   useEffect(() => {
     let cancelled = false
 
-    // Sinkronisasi terakhir (tersimpan di database) ditampilkan sejak awal,
-    // walaupun halaman baru dimuat ulang oleh petugas.
-    api.get('/students/import/source')
-      .then((response) => {
-        if (cancelled) return
+    // Sumber spreadsheet & waktu sinkron terakhir dimuat untuk semua jenis
+    // sekaligus, sehingga tab tendik/dosen langsung tahu statusnya walaupun
+    // halaman baru dimuat ulang oleh petugas.
+    Promise.all(SPREADSHEET_BORROWER_TYPES.map(async (type) => {
+      const value = type.value
 
-        const url = String(response.data?.url || '').trim()
-        if (url) localStorage.setItem(SYNC_URL_KEY, url)
-        if (response.data?.last_synced_at) setLastSyncedAt(response.data.last_synced_at)
-      })
-      .catch(() => {
+      try {
+        const response = await api.get('/students/import/source', { params: { type: value } })
+
+        return [value, {
+          url: String(response.data?.url || '').trim(),
+          lastSyncedAt: String(response.data?.last_synced_at || ''),
+        }]
+      } catch {
         // URL belum tersimpan atau server belum tersedia.
+        return [value, null]
+      }
+    })).then((entries) => {
+      if (cancelled) return
+
+      const loaded = {}
+      entries.forEach(([value, data]) => {
+        if (data?.url) localStorage.setItem(syncStorageKey(value), data.url)
+        loaded[value] = data || { url: '', lastSyncedAt: '' }
       })
+      setSyncSources((current) => ({ ...current, ...loaded }))
+    })
 
     return () => { cancelled = true }
   }, [])
+
+  // Waktu sinkron terakhir yang paling baru dari semua jenis — ditampilkan
+  // sebagai ringkasan di bawah tombol Sinkronkan.
+  const lastSyncedAt = useMemo(() => {
+    const times = SPREADSHEET_BORROWER_TYPES
+      .map((type) => syncSources[type.value]?.lastSyncedAt)
+      .filter(Boolean)
+      .sort()
+    const newest = times[times.length - 1]
+
+    return newest ? formatClock(newest) : ''
+  }, [syncSources])
 
   useEffect(() => {
     // Sinkronisasi pertama saat halaman dibuka, lalu diulang setiap
@@ -284,7 +374,13 @@ function Students() {
 
   const handleImported = (result) => {
     setError('')
-    if (result?.synced_at) setLastSyncedAt(result.synced_at)
+    if (result?.synced_at) {
+      const value = normalizeBorrowerType(result.type)
+      setSyncSources((current) => ({
+        ...current,
+        [value]: { ...(current[value] || { url: '' }), lastSyncedAt: result.synced_at },
+      }))
+    }
     fetchStudents()
   }
 
@@ -348,6 +444,12 @@ function Students() {
 
   const updateForm = (event) => setForm((current) => ({ ...current, [event.target.name]: event.target.value }))
 
+  // Jenis yang spreadsheet-nya sudah ditautkan — ditampilkan sebagai ringkasan
+  // supaya petugas tahu kelompok mana saja yang ikut tersinkron otomatis.
+  const linkedTypes = SPREADSHEET_BORROWER_TYPES
+    .filter((type) => syncSources[type.value]?.url)
+    .map((type) => type.value)
+
   return (
     <div className="mx-auto max-w-5xl">
       <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -377,8 +479,13 @@ function Students() {
             </button>
           </div>
           <span className="text-right text-xs text-slate-500">
+            {linkedTypes.length > 0 && (
+              <span className="block text-slate-400">
+                Spreadsheet: {linkedTypes.map((type) => borrowerTypeLabel(type)).join(', ')}
+              </span>
+            )}
             {lastSyncedAt && (
-              <span className="block text-slate-400">Sinkron terakhir {formatClock(lastSyncedAt)}</span>
+              <span className="block text-slate-400">Sinkron terakhir {lastSyncedAt}</span>
             )}
           </span>
         </div>
@@ -388,6 +495,9 @@ function Students() {
         open={showImportModal}
         onClose={() => setShowImportModal(false)}
         onImported={handleImported}
+        initialType={typeFilter || DEFAULT_BORROWER_TYPE}
+        sources={syncSources}
+        onSourcesChange={setSyncSources}
       />
 
       {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}

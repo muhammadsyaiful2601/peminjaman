@@ -13,6 +13,35 @@ export const BORROWER_TYPES = [
 
 export const DEFAULT_BORROWER_TYPE = 'mahasiswa'
 
+/**
+ * Jenis peminjam yang punya spreadsheet sinkronisasi sendiri, dengan logika
+ * yang persis sama seperti mahasiswa: tautan Google Sheets terpublikasi,
+ * impor otomatis berkala, dan penanda waktu sinkron terakhir.
+ *
+ * Peminjam umum tidak termasuk — jumlahnya sedikit dan dicatat manual.
+ * Cerminan `App\Support\BorrowerType::SPREADSHEET_TYPES` di backend.
+ */
+export const SPREADSHEET_BORROWER_TYPES = BORROWER_TYPES.filter((type) => (
+  ['mahasiswa', 'tendik', 'dosen'].includes(type.value)
+))
+
+/**
+ * Kunci localStorage untuk URL spreadsheet tiap jenis. Kunci mahasiswa
+ * sengaja memakai nama lama agar browser yang sudah pernah menyimpan URL
+ * tidak perlu menautkan ulang spreadsheet.
+ */
+export function syncStorageKey(type) {
+  const value = normalizeBorrowerType(type)
+
+  if (value === DEFAULT_BORROWER_TYPE) return 'student_sync_csv_url'
+
+  return `${value}_sync_csv_url`
+}
+
+export function hasSpreadsheetSupport(type) {
+  return SPREADSHEET_BORROWER_TYPES.some((item) => item.value === normalizeBorrowerType(type))
+}
+
 /** Warna badge jenis peminjam di tabel dan daftar. */
 const BADGE_CLASSES = {
   mahasiswa: 'bg-blue-50 text-blue-700 ring-blue-200',

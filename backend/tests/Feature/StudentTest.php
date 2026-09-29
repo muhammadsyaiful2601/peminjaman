@@ -50,7 +50,7 @@ class StudentTest extends TestCase
 
         $this->deleteJson('/api/students/' . $student->id)
             ->assertOk()
-            ->assertJsonPath('message', 'Data mahasiswa berhasil dihapus.');
+            ->assertJsonPath('message', 'Data peminjam berhasil dihapus.');
 
         $this->assertDatabaseMissing('students', ['id' => $student->id]);
     }
@@ -382,6 +382,119 @@ class StudentTest extends TestCase
             'student_id' => '2211082001',
             'type' => 'mahasiswa',
         ]);
+    }
+
+    public function test_setiap_jenis_punya_url_spreadsheet_terpisah(): void
+    {
+        Sanctum::actingAs($this->staff());
+
+        // Tanpa parameter sama sekali, yang dibaca tetap spreadsheet mahasiswa.
+        $this->getJson('/api/students/import/source')
+            ->assertOk()
+            ->assertJsonPath('type', 'mahasiswa')
+            ->assertJsonPath('supported', true)
+            ->assertJsonPath('url', '');
+
+        foreach (['mahasiswa' => 'MHS', 'tendik' => 'TENDIK', 'dosen' => 'DOSEN'] as $type => $id) {
+            $this->postJson('/api/students/import/source', [
+                'url' => "https://docs.google.com/spreadsheets/d/{$id}/edit#gid=0",
+                'type' => $type,
+            ])->assertOk()->assertJsonPath('type', $type);
+        }
+
+        // Tiap jenis mengembalikan URL-nya sendiri, tidak saling menimpa.
+        foreach (['mahasiswa' => 'MHS', 'tendik' => 'TENDIK', 'dosen' => 'DOSEN'] as $type => $id) {
+            $this->getJson('/api/students/import/source?type=' . $type)
+                ->assertOk()
+                ->assertJsonPath('type', $type)
+                ->assertJsonPath('url', "https://docs.google.com/spreadsheets/d/{$id}/edit#gid=0");
+        }
+
+        // Peminjam umum tidak memakai sinkronisasi spreadsheet.
+        $this->getJson('/api/students/import/source?type=umum')
+            ->assertOk()
+            ->assertJsonPath('supported', false)
+            ->assertJsonPath('url', '');
+        $this->postJson('/api/students/import/source', [
+            'url' => 'https://docs.google.com/spreadsheets/d/UMUM/edit#gid=0',
+            'type' => 'umum',
+        ])->assertStatus(422);
+    }
+
+    public function test_spreadsheet_tendik_dipaksa_berjenis_tanpa_kolom_jenis(): void
+    {
+        Sanctum::actingAs($this->staff());
+
+        // Berkas tendik/dosen tidak perlu kolom "Jenis": backend memaksa
+        // seluruh baris menjadi jenis yang dipilih.
+        $csv = "NIM/NIP,Nama,Jenis,Email\n"
+            ."198001012005011001,Siti Aminah,,siti@pnp.ac.id\n"
+            ."198001012005011002,Rahmat,tendik,rahmat@pnp.ac.id\n";
+
+        $this->post('/api/students/import', [
+            'file' => \Illuminate\Http\UploadedFile::fake()->createWithContent('tendik.csv', $csv),
+            'type' => 'tendik',
+        ], ['Accept' => 'application/json'])->assertOk()
+            ->assertJsonPath('imported', 2);
+
+        $this->assertDatabaseHas('students', ['student_id' => '198001012005011001', 'type' => 'tendik']);
+        $this->assertDatabaseHas('students', ['student_id' => '198001012005011002', 'type' => 'tendik']);
+    }
+
+    public function test_spreadsheet_dosen_mengabaikan_kolom_jenis_bila_jenis_dipaksa(): void
+    {
+        Sanctum::actingAs($this->staff());
+
+        // Nilai kolom "Jenis" diabaikan karena petugas menautkan spreadsheet
+        // ini sebagai spreadsheet dosen.
+        $csv = "NIM/NIP,Nama,Jenis,Email\n"
+            ."197505052000031002,Andi Saputra,tendik,andi@pnp.ac.id\n";
+
+        $this->post('/api/students/import', [
+            'file' => \Illuminate\Http\UploadedFile::fake()->createWithContent('dosen.csv', $csv),
+            'type' => 'dosen',
+        ], ['Accept' => 'application/json'])->assertOk()
+            ->assertJsonPath('imported', 1);
+
+        $this->assertDatabaseHas('students', ['student_id' => '197505052000031002', 'type' => 'dosen']);
+    }
+
+    public function test_sinkronisasi_spreadsheet_per_jenis_tidak_saling_menimpa(): void
+    {
+        Sanctum::actingAs($this->staff());
+
+        Http::fake([
+            'docs.google.com/*' => Http::response(
+                "NIM/NIP,Nama,Email\n197505052000031002,Andi Saputra,andi@pnp.ac.id\n",
+                200
+            ),
+        ]);
+
+        $this->postJson('/api/students/import/csv-url', [
+            'url' => 'https://docs.google.com/spreadsheets/d/DOSEN/edit#gid=0',
+            'type' => 'dosen',
+        ])->assertOk()->assertJsonPath('imported', 1);
+
+        $this->assertDatabaseHas('students', ['student_id' => '197505052000031002', 'type' => 'dosen']);
+
+        // URL & waktu sinkron dosen tersimpan pada kuncinya sendiri, dan
+        // spreadsheet mahasiswa tidak ikut berubah.
+        $dosenSource = $this->getJson('/api/students/import/source?type=dosen')->assertOk();
+        $dosenSource->assertJsonPath('url', 'https://docs.google.com/spreadsheets/d/DOSEN/edit#gid=0');
+        $this->assertNotNull($dosenSource->json('last_synced_at'));
+
+        $this->getJson('/api/students/import/source?type=mahasiswa')
+            ->assertOk()
+            ->assertJsonPath('url', '')
+            ->assertJsonPath('last_synced_at', null);
+
+        // Sinkron ulang pada jenis yang sama tidak menggandakan data.
+        $this->postJson('/api/students/import/csv-url', [
+            'url' => 'https://docs.google.com/spreadsheets/d/DOSEN/edit#gid=0',
+            'type' => 'dosen',
+        ])->assertOk()
+            ->assertJsonPath('imported', 0)
+            ->assertJsonPath('unchanged', 1);
     }
 
     public function test_peminjam_hanya_dapat_mengelola_data_mahasiswa_dengan_role_petugas(): void

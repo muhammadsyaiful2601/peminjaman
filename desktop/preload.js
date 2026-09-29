@@ -24,7 +24,7 @@ contextBridge.exposeInMainWorld('desktop', {
   // Dipanggil setelah pemulihan database: migrate + restart server backend
   // agar skema database versi lama langsung dilengkapi tanpa restart aplikasi.
   afterRestore: () => ipcRenderer.invoke('app:after-restore'),
-  importStudentsFromCsv: (csvUrl) => ipcRenderer.invoke('students:import-published-csv', csvUrl),
+  importStudentsFromCsv: (csvUrl, type) => ipcRenderer.invoke('students:import-published-csv', csvUrl, type),
   getUpdateState: () => ipcRenderer.invoke('update:get-state'),
   checkForUpdates: () => ipcRenderer.invoke('update:check'),
   downloadUpdate: () => ipcRenderer.invoke('update:download'),
