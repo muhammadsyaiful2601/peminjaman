@@ -82,7 +82,11 @@ const PREFERRED_PORT = 8642;
 //  spreadsheet sendiri dengan alur identik mahasiswa. Kunci app_settings tiap
 //  kelompok diatur lewat BorrowerType::syncUrlKey(), dan importer desktop
 //  meneruskan `type` ke backend.
-const TEMPLATE_VERSION = '1.4.8';
+//  1.4.9: halaman "/students" (Data Mahasiswa) dan "/employees" (Data Tendik,
+//  Dosen & Umum) memakai satu komponen BorrowersPage yang sama, jadi logikanya
+//  identik. Template impor dibuat per kelompok (student_sync_csv_url tak
+//  berubah; kolom Jenis dihapus dari template karena jenisnya sudah pasti).
+const TEMPLATE_VERSION = '1.4.9';
 const isDev = !app.isPackaged;
 
 /* ------------------------------------------------------------------ paths */

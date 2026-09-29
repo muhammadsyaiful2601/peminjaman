@@ -94,6 +94,26 @@ Website dan desktop memakai source frontend, API, migration, seeder, dan aturan 
 
 ## Fitur
 
+### Dua Halaman: Data Mahasiswa & Data Tendik/Dosen
+
+Pencatatan peminjam dipisah menjadi dua halaman agar mudah dicari, tapi
+logikanya **identik** karena keduanya memakai satu komponen yang sama
+([`frontend/src/components/borrowers/BorrowersPage.jsx`](frontend/src/components/borrowers/BorrowersPage.jsx)):
+
+| Halaman | Rute | Isi | Tab jenis | Spreadsheet otomatis |
+| :--- | :--- | :--- | :--- | :--- |
+| **Data Mahasiswa** | `/students` | Mahasiswa saja | — (jenis terkunci) | Mahasiswa |
+| **Data Tendik, Dosen & Umum** | `/employees` | Tendik, Dosen, Umum | Semua / Tendik / Dosen / Umum | Tendik & Dosen |
+
+Yang **sama persis** di kedua halaman: kolom nomor (No.), 10 baris per halaman
+dengan tombol Sebelumnya/Berikutnya, pencarian, form tambah/ubah/hapus, impor
+berkas, unduh template, tautan Google Sheets, sinkronisasi otomatis tiap 5
+menit, dan penanda waktu sinkron terakhir.
+
+Yang **berbeda**: kelompok yang ditampilkan. Halaman mahasiswa mengunci jenis
+(muncul tombol "Tambah Mahasiswa"), sedangkan halaman pegawai memakai tab.
+Masing-masing halaman hanya menarik spreadsheet milik kelompoknya sendiri.
+
 ### Jenis Peminjam (Mahasiswa, Tendik, Dosen, Umum)
 
 Aplikasi tidak hanya melayani mahasiswa. Satu halaman **Data Peminjam**
@@ -168,6 +188,25 @@ Kolom yang dikenali di spreadsheet: `NIM/NIP`, `Nama`, `Email`,
 disimpan sebagai kelompok itu** sehingga kolom `Jenis` tidak perlu diisi di
 file tendik/dosen.
 
+### Template Spreadsheet
+
+Tersedia template siap pakai per kelompok, bisa diunduh dari
+**Impor Spreadsheet → Unduh Template (Excel)**. Nama berkas menyesuaikan
+kelompok: `template-impor-mahasiswa.xls`, `template-impor-tendik.xls`,
+`template-impor-dosen.xls`.
+
+| Template | Judul di file | Kolom identitas | Petunjuk di dalam file |
+| :--- | :--- | :--- | :--- |
+| Mahasiswa | `TEMPLATE IMPOR DATA MAHASISWA` | `NIM` | Isi NIM; Jabatan boleh diisi program studi. |
+| Tendik | `TEMPLATE IMPOR DATA TENDIK` | `NIP` | Isi NIP pegawai, bukan NIM. |
+| Dosen | `TEMPLATE IMPOR DATA DOSEN` | `NIP` | Isi NIP dosen, bukan NIM. |
+
+Semua template memakai kolom yang sama —
+`{NIM/NIP} | Nama | Jabatan / Unit Kerja | Email | No. Telepon` — dan **tidak
+memuat kolom `Jenis`**, karena kelompoknya sudah pasti dari template itu
+sendiri. Template juga sengaja **tanpa baris data contoh** supaya contoh tidak
+ikut terimpor saat petugas lupa menghapusnya.
+
 | Jenis | Kunci `app_settings` (URL) | Kunci (waktu sinkron) |
 | :--- | :--- | :--- |
 | Mahasiswa | `student_sync_csv_url` | `student_sync_last_at` |
@@ -188,6 +227,7 @@ Endpoint yang memakai `type`:
 | `POST /api/students/import/source` | `url`, `type` | Simpan URL kelompok tersebut. |
 | `POST /api/students/import/csv-url` | `url`, `type` | Tarik CSV, paksa jenis, lalu simpan URL-nya. |
 | `POST /api/students/import` | `file`, `type` | Impor berkas; `type` memaksa jenis seluruh baris. |
+| `GET /api/students/import/template` | `type` | Unduh template kelompok tersebut. |
 
 ### Penomoran & Paginasi Tabel
 

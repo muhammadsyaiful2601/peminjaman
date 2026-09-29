@@ -501,17 +501,45 @@ class StudentController extends Controller
     }
 
     /**
-     * Unduh template impor: file .xls (HTML table) yang berisi judul,
-     * petunjuk, dan header berformat tanpa data contoh. File ini bisa
-     * langsung dibuka di Excel atau diunggah ke Google Sheets.
+     * Unduh template impor untuk satu kelompok peminjam.
      *
-     * Kolom "Jenis" dan "Jabatan / Unit Kerja" bersifat opsional — boleh
-     * dikosongkan (dianggap mahasiswa) atau dihapus seluruhnya untuk
-     * spreadsheet yang hanya berisi mahasiswa.
+     * File .xls (HTML table) berisi judul, petunjuk, dan header berformat
+     * TANPA data contoh — supaya contoh tidak ikut terimpor saat petugas lupa
+     * menghapus baris percontohan. Bisa langsung dibuka di Excel atau diunggah
+     * ke Google Sheets.
+     *
+     * Template dibuat per kelompok (`?type=mahasiswa|tendik|dosen`) supaya
+     * judul, nama kolom identitas, dan petunjuknya sesuai kelompok tersebut.
+     * Kolom "Jenis" sengaja tidak disertakan: begitu spreadsheet/template
+     * ini ditautkan ke suatu kelompok, seluruh barisnya otomatis menjadi
+     * kelompok itu.
      */
-    public function downloadTemplate()
+    public function downloadTemplate(Request $request)
     {
-        $typeOptions = implode(' / ', array_values(BorrowerType::options()));
+        $type = $this->resolveSpreadsheetType($request);
+        $label = BorrowerType::label($type);
+        // Judul memakai huruf kapital penuh, seperti template lama.
+        $heading = \Illuminate\Support\Str::upper($label);
+        $identity = $this->identityColumnLabel($type);
+
+        // Petunjuk per kelompok: yang relevan saja yang ditampilkan.
+        $notes = match ($type) {
+            BorrowerType::TENDIK => [
+                'Isi <b>NIP</b> pegawai, bukan NIM mahasiswa.',
+                'Kolom <b>Jabatan / Unit Kerja</b> diisi jabatan resmi, mis. &quot;Staf Bagian Keuangan&quot; atau &quot;Asisten Lab Laboratorium Komputer&quot;.',
+            ],
+            BorrowerType::DOSEN => [
+                'Isi <b>NIP</b> dosen, bukan NIM mahasiswa.',
+                'Kolom <b>Jabatan / Unit Kerja</b> diisi jabatan/prodi, mis. &quot;Dosen Teknik Informatika&quot;.',
+            ],
+            default => [
+                'Isi <b>NIM</b> mahasiswa. Kolom <b>Jabatan / Unit Kerja</b> boleh diisi nama program studi.',
+            ],
+        };
+        $noteRows = '';
+        foreach ($notes as $note) {
+            $noteRows .= '<tr><td colspan="5" style="font-size:10pt; color:#555555;">'.$note.'</td></tr>';
+        }
 
         $html = <<<HTML
             <html xmlns:x="urn:schemas-microsoft-com:office:excel">
@@ -519,25 +547,24 @@ class StudentController extends Controller
                 <meta charset="UTF-8">
                 <!--[if gte mso 9]><xml>
                     <x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>
-                        <x:Name>Data Peminjam</x:Name>
+                        <x:Name>Data {$label}</x:Name>
                         <x:WorksheetOptions><x:Panes></x:Panes></x:WorksheetOptions>
                     </x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook>
                 </xml><![endif]-->
             </head>
             <body>
                 <table border="0">
-                    <tr><td colspan="6" style="font-size:14pt; font-weight:bold;">TEMPLATE IMPOR DATA PEMINJAM</td></tr>
-                    <tr><td colspan="6" style="font-size:10pt; color:#555555;">Isi data mulai baris 4 ke bawah. Baris judul, petunjuk, dan header tidak perlu diubah.</td></tr>
+                    <tr><td colspan="5" style="font-size:14pt; font-weight:bold;">TEMPLATE IMPOR DATA {$heading}</td></tr>
+                    <tr><td colspan="5" style="font-size:10pt; color:#555555;">Isi data mulai baris 4 ke bawah. Baris judul, petunjuk, dan header tidak perlu diubah.</td></tr>
                     <tr>
-                        <td style="background-color:#0e7490; color:#ffffff; font-weight:bold; border:1px solid #155e75; padding:6px 10px;">NIM/NIP</td>
+                        <td style="background-color:#0e7490; color:#ffffff; font-weight:bold; border:1px solid #155e75; padding:6px 10px;">{$identity}</td>
                         <td style="background-color:#0e7490; color:#ffffff; font-weight:bold; border:1px solid #155e75; padding:6px 10px;">Nama</td>
-                        <td style="background-color:#4a5568; color:#ffffff; font-weight:bold; border:1px solid #2d3748; padding:6px 10px;">Jenis</td>
                         <td style="background-color:#4a5568; color:#ffffff; font-weight:bold; border:1px solid #2d3748; padding:6px 10px;">Jabatan / Unit Kerja</td>
                         <td style="background-color:#0e7490; color:#ffffff; font-weight:bold; border:1px solid #155e75; padding:6px 10px;">Email</td>
                         <td style="background-color:#0e7490; color:#ffffff; font-weight:bold; border:1px solid #155e75; padding:6px 10px;">No. Telepon</td>
                     </tr>
-                    <tr><td colspan="6" style="font-size:10pt; color:#555555;"><b>Jenis</b> (opsional): {$typeOptions}. Kosongkan bila peminjam adalah mahasiswa.</td></tr>
-                    <tr><td colspan="6" style="font-size:10pt; color:#555555;"><b>Jabatan / Unit Kerja</b> (opsional): jabatan pegawai, program studi, atau unit kerja. Boleh dikosongkan.</td></tr>
+                    {$noteRows}
+                    <tr><td colspan="5" style="font-size:10pt; color:#555555;">Kolom <b>Jenis</b> tidak ada pada template ini: seluruh baris otomatis disimpan sebagai <b>{$label}</b>.</td></tr>
                 </table>
             </body>
             </html>
@@ -545,7 +572,19 @@ class StudentController extends Controller
 
         return response($html)
             ->header('Content-Type', 'application/vnd.ms-excel; charset=UTF-8')
-            ->header('Content-Disposition', 'attachment; filename="template-impor-peminjam.xls"');
+            ->header('Content-Disposition', 'attachment; filename="template-impor-'.$type.'.xls"');
+    }
+
+    /**
+     * Nama kolom identitas pada template, mengikuti kelompok peminjam.
+     */
+    private function identityColumnLabel(string $type): string
+    {
+        return match (BorrowerType::clean($type)) {
+            BorrowerType::TENDIK, BorrowerType::DOSEN => 'NIP',
+            BorrowerType::UMUM => 'Nomor Identitas',
+            default => 'NIM',
+        };
     }
 
     /**

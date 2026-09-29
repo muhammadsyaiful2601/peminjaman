@@ -21,6 +21,7 @@ import OfficialLoan from './pages/OfficialLoan'
 import Clearance from './pages/Clearance'
 import Technicians from './pages/Technicians'
 import Students from './pages/Students'
+import Employees from './pages/Employees'
 import SystemSettings from './pages/SystemSettings'
 
 // Sesi kerja berakhir setelah 30 menit tanpa aktivitas.
@@ -136,6 +137,14 @@ function App() {
           element={
             <ProtectedRoute roles={['admin', 'assistant']}>
               <Students />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="employees"
+          element={
+            <ProtectedRoute roles={['admin', 'assistant']}>
+              <Employees />
             </ProtectedRoute>
           }
         />

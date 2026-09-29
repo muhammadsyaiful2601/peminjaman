@@ -27,10 +27,12 @@ import {
  * @param {Function} [props.onImported]    Dipanggil dengan hasil impor.
  * @param {string}   [props.initialType]   Jenis yang dipakai saat modal dibuka
  *                                         (default: tab yang sedang aktif).
+ * @param {string[]} [props.allowedTypes]  Kelompok yang boleh dipilih. Bila
+ *                                         diisi satu jenis, pemilih disembunyikan.
  * @param {object}   [props.sources]       Sumber spreadsheet per jenis dari halaman induk.
  * @param {Function} [props.onSourcesChange] Dipanggil saat URL jenis terpilih berubah.
  */
-function ImportStudentsModal({ open, onClose, onImported, initialType, sources, onSourcesChange }) {
+function ImportStudentsModal({ open, onClose, onImported, initialType, allowedTypes, sources, onSourcesChange }) {
   const fileInputRef = useRef(null)
   const [selectedFile, setSelectedFile] = useState(null)
   const [source, setSource] = useState('file')
@@ -52,13 +54,19 @@ function ImportStudentsModal({ open, onClose, onImported, initialType, sources, 
     if (!open) return
 
     // Modal dibuka pada tab yang sedang aktif bila tab itu punya spreadsheet.
-    const wanted = hasSpreadsheetSupport(initialType) ? normalizeBorrowerType(initialType) : DEFAULT_BORROWER_TYPE
+    // `allowedTypes` membatasi pilihan agar tidak mungkin mengimpor ke kelompok
+    // yang tidak ditangani halaman pemanggil (mis. mahasiswa dari halaman
+    // pegawai).
+    const pool = allowedTypes?.length ? allowedTypes : SPREADSHEET_BORROWER_TYPES.map((t) => t.value)
+    const wanted = pool.includes(normalizeBorrowerType(initialType))
+      ? normalizeBorrowerType(initialType)
+      : (pool.includes(DEFAULT_BORROWER_TYPE) ? DEFAULT_BORROWER_TYPE : pool[0])
     const savedUrl = urlFor(wanted)
 
     setType(wanted)
     setSpreadsheet(savedUrl)
     setSource(savedUrl ? 'api' : 'file')
-  }, [open, initialType, urlFor])
+  }, [open, initialType, allowedTypes, urlFor])
 
   // Ganti jenis -> muat URL milik jenis itu (kalau ada).
   const handleTypeChange = (next) => {
@@ -164,8 +172,8 @@ function ImportStudentsModal({ open, onClose, onImported, initialType, sources, 
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" onClick={handleClose}>
       <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl" onClick={(event) => event.stopPropagation()}>
         <ModalHeader handleClose={handleClose} />
-        <TypeSection type={type} onChange={handleTypeChange} />
-        <TemplateSection />
+        <TypeSection type={type} onChange={handleTypeChange} allowedTypes={allowedTypes} />
+        <TemplateSection type={type} />
         <SourceTabs source={source} setSource={setSource} />
         {source === 'file'
           ? <FileSection fileInputRef={fileInputRef} handleFileChange={handleFileChange} />
@@ -183,13 +191,28 @@ export default ImportStudentsModal
 /**
  * Pemilih kelompok peminjam. Tiap kelompok punya spreadsheet Google Sheets
  * sendiri dengan alur identik, jadi petugas cukup menautkan URL per kelompok.
+ *
+ * Saat hanya ada satu kelompok yang boleh dipakai (halaman mahasiswa), pemilih
+ * disembunyikan karena sudah tidak ada pilihan lain.
  */
-function TypeSection({ type, onChange }) {
+function TypeSection({ type, onChange, allowedTypes }) {
+  const pool = allowedTypes?.length ? allowedTypes : SPREADSHEET_BORROWER_TYPES.map((t) => t.value)
+  const options = SPREADSHEET_BORROWER_TYPES.filter((item) => pool.includes(item.value))
+
+  if (options.length <= 1) {
+    return (
+      <div className="mb-4 rounded-lg border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-900">
+        Data akan diimpor sebagai <strong>{borrowerTypeLabel(type)}</strong>. Kolom
+        &ldquo;Jenis&rdquo; pada spreadsheet tidak perlu diisi.
+      </div>
+    )
+  }
+
   return (
     <div className="mb-4">
       <p className="mb-2 text-sm font-medium text-slate-700">Data yang akan diimpor</p>
-      <div className="grid grid-cols-3 gap-2">
-        {SPREADSHEET_BORROWER_TYPES.map((item) => {
+      <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${Math.min(options.length, 3)}, minmax(0, 1fr))` }}>
+        {options.map((item) => {
           const active = type === item.value
 
           return (
@@ -230,7 +253,7 @@ function ModalHeader({ handleClose }) {
   )
 }
 
-function TemplateSection() {
+function TemplateSection({ type }) {
   return (
     <div className="mb-4 rounded-lg border border-cyan-200 bg-cyan-50 p-4">
       <div className="flex items-start gap-3">
@@ -238,26 +261,31 @@ function TemplateSection() {
         <div className="text-sm">
           <p className="font-medium text-cyan-900">Belum punya file?</p>
           <p className="mt-0.5 text-cyan-700">
-            Unduh template Excel yang sudah berisi judul dan header kolom. Isi data mulai baris ke-4, lalu simpan sebagai CSV
-            atau unggah langsung ke Google Sheets (<em>File → Import</em>) dan unduh kembali sebagai CSV. Kolom
-            <strong> Jenis</strong> dan <strong> Jabatan / Unit Kerja</strong> bersifat opsional — kosongkan bila peminjam
-            adalah mahasiswa.
+            Unduh template Excel untuk kelompok{' '}
+            <strong>{borrowerTypeLabel(type)}</strong> — sudah berisi judul, petunjuk, dan header kolom. Isi data mulai
+            baris ke-4, lalu simpan sebagai CSV atau unggah langsung ke Google Sheets
+            (<em>File → Import</em>) dan unduh kembali sebagai CSV. Kolom
+            {' '}<strong>Jenis</strong> dan <strong>Jabatan / Unit Kerja</strong> tidak perlu diisi karena seluruh baris
+            otomatis menjadi {borrowerTypeLabel(type).toLowerCase()}.
           </p>
-          <TemplateButton />
+          <TemplateButton type={type} />
         </div>
       </div>
     </div>
   )
 }
 
-function TemplateButton() {
+function TemplateButton({ type }) {
   const [downloading, setDownloading] = useState(false)
 
   const handleClick = async () => {
     setDownloading(true)
     try {
-      const response = await api.get('/students/import/template', { responseType: 'blob' })
-      await downloadBlob(response.data, 'template-impor-peminjam.xls')
+      const response = await api.get('/students/import/template', {
+        params: { type },
+        responseType: 'blob',
+      })
+      await downloadBlob(response.data, `template-impor-${type}.xls`)
     } catch {
       // Gagal unduh: biarkan pengguna mencoba lagi.
     } finally {

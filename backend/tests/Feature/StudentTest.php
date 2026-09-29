@@ -384,6 +384,36 @@ class StudentTest extends TestCase
         ]);
     }
 
+    public function test_template_impor_dibuat_untuk_tiap_kelompok(): void
+    {
+        Sanctum::actingAs($this->staff());
+
+        $expected = [
+            'mahasiswa' => ['title' => 'TEMPLATE IMPOR DATA MAHASISWA', 'identity' => '>NIM<'],
+            'tendik' => ['title' => 'TEMPLATE IMPOR DATA TENDIK', 'identity' => '>NIP<'],
+            'dosen' => ['title' => 'TEMPLATE IMPOR DATA DOSEN', 'identity' => '>NIP<'],
+        ];
+
+        foreach ($expected as $type => $expect) {
+            $response = $this->getJson('/api/students/import/template?type=' . $type);
+
+            $response->assertOk()
+                ->assertHeader('Content-Disposition', 'attachment; filename="template-impor-'.$type.'.xls"');
+
+            $content = $response->getContent();
+            $this->assertStringContainsString($expect['title'], $content, "judul template {$type}");
+            $this->assertStringContainsString($expect['identity'], $content, "kolom identitas {$type}");
+            $this->assertStringContainsString('Jabatan / Unit Kerja', $content);
+            $this->assertStringContainsString('Email', $content);
+            $this->assertStringContainsString('No. Telepon', $content);
+            // Template per kelompok tidak punya kolom header "Jenis" karena
+            // jenisnya sudah pasti dari template itu sendiri.
+            $this->assertStringNotContainsString('padding:6px 10px;">Jenis<', $content);
+            // Tetap tanpa data contoh supaya tidak ikut terimpor.
+            $this->assertStringNotContainsString('Budi', $content);
+        }
+    }
+
     public function test_setiap_jenis_punya_url_spreadsheet_terpisah(): void
     {
         Sanctum::actingAs($this->staff());
@@ -673,20 +703,16 @@ class StudentTest extends TestCase
         $response = $this->getJson('/api/students/import/template');
 
         $response->assertOk()
-            ->assertHeader('Content-Disposition', 'attachment; filename="template-impor-peminjam.xls"');
+            ->assertHeader('Content-Disposition', 'attachment; filename="template-impor-mahasiswa.xls"');
 
         $content = $response->getContent();
-        $this->assertStringContainsString('TEMPLATE IMPOR DATA PEMINJAM', $content);
-        $this->assertStringContainsString('NIM/NIP', $content);
+        $this->assertStringContainsString('TEMPLATE IMPOR DATA MAHASISWA', $content);
+        $this->assertStringContainsString('NIM', $content);
         $this->assertStringContainsString('Nama', $content);
         $this->assertStringContainsString('Email', $content);
         $this->assertStringContainsString('No. Telepon', $content);
-        // Kolom pendukung pegawai: jenis peminjam & jabatan/unit kerja.
-        $this->assertStringContainsString('Jenis', $content);
+        // Kolom pendukung: jabatan/unit kerja.
         $this->assertStringContainsString('Jabatan / Unit Kerja', $content);
-        foreach (['Mahasiswa', 'Tendik', 'Dosen', 'Umum'] as $label) {
-            $this->assertStringContainsString($label, $content);
-        }
 
         // Template tidak memuat data contoh.
         $this->assertStringNotContainsString('Budi', $content);
