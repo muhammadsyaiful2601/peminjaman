@@ -53,6 +53,9 @@ function Students() {
   const countdownRef = useRef(SYNC_INTERVAL_SECONDS)
   const searchRef = useRef('')
   const pageRef = useRef(1)
+  // Efek pengaim halaman melewati run pertama (pemuatan awal sudah ditangani
+  // efek lain), lalu setiap perpindahan halaman berikutnya tetap mengambil data.
+  const skipPageFetchRef = useRef(true)
   const modalOpenRef = useRef(false)
   const [lastSyncedAt, setLastSyncedAt] = useState('')
 
@@ -158,18 +161,28 @@ function Students() {
   // Daftar mahasiswa diambil sekali saat halaman dibuka.
   useEffect(() => { fetchStudents('') }, [fetchStudents])
 
-  // Halaman tabel diganti -> ambil 10 baris berikutnya dari server.
+  // Halaman tabel diganti -> ambil 10 baris halaman itu dari server.
+  // Run pertama dilewati karena pemuatan awal sudah ditangani efek di atas.
+  // Catatan: jangan berhenti hanya saat `page <= 1` — kembali ke halaman 1
+  // juga butuh data halaman 1, bukan sisa data halaman sebelumnya.
   useEffect(() => {
-    if (page <= 1) return
+    if (skipPageFetchRef.current) {
+      skipPageFetchRef.current = false
+
+      return
+    }
+
     fetchStudents(undefined, false, page)
   }, [page, fetchStudents])
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
       // Kata kunci pencarian berubah -> selalu kembali ke halaman 1 supaya
-      // hasil pencarian tidak pernah tersembunyi di halaman belakang.
-      setPage(1)
-      fetchStudents(search, false, 1)
+      // hasil pencarian tidak pernah tersembunyi di halaman belakang. Kalau
+      // sudah di halaman 1, pengambilannya dilakukan di sini; kalau belum,
+      // efek `page` di atas yang mengambil supaya tidak ada permintaan ganda.
+      if (pageRef.current === 1) fetchStudents(search, false, 1)
+      else setPage(1)
     }, 300)
 
     return () => window.clearTimeout(timeout)
@@ -231,6 +244,14 @@ function Students() {
     setError('')
     setSuccess('')
     await syncStudents(true)
+  }
+
+  // Pencarian dipicu tombol "Cari"/Enter: kembali ke halaman 1. Kalau sudah di
+  // halaman 1, pengambilan dilakukan langsung; kalau belum, efek `page` yang
+  // mengambil supaya tidak ada dua permintaan untuk hasil yang sama.
+  const runSearch = () => {
+    if (pageRef.current === 1) fetchStudents(search, false, 1)
+    else setPage(1)
   }
 
   const handleImported = (result) => {
@@ -371,9 +392,9 @@ function Students() {
       <div className="mb-4 flex flex-col gap-2 sm:flex-row">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
-          <input value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key !== 'Enter') return; setPage(1); fetchStudents(search, false, 1) }} placeholder="Cari NIM, nama, atau email..." className="w-full rounded-lg border border-slate-300 py-2.5 pl-10 pr-4 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500" />
+          <input value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') runSearch() }} placeholder="Cari NIM, nama, atau email..." className="w-full rounded-lg border border-slate-300 py-2.5 pl-10 pr-4 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500" />
         </div>
-        <button type="button" onClick={() => { setPage(1); fetchStudents(search, false, 1) }} className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-800 px-5 py-2.5 font-medium text-white hover:bg-slate-900"><Search className="h-4 w-4" />Cari</button>
+        <button type="button" onClick={runSearch} className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-800 px-5 py-2.5 font-medium text-white hover:bg-slate-900"><Search className="h-4 w-4" />Cari</button>
       </div>
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
