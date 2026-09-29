@@ -9,6 +9,7 @@ use App\Mail\ReturnConfirmation;
 use App\Models\Item;
 use App\Models\Loan;
 use App\Models\Technician;
+use App\Support\BorrowerType;
 use App\Support\Branding;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
@@ -17,6 +18,7 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
 use Smalot\PdfParser\Parser as PdfParser;
 
@@ -174,6 +176,9 @@ class LoanController extends Controller
             'borrower_email' => ['required', 'email', 'max:255'],
             'borrower_phone' => ['nullable', 'string', 'max:20'],
             'borrower_student_id' => ['nullable', 'string', 'max:50'],
+            // Jenis peminjam (mahasiswa/tendik/dosen/umum). Nullable karena
+            // form lama tidak mengirimnya; null dibaca sebagai mahasiswa.
+            'borrower_type' => ['nullable', 'string', Rule::in(BorrowerType::ALL)],
             'borrow_photo' => ['required', 'image', 'max:5120'],
         ]);
 
@@ -218,6 +223,7 @@ class LoanController extends Controller
                 'borrower_email' => $validated['borrower_email'],
                 'borrower_phone' => $validated['borrower_phone'] ?? null,
                 'borrower_student_id' => $validated['borrower_student_id'] ?? null,
+                'borrower_type' => BorrowerType::clean($validated['borrower_type'] ?? null),
                 'borrow_photo' => $photoPath,
                 'status' => 'borrowed',
                 'borrowed_at' => now(),

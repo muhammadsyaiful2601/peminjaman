@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import api from '../api/axios'
+import { BORROWER_TYPES, DEFAULT_BORROWER_TYPE, borrowerTypeLabel, identityLabel } from '../utils/borrowerTypes'
 import {
   ArrowLeft,
   Camera,
@@ -40,6 +41,19 @@ function NewLoan() {
   const [borrowerEmail, setBorrowerEmail] = useState('')
   const [borrowerPhone, setBorrowerPhone] = useState('')
   const [borrowerStudentId, setBorrowerStudentId] = useState('')
+  // Jenis peminjam: mahasiswa, tendik, dosen, atau umum. Memengaruhi daftar
+  // peminjam yang bisa dipilih di bawah.
+  const [borrowerType, setBorrowerType] = useState(DEFAULT_BORROWER_TYPE)
+
+  // Daftar peminjam tersimpan yang cocok dengan jenis aktif + kata kunci
+  // pencarian. `student.type` selalu ada karena backend menormalkan nilai
+  // kosong/transaksi lama menjadi "mahasiswa".
+  const typeMatches = students.filter((student) => (
+    (student.type || DEFAULT_BORROWER_TYPE) === borrowerType
+    && `${student.student_id} ${student.name} ${student.email} ${student.position || ''}`
+      .toLowerCase()
+      .includes(studentSearch.toLowerCase().trim())
+  ))
 
   useEffect(() => {
     const fetchItems = async () => {
@@ -144,6 +158,8 @@ function NewLoan() {
     setBorrowerEmail(student.email || '')
     setBorrowerPhone(student.phone || '')
     setBorrowerStudentId(student.student_id || '')
+    // Ikuti jenis dari data yang dipilih supaya transaksi yang tersimpan benar.
+    setBorrowerType(student.type || DEFAULT_BORROWER_TYPE)
   }
 
   const handleSubmit = async (e) => {
@@ -175,6 +191,7 @@ function NewLoan() {
     formData.append('borrower_email', borrowerEmail)
     if (borrowerPhone) formData.append('borrower_phone', borrowerPhone)
     if (borrowerStudentId) formData.append('borrower_student_id', borrowerStudentId)
+    formData.append('borrower_type', borrowerType)
     formData.append('borrow_photo', photo)
 
     try {
@@ -205,6 +222,7 @@ function NewLoan() {
     setBorrowerStudentId('')
     setSelectedStudentId('')
     setStudentSearch('')
+    setBorrowerType(DEFAULT_BORROWER_TYPE)
   }
 
   // Success page after loan is created
@@ -367,13 +385,43 @@ function NewLoan() {
             2. Data Peminjam
           </h2>
           <p className="text-sm text-slate-500 mb-4">
-            Pilih data mahasiswa tersimpan untuk mengisi otomatis, atau isi data secara manual. QR Code akan dikirim ke email yang dimasukkan.
+            Tentukan jenis peminjam, lalu pilih data yang tersimpan untuk mengisi otomatis atau isi manual. QR Code akan dikirim ke email yang dimasukkan.
           </p>
+
+          {/* Pilihan jenis peminjam — menentukan daftar peminjam di bawah. */}
+          <div className="mb-5">
+            <label className="block text-sm font-medium text-slate-700 mb-2">Jenis Peminjam *</label>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {BORROWER_TYPES.map((type) => {
+                const active = borrowerType === type.value
+
+                return (
+                  <button
+                    key={type.value}
+                    type="button"
+                    onClick={() => {
+                      setBorrowerType(type.value)
+                      // Pemilih saat ini bisa berbeda jenis, jadi kosongkan.
+                      setSelectedStudentId('')
+                      setBorrowerStudentId('')
+                    }}
+                    className={`rounded-lg border px-3 py-2.5 text-sm font-medium transition ${
+                      active
+                        ? 'border-cyan-600 bg-cyan-600 text-white'
+                        : 'border-slate-300 bg-white text-slate-600 hover:border-cyan-300 hover:bg-cyan-50'
+                    }`}
+                  >
+                    {type.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
 
           <div className="mb-5 rounded-lg border border-cyan-100 bg-cyan-50 p-4">
             <label className="flex items-center gap-2 text-sm font-medium text-cyan-900">
               <GraduationCap className="h-5 w-5 text-cyan-600" />
-              Gunakan data mahasiswa tersimpan
+              Gunakan data {borrowerTypeLabel(borrowerType).toLowerCase()} tersimpan
             </label>
             <div className="relative mt-2">
               <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
@@ -384,16 +432,13 @@ function NewLoan() {
                   setStudentSearch(event.target.value)
                   setSelectedStudentId('')
                 }}
-                placeholder="Cari NIM atau nama mahasiswa..."
+                placeholder={`Cari ${identityLabel(borrowerType)} atau nama...`}
                 className="w-full rounded-lg border border-cyan-200 bg-white py-2.5 pl-10 pr-4 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500"
               />
             </div>
-            {students.length > 0 ? (
+            {typeMatches.length > 0 ? (
               <div className="mt-2 max-h-52 space-y-1 overflow-y-auto rounded-lg border border-cyan-200 bg-white p-1">
-                {students
-                  .filter((student) => `${student.student_id} ${student.name} ${student.email}`.toLowerCase().includes(studentSearch.toLowerCase().trim()))
-                  .slice(0, 8)
-                  .map((student) => (
+                {typeMatches.slice(0, 8).map((student) => (
                     <button
                       key={student.id}
                       type="button"
@@ -407,14 +452,18 @@ function NewLoan() {
                       {String(student.id) === selectedStudentId && <span className="text-xs font-semibold text-cyan-700">Terpilih</span>}
                     </button>
                   ))}
-                {students.filter((student) => `${student.student_id} ${student.name} ${student.email}`.toLowerCase().includes(studentSearch.toLowerCase().trim())).length === 0 && (
-                  <p className="px-3 py-3 text-center text-xs text-slate-500">Mahasiswa tidak ditemukan.</p>
+                {typeMatches.length === 0 && (
+                  <p className="px-3 py-3 text-center text-xs text-slate-500">
+                    {borrowerTypeLabel(borrowerType)} tidak ditemukan.
+                  </p>
                 )}
               </div>
             ) : (
-              <p className="mt-2 text-xs text-cyan-700">Belum ada data mahasiswa tersimpan. Tambahkan melalui menu Data Mahasiswa.</p>
+              <p className="mt-2 text-xs text-cyan-700">
+                Belum ada data {borrowerTypeLabel(borrowerType).toLowerCase()} tersimpan. Tambahkan melalui menu Data Peminjam.
+              </p>
             )}
-            <p className="mt-2 text-xs text-cyan-700">Klik data mahasiswa di daftar untuk mengisi form otomatis. Kosongkan pencarian untuk mengisi manual.</p>
+            <p className="mt-2 text-xs text-cyan-700">Klik data di daftar untuk mengisi form otomatis. Kosongkan pencarian untuk mengisi manual.</p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -460,7 +509,7 @@ function NewLoan() {
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">NIM / NIP (Opsional)</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">{identityLabel(borrowerType)} (Opsional)</label>
               <div className="relative">
                 <IdCard className="w-5 h-5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
@@ -468,7 +517,7 @@ function NewLoan() {
                   value={borrowerStudentId}
                   onChange={(e) => setBorrowerStudentId(e.target.value)}
                   className="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none"
-                  placeholder="Nomor induk mahasiswa"
+                  placeholder={`Nomor induk ${borrowerTypeLabel(borrowerType).toLowerCase()}`}
                 />
               </div>
             </div>

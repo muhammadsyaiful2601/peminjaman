@@ -84,7 +84,7 @@ function Layout() {
       label: 'Manajemen',
       icon: Settings,
       items: (user?.role === 'admin' || user?.role === 'assistant') ? [
-        { to: '/students', label: 'Data Mahasiswa', icon: UserCircle },
+        { to: '/students', label: 'Data Peminjam', icon: UserCircle },
         ...(user?.role === 'admin' ? [
         { to: '/users', label: 'Kelola User', icon: Users },
         { to: '/technicians', label: 'Kelola Teknisi', icon: Wrench },

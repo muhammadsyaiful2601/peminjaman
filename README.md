@@ -94,6 +94,57 @@ Website dan desktop memakai source frontend, API, migration, seeder, dan aturan 
 
 ## Fitur
 
+### Jenis Peminjam (Mahasiswa, Tendik, Dosen, Umum)
+
+Aplikasi tidak hanya melayani mahasiswa. Satu halaman **Data Peminjam**
+menggantikan halaman Data Mahasiswa lama dan memuat seluruh peminjam dengan
+tab per jenis:
+
+| Jenis | Identitas | Keterangan |
+| :--- | :--- | :--- |
+| **Mahasiswa** | NIM | Jenis bawaan, dipakai seluruh data lama |
+| **Tendik** | NIP | Tenaga pendidik & kependidikan PNP |
+| **Dosen** | NIP | Dosen PNP |
+| **Umum** | Nomor identitas | Peminjam dari luar kampus |
+
+Setiap jenis juga menyimpan **Jabatan / Unit Kerja** (jabatan pegawai, program
+studi, atau unit kerja) yang boleh dikosongkan.
+
+- Tab menampilkan **jumlah data** pada masing-masing jenis, dan angkanya ikut
+  mengikuti kata kunci pencarian.
+- Kolom **Jenis** tampil sebagai badge berwarna di tabel Data Peminjam, daftar
+  Peminjaman, detail transaksi, dan halaman Surat Bebas Labor.
+- Kolom identitas menyesuaikan otomatis: `NIM` untuk mahasiswa, `NIP` untuk
+  tendik/dosen, dan `Nomor Identitas` untuk peminjam umum.
+- Form **Buat Peminjaman** punya pemilih jenis; daftar peminjam tersimpan yang
+  muncul hanya berisi jenis yang dipilih, dan memilih salah satu otomatis
+  mengisi nama/email/NIP beserta jenisnya.
+- **Surat bebas labor** otomatis berlaku untuk pegawai: pencocokan transaksi
+  lama tetap memakai NIM/NIP, email, nama, atau nomor telepon, dan peminjam
+  yang tidak terdaftar tetap tampil sebagai "Peminjam manual".
+
+Data pegawai disimpan pada tabel yang sama dengan mahasiswa (tetap `students`),
+sehingga seluruh alur yang sudah ada ikut memakainya tanpa perubahan.
+
+Parameter baru pada API:
+
+| Endpoint | Parameter | Keterangan |
+| :--- | :--- | :--- |
+| `GET /api/students` | `type` | Filter jenis: `mahasiswa`, `tendik`, `dosen`, atau `umum`. Kosong = semua. |
+| `GET /api/students` | — | `meta.by_type` berisi jumlah per jenis (ikut memperhitungkan `search`). |
+| `POST`/`PUT /api/students` | `type`, `position` | Jenis dan jabatan/unit kerja. `type` opsional — bila tidak dikirim, jenis lama dipertahankan. |
+| `POST /api/loans` | `borrower_type` | Jenis peminjam pada transaksi. Opsional; kosong dibaca sebagai `mahasiswa`. |
+
+Impor spreadsheet (CSV/XLSX/Google Sheets) menerima dua kolom baru yang
+**opsional** — `Jenis` dan `Jabatan / Unit Kerja`. Kolom `Jenis` mengenali juga
+istilah lain seperti `Eddik`, `Mhs`, `dosen`, atau `masyarakat`. Kolom kosong
+berarti mahasiswa, dan spreadsheet lama tanpa kedua kolom ini tetap bisa
+diimpor. Jenis yang tidak dikenali akan ditolak dengan pesan yang jelas, bukan
+disimpan diam-diam sebagai mahasiswa.
+
+Daftar istilah yang dikenali pada kolom `Jenis` ada di
+[`backend/app/Support/BorrowerType.php`](backend/app/Support/BorrowerType.php).
+
 ### Penomoran & Paginasi Tabel
 
 Seluruh tabel dan daftar data di aplikasi memakai aturan yang sama:

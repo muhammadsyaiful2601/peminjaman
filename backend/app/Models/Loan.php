@@ -2,7 +2,9 @@
 
 namespace App\Models;
 
+use App\Support\BorrowerType;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -17,6 +19,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'borrower_email',
     'borrower_phone',
     'borrower_student_id',
+    'borrower_type',
     'borrow_photo',
     'status',
     'borrowed_at',
@@ -34,6 +37,17 @@ class Loan extends Model
             'borrowed_at' => 'datetime',
             'returned_at' => 'datetime',
         ];
+    }
+
+    /**
+     * Jenis peminjam saat transaksi dibuat. Transaksi lama tidak punya kolom
+     * ini, jadi null dibaca sebagai "mahasiswa" (semula satu-satunya jenis).
+     */
+    protected function borrowerType(): Attribute
+    {
+        return Attribute::make(
+            get: fn (mixed $value) => BorrowerType::clean($value),
+        );
     }
 
     public function item(): BelongsTo

@@ -75,7 +75,10 @@ const PREFERRED_PORT = 8642;
 //  1.4.6: semua tabel diberi kolom nomor (No.) dan paginasi 10 data per halaman
 //  dengan tombol Sebelumnya/Berikutnya. Endpoint /api/students kini menerima
 //  page & per_page (opsional — tanpa per_page tetap mengembalikan semua data).
-const TEMPLATE_VERSION = '1.4.6';
+//  1.4.7: peminjam tidak lagi hanya mahasiswa — ditambah jenis tendik, dosen,
+//  dan umum (kolom `students.type` + `students.position` dan
+//  `loans.borrower_type`). Data lama otomatis menjadi jenis "mahasiswa".
+const TEMPLATE_VERSION = '1.4.7';
 const isDev = !app.isPackaged;
 
 /* ------------------------------------------------------------------ paths */

@@ -5,6 +5,7 @@ import { downloadBlob } from '../utils/downloadBlob'
 import { ClearanceLetterModal } from '../components/ClearanceLetterModal'
 import TablePagination from '../components/TablePagination'
 import useTablePagination, { ROWS_PER_PAGE } from '../hooks/useTablePagination'
+import { borrowerTypeBadgeClass, borrowerTypeLabel } from '../utils/borrowerTypes'
 import {
   AlertTriangle,
   ArrowLeft,
@@ -537,12 +538,12 @@ function Clearance() {
 
           <section className="rounded-xl border border-slate-200 bg-white">
             <h2 className="border-b border-slate-100 px-5 py-4 font-semibold text-slate-900">
-              Pilih mahasiswa {borrowers.length > 0 && <span className="text-sm font-normal text-slate-500">({borrowers.length} hasil)</span>}
+              Pilih peminjam {borrowers.length > 0 && <span className="text-sm font-normal text-slate-500">({borrowers.length} hasil)</span>}
             </h2>
             {searching ? (
-              <p className="px-5 py-8 text-center text-sm text-slate-500">Memuat daftar mahasiswa...</p>
+              <p className="px-5 py-8 text-center text-sm text-slate-500">Memuat daftar peminjam...</p>
             ) : borrowers.length === 0 ? (
-              <p className="px-5 py-8 text-center text-sm text-slate-500">Tidak ada mahasiswa yang cocok dengan pencarian.</p>
+              <p className="px-5 py-8 text-center text-sm text-slate-500">Tidak ada peminjam yang cocok dengan pencarian.</p>
             ) : (
               <ul className="divide-y divide-slate-100">
                 {borrowers.map((borrower) => {
@@ -576,7 +577,7 @@ function Clearance() {
                             </button>
                           ) : (
                             <span
-                              title="Hanya mahasiswa berstatus Bebas Labor yang dapat dipilih masal"
+                              title="Hanya peminjam berstatus Bebas Labor yang dapat dipilih masal"
                               className="inline-block h-5 w-5 opacity-20"
                             >
                               <Square className="h-5 w-5 text-slate-300" />
@@ -587,7 +588,13 @@ function Clearance() {
                         <div>
                           <p className="font-medium text-slate-900">{borrower.name}</p>
                           <p className="text-xs text-slate-500">
-                            {borrower.student_id ? `NIM ${borrower.student_id} · ` : ''}{borrower.email}{borrower.phone ? ` · ${borrower.phone}` : ''}
+                            {borrower.student_id ? `${borrower.student_id} · ` : ''}{borrower.email}{borrower.phone ? ` · ${borrower.phone}` : ''}
+                          </p>
+                          <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-slate-400">
+                            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset ${borrowerTypeBadgeClass(borrower.type)}`}>
+                              {borrowerTypeLabel(borrower.type)}
+                            </span>
+                            {borrower.position && <span>{borrower.position}</span>}
                           </p>
                           <p className="mt-1 text-xs text-slate-400">
                             {borrower.has_loans
@@ -596,7 +603,7 @@ function Clearance() {
                           </p>
                           {borrower.has_student_record === false && (
                             <p className="mt-1 text-xs font-medium text-amber-600">
-                              Peminjam manual — belum terdaftar pada data mahasiswa
+                              Peminjam manual — belum terdaftar pada Data Peminjam
                             </p>
                           )}
                         </div>

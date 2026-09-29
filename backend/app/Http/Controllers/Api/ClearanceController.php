@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\ClearanceLetter;
 use App\Models\Loan;
 use App\Models\Student;
+use App\Support\BorrowerType;
 use App\Support\Branding;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Database\Eloquent\Builder;
@@ -521,6 +522,8 @@ class ClearanceController extends Controller
             'name' => trim((string) $student->name),
             'email' => trim((string) $student->email),
             'phone' => trim((string) ($student->phone ?? '')),
+            'type' => $student->type,
+            'position' => trim((string) ($student->position ?? '')),
             'has_student_record' => true,
         ];
     }
@@ -545,6 +548,8 @@ class ClearanceController extends Controller
             'student_id' => $studentId !== '' ? $studentId : $latestStudentId,
             'email' => $email !== '' ? $email : (string) ($latest?->borrower_email ?? ''),
             'phone' => $phone !== '' ? $phone : (string) ($latest?->borrower_phone ?? ''),
+            'type' => $student?->type ?? $latest?->borrower_type ?? BorrowerType::MAHASISWA,
+            'position' => trim((string) ($student?->position ?? '')),
             'last_loan_at' => $latest?->created_at?->toIso8601String(),
             'has_student_record' => $student !== null,
         ];
@@ -742,6 +747,10 @@ class ClearanceController extends Controller
             'name' => $identity['name'] ?? '',
             'email' => $identity['email'] ?? '',
             'phone' => $identity['phone'] ?? '',
+            // Jenis peminjam ikut dibawa agar halaman bebas labor bisa
+            // menampilkan badge yang sama dengan halaman Data Peminjam.
+            'type' => $identity['type'] ?? BorrowerType::MAHASISWA,
+            'position' => $identity['position'] ?? '',
             'has_student_record' => (bool) ($identity['has_student_record'] ?? false),
             'has_loans' => $hasLoans,
             'can_issue_letter' => $eligible,

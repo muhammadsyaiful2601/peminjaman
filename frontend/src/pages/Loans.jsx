@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import api from '../api/axios'
 import TablePagination from '../components/TablePagination'
+import { borrowerTypeBadgeClass, borrowerTypeLabel } from '../utils/borrowerTypes'
 import { Plus, Eye, Pencil, PackageX, Search } from 'lucide-react'
 
 // Jumlah baris per halaman pada tabel Peminjaman.
@@ -152,6 +153,9 @@ function Loans() {
                         <td className="px-6 py-3">
                           <p className="font-medium text-slate-900">{loan.borrower_name}</p>
                           <p className="text-xs text-slate-500">{loan.borrower_email}</p>
+                          <span className={`mt-1 inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset ${borrowerTypeBadgeClass(loan.borrower_type)}`}>
+                            {borrowerTypeLabel(loan.borrower_type)}
+                          </span>
                         </td>
                         <td className="px-6 py-3 text-slate-600">
                           {loan.loan_items?.length

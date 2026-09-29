@@ -5,9 +5,11 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\AppSetting;
 use App\Models\Student;
+use App\Support\BorrowerType;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 
 class StudentController extends Controller
 {
@@ -15,25 +17,50 @@ class StudentController extends Controller
     {
         $validated = $request->validate([
             'search' => ['nullable', 'string', 'max:100'],
+            'type' => ['nullable', Rule::in(BorrowerType::ALL)],
             'page' => ['nullable', 'integer', 'min:1'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:1000'],
         ]);
 
         $search = trim((string) ($validated['search'] ?? ''));
+        $type = $validated['type'] ?? null;
 
         $query = Student::query()
             ->when($search !== '', function ($query) use ($search) {
                 $query->where(function ($subQuery) use ($search) {
                     $subQuery->where('student_id', 'like', "%{$search}%")
                         ->orWhere('name', 'like', "%{$search}%")
-                        ->orWhere('email', 'like', "%{$search}%");
+                        ->orWhere('email', 'like', "%{$search}%")
+                        ->orWhere('position', 'like', "%{$search}%");
                 });
             })
+            ->when($type !== null, fn ($query) => $query->where('type', $type))
             ->orderBy('name');
 
+        // Jumlah per jenis untuk badge pada tab filter. Sengaja dihitung
+        // terpisah dari filter `type` supaya angka jenis lain tetap terlihat
+        // meski sedang menampilkan satu jenis saja. Kata kunci pencarian tetap
+        // ikut dipakai agar angka pada tab cocok dengan yang diketik petugas.
+        $counts = Student::query()
+            ->when($search !== '', function ($query) use ($search) {
+                $query->where(function ($subQuery) use ($search) {
+                    $subQuery->where('student_id', 'like', "%{$search}%")
+                        ->orWhere('name', 'like', "%{$search}%")
+                        ->orWhere('email', 'like', "%{$search}%")
+                        ->orWhere('position', 'like', "%{$search}%");
+                });
+            })
+            ->selectRaw('type, count(*) as aggregate')
+            ->groupBy('type')
+            ->pluck('aggregate', 'type');
+        $byType = ['all' => (int) $counts->sum()];
+        foreach (BorrowerType::ALL as $option) {
+            $byType[$option] = (int) ($counts[$option] ?? 0);
+        }
+
         // Tanpa `per_page` seluruh data dikembalikan. Pemanggil lama (mis.
-        // form peminjaman yang butuh semua mahasiswa dalam satu daftar)
-        // tetap bekerja apa adanya; halaman tabel Data Mahasiswa mengirim
+        // form peminjaman yang butuh semua peminjam dalam satu daftar)
+        // tetap bekerja apa adanya; halaman tabel Data Peminjam mengirim
         // `per_page` sehingga tabel cukup 10 baris per halaman.
         if (! array_key_exists('per_page', $validated) || $validated['per_page'] === null) {
             $students = $query->get();
@@ -43,6 +70,8 @@ class StudentController extends Controller
                 'meta' => [
                     'total' => $students->count(),
                     'search' => $search,
+                    'type' => $type,
+                    'by_type' => $byType,
                 ],
             ]);
         }
@@ -59,6 +88,8 @@ class StudentController extends Controller
             'meta' => [
                 'total' => $paginator->total(),
                 'search' => $search,
+                'type' => $type,
+                'by_type' => $byType,
                 'current_page' => $paginator->currentPage(),
                 'last_page' => $paginator->lastPage(),
                 'per_page' => $paginator->perPage(),
@@ -205,7 +236,7 @@ class StudentController extends Controller
 
         if ($columnMap === null) {
             return response()->json([
-                'message' => 'Header spreadsheet tidak dikenali. Gunakan template: NIM/NIP, Nama, Email, No. Telepon.',
+                'message' => 'Header spreadsheet tidak dikenali. Gunakan template: NIM/NIP, Nama, Email, No. Telepon (Jenis & Jabatan opsional).',
             ], 422);
         }
 
@@ -231,11 +262,28 @@ class StudentController extends Controller
                 'name' => trim((string) ($row[$columnMap['name']] ?? '')),
                 'email' => strtolower(trim((string) ($row[$columnMap['email']] ?? ''))),
                 'phone' => isset($columnMap['phone']) ? trim((string) ($row[$columnMap['phone']] ?? '')) : '',
+                'position' => isset($columnMap['position']) ? trim((string) ($row[$columnMap['position']] ?? '')) : '',
             ];
+
+            // Kolom "Jenis" opsional: bila kosong, baris dianggap mahasiswa
+            // supaya spreadsheet lama tanpa kolom ini tetap bisa diimpor.
+            $rawType = isset($columnMap['type']) ? trim((string) ($row[$columnMap['type']] ?? '')) : '';
+            $type = $rawType === '' ? BorrowerType::MAHASISWA : BorrowerType::fromText($rawType);
 
             if ($data['student_id'] === '' && $data['name'] === '' && $data['email'] === '') {
                 continue;
             }
+
+            // Jenis yang tidak dikenali Ditolak, bukan diam-diam disimpan
+            // sebagai mahasiswa supaya salah kategori tidak sulit ditelusuri.
+            if ($rawType !== '' && $type === null) {
+                $errors[] = "Baris {$rowNumber}: Jenis peminjam \"{$rawType}\" tidak dikenal "
+                    . '(pilihan: '.implode(', ', BorrowerType::options()).').';
+
+                continue;
+            }
+
+            $data['type'] = $type;
 
             if (isset($seenStudentIds[$data['student_id']])) {
                 $errors[] = "Baris {$rowNumber}: NIM {$data['student_id']} duplikat di dalam file.";
@@ -254,6 +302,8 @@ class StudentController extends Controller
                 'name' => ['required', 'string', 'max:255'],
                 'email' => ['required', 'email', 'max:255'],
                 'phone' => ['nullable', 'string', 'max:20'],
+                'type' => ['required', 'string', Rule::in(BorrowerType::ALL)],
+                'position' => ['nullable', 'string', 'max:150'],
             ]);
 
             if ($validator->fails()) {
@@ -283,6 +333,8 @@ class StudentController extends Controller
             $payload = [
                 'student_id' => $data['student_id'],
                 'name' => $data['name'],
+                'type' => $data['type'],
+                'position' => $data['position'] !== '' ? $data['position'] : null,
                 'email' => $data['email'],
                 'phone' => $data['phone'] !== '' ? $data['phone'] : null,
             ];
@@ -324,7 +376,7 @@ class StudentController extends Controller
             ], 422);
         }
 
-        $summary = ["{$imported} mahasiswa baru ditambahkan", "{$updated} diperbarui"];
+        $summary = ["{$imported} peminjam baru ditambahkan", "{$updated} diperbarui"];
 
         if ($unchanged > 0) {
             $summary[] = "{$unchanged} tanpa perubahan";
@@ -352,42 +404,61 @@ class StudentController extends Controller
             $emailRule .= ',' . $student->id;
         }
 
-        return $request->validate([
+        $validated = $request->validate([
             'student_id' => ['required', 'string', 'max:50', $studentIdRule],
             'name' => ['required', 'string', 'max:255'],
+            'type' => ['sometimes', 'string', Rule::in(BorrowerType::ALL)],
+            'position' => ['nullable', 'string', 'max:150'],
             'email' => ['required', 'email', 'max:255', $emailRule],
             'phone' => ['nullable', 'string', 'max:20'],
         ]);
+
+        // Pemanggil lama tidak mengirim `type`; defaults ke mahasiswa supaya
+        // data lama tidak berubah jenis hanya karena disimpan ulang.
+        $validated['type'] = $validated['type'] ?? ($student?->type ?? BorrowerType::MAHASISWA);
+        $validated['position'] = $validated['position'] ?? ($student?->position ?? null);
+
+        return $validated;
     }
 
     /**
      * Unduh template impor: file .xls (HTML table) yang berisi judul,
      * petunjuk, dan header berformat tanpa data contoh. File ini bisa
      * langsung dibuka di Excel atau diunggah ke Google Sheets.
+     *
+     * Kolom "Jenis" dan "Jabatan / Unit Kerja" bersifat opsional — boleh
+     * dikosongkan (dianggap mahasiswa) atau dihapus seluruhnya untuk
+     * spreadsheet yang hanya berisi mahasiswa.
      */
     public function downloadTemplate()
     {
-        $html = <<<'HTML'
+        $typeOptions = implode(' / ', array_values(BorrowerType::options()));
+
+        $html = <<<HTML
             <html xmlns:x="urn:schemas-microsoft-com:office:excel">
             <head>
                 <meta charset="UTF-8">
                 <!--[if gte mso 9]><xml>
                     <x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>
-                        <x:Name>Data Mahasiswa</x:Name>
+                        <x:Name>Data Peminjam</x:Name>
                         <x:WorksheetOptions><x:Panes></x:Panes></x:WorksheetOptions>
                     </x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook>
                 </xml><![endif]-->
             </head>
             <body>
                 <table border="0">
-                    <tr><td colspan="4" style="font-size:14pt; font-weight:bold;">TEMPLATE IMPOR DATA MAHASISWA</td></tr>
-                    <tr><td colspan="4" style="font-size:10pt; color:#555555;">Isi data mulai baris 4 ke bawah. Baris judul, petunjuk, dan header tidak perlu diubah.</td></tr>
+                    <tr><td colspan="6" style="font-size:14pt; font-weight:bold;">TEMPLATE IMPOR DATA PEMINJAM</td></tr>
+                    <tr><td colspan="6" style="font-size:10pt; color:#555555;">Isi data mulai baris 4 ke bawah. Baris judul, petunjuk, dan header tidak perlu diubah.</td></tr>
                     <tr>
                         <td style="background-color:#0e7490; color:#ffffff; font-weight:bold; border:1px solid #155e75; padding:6px 10px;">NIM/NIP</td>
                         <td style="background-color:#0e7490; color:#ffffff; font-weight:bold; border:1px solid #155e75; padding:6px 10px;">Nama</td>
+                        <td style="background-color:#4a5568; color:#ffffff; font-weight:bold; border:1px solid #2d3748; padding:6px 10px;">Jenis</td>
+                        <td style="background-color:#4a5568; color:#ffffff; font-weight:bold; border:1px solid #2d3748; padding:6px 10px;">Jabatan / Unit Kerja</td>
                         <td style="background-color:#0e7490; color:#ffffff; font-weight:bold; border:1px solid #155e75; padding:6px 10px;">Email</td>
                         <td style="background-color:#0e7490; color:#ffffff; font-weight:bold; border:1px solid #155e75; padding:6px 10px;">No. Telepon</td>
                     </tr>
+                    <tr><td colspan="6" style="font-size:10pt; color:#555555;"><b>Jenis</b> (opsional): {$typeOptions}. Kosongkan bila peminjam adalah mahasiswa.</td></tr>
+                    <tr><td colspan="6" style="font-size:10pt; color:#555555;"><b>Jabatan / Unit Kerja</b> (opsional): jabatan pegawai, program studi, atau unit kerja. Boleh dikosongkan.</td></tr>
                 </table>
             </body>
             </html>
@@ -395,7 +466,7 @@ class StudentController extends Controller
 
         return response($html)
             ->header('Content-Type', 'application/vnd.ms-excel; charset=UTF-8')
-            ->header('Content-Disposition', 'attachment; filename="template-impor-mahasiswa.xls"');
+            ->header('Content-Disposition', 'attachment; filename="template-impor-peminjam.xls"');
     }
 
     /**
@@ -534,9 +605,24 @@ class StudentController extends Controller
     {
         $aliases = [
             'student_id' => ['studentid', 'nim', 'nimnip', 'nip', 'nidn', 'idmahasiswa', 'nomorinduk'],
-            'name' => ['name', 'nama', 'namamahasiswa', 'namalengkap'],
+            'name' => ['name', 'nama', 'namamahasiswa', 'namalengkap', 'namapeminjam'],
             'email' => ['email', 'surel'],
             'phone' => ['phone', 'telepon', 'notelepon', 'notelp', 'nomortelepon', 'nohp', 'hp', 'whatsapp'],
+            // Kolom opsional — hanya dipakai bila ada di spreadsheet. Istilah
+            // "jabatan" sengaja tidak dipakai untuk `type` karena kolom itu
+            // berisi jabatan/unit kerja, bukan jenis peminjam (lihat `position`).
+            'type' => ['jenis', 'jenispeminjam', 'jenisorang', 'tipe', 'kategori', 'statuskepegawaian', 'golongan'],
+            'position' => [
+                'jabatan',
+                'jabatanfungsional',
+                'jabatanunitkerja',
+                'jabatanprogdi',
+                'unitkerja',
+                'programstudi',
+                'prodi',
+                'fakultas',
+                'unit',
+            ],
         ];
 
         $map = [];

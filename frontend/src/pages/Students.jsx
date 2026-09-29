@@ -3,10 +3,11 @@ import { Mail, Pencil, Phone, Plus, RefreshCw, Search, Trash2, UserRound, Upload
 import api from '../api/axios'
 import TablePagination from '../components/TablePagination'
 import ImportStudentsModal from '../components/ImportStudentsModal'
+import { BORROWER_TYPES, DEFAULT_BORROWER_TYPE, borrowerTypeBadgeClass, borrowerTypeLabel, identityLabel } from '../utils/borrowerTypes'
 
-const emptyForm = { student_id: '', name: '', email: '', phone: '' }
+const emptyForm = { student_id: '', name: '', type: DEFAULT_BORROWER_TYPE, position: '', email: '', phone: '' }
 const SYNC_INTERVAL_SECONDS = 5 * 60
-// Jumlah baris per halaman pada tabel Data Mahasiswa. Setelah 10 data
+// Jumlah baris per halaman pada tabel Data Peminjam. Setelah 10 data
 // muncul tombol "Berikutnya" supaya petugas bisa membuka halaman berikutnya.
 const PER_PAGE = 10
 // URL CSV Google Sheets terpublikasi yang menjadi sumber sinkronisasi otomatis.
@@ -45,6 +46,9 @@ function Students() {
   const [page, setPage] = useState(1)
   const [lastPage, setLastPage] = useState(1)
   const [total, setTotal] = useState(0)
+  // Tab jenis peminjam: '' = Semua, atau salah satu BORROWER_TYPES.
+  const [typeFilter, setTypeFilter] = useState('')
+  const [counts, setCounts] = useState({ all: 0 })
   const syncingRef = useRef(false)
   // Ref berikut membuat timer otomatis selalu memakai versi terbaru dari
   // fungsi/data terkait, sehingga interval tidak perlu dibuat ulang tiap render
@@ -53,14 +57,18 @@ function Students() {
   const countdownRef = useRef(SYNC_INTERVAL_SECONDS)
   const searchRef = useRef('')
   const pageRef = useRef(1)
-  // Efek pengaim halaman melewati run pertama (pemuatan awal sudah ditangani
-  // efek lain), lalu setiap perpindahan halaman berikutnya tetap mengambil data.
+  const typeRef = useRef('')
+  // Efek perpindahan halaman melewati run pertama (pemuatan awal sudah
+  // ditangani efek lain), lalu setiap perpindahan halaman berikutnya tetap
+  // mengambil data.
   const skipPageFetchRef = useRef(true)
+  const skipTypeFetchRef = useRef(true)
   const modalOpenRef = useRef(false)
   const [lastSyncedAt, setLastSyncedAt] = useState('')
 
   useEffect(() => { searchRef.current = search }, [search])
   useEffect(() => { pageRef.current = page }, [page])
+  useEffect(() => { typeRef.current = typeFilter }, [typeFilter])
   useEffect(() => { modalOpenRef.current = showImportModal }, [showImportModal])
 
   const fetchStudents = useCallback(async (searchValue, silent = false, pageValue = null) => {
@@ -68,18 +76,23 @@ function Students() {
     // Halaman tujuan: argumen eksplisit (dipakai saat reset ke halaman 1),
     // selain itu mengikuti halaman yang sedang aktif.
     const currentPage = Number(pageValue) > 0 ? Number(pageValue) : pageRef.current
+    // Tab jenis yang sedang aktif; `typeRef` disimpan agar fungsi ini tetap
+    // stabil (useCallback dengan []) namun membaca nilai terbaru.
+    const type = typeRef.current.trim()
 
     if (!silent) setLoading(true)
 
     try {
       const params = { page: currentPage, per_page: PER_PAGE }
       if (term) params.search = term
+      if (type) params.type = type
       const response = await api.get('/students', { params })
       setStudents(response.data.data || [])
       setLastPage(response.data.meta?.last_page || 1)
       setTotal(response.data.meta?.total || 0)
+      setCounts(response.data.meta?.by_type || { all: 0 })
     } catch (requestError) {
-      setError(requestError.response?.data?.message || 'Gagal memuat data mahasiswa.')
+      setError(requestError.response?.data?.message || 'Gagal memuat data peminjam.')
     } finally {
       if (!silent) setLoading(false)
     }
@@ -188,6 +201,21 @@ function Students() {
     return () => window.clearTimeout(timeout)
   }, [search, fetchStudents])
 
+  // Tab jenis diganti -> daftar dimuat ulang dan halaman kembali ke 1.
+  // Run pertama dilewati karena pemuatan awal sudah dilakukan efek mount.
+  useEffect(() => {
+    if (skipTypeFetchRef.current) {
+      skipTypeFetchRef.current = false
+
+      return
+    }
+
+    // Kalau belum di halaman 1, cukup setPage(1) — efek `page` yang mengambil
+    // supaya tidak ada dua permintaan untuk hasil yang sama.
+    if (pageRef.current !== 1) setPage(1)
+    else fetchStudents(undefined, false, 1)
+  }, [typeFilter, fetchStudents])
+
   // Versi terbaru syncStudents disimpan di ref agar timer otomatis di bawah
   // selalu memakai logika & data terbaru (tanpa membuat interval baru).
   useEffect(() => { syncRef.current = syncStudents }, [syncStudents])
@@ -271,7 +299,7 @@ function Students() {
         setSuccess('Data mahasiswa berhasil diperbarui.')
       } else {
         await api.post('/students', form)
-        setSuccess('Data mahasiswa berhasil ditambahkan.')
+        setSuccess(`Data ${borrowerTypeLabel(form.type).toLowerCase()} berhasil ditambahkan.`)
       }
       setForm(emptyForm)
       setEditingStudent(null)
@@ -289,6 +317,8 @@ function Students() {
     setForm({
       student_id: student.student_id,
       name: student.name,
+      type: student.type || DEFAULT_BORROWER_TYPE,
+      position: student.position || '',
       email: student.email,
       phone: student.phone || '',
     })
@@ -302,17 +332,17 @@ function Students() {
   }
 
   const handleDelete = async (student) => {
-    if (!window.confirm(`Hapus data mahasiswa "${student.name}"?`)) return
+    if (!window.confirm(`Hapus data peminjam "${student.name}"?`)) return
     setError('')
     try {
       await api.delete(`/students/${student.id}`)
-      setSuccess('Data mahasiswa berhasil dihapus.')
+      setSuccess('Data peminjam berhasil dihapus.')
       // Baris terakhir pada halaman ini dihapus: mundur satu halaman supaya
       // tabel tidak tampil kosong menetap.
       if (students.length <= 1 && page > 1) setPage((current) => current - 1)
       else fetchStudents()
     } catch (requestError) {
-      setError(requestError.response?.data?.message || 'Data mahasiswa gagal dihapus.')
+      setError(requestError.response?.data?.message || 'Data peminjam gagal dihapus.')
     }
   }
 
@@ -322,8 +352,8 @@ function Students() {
     <div className="mx-auto max-w-5xl">
       <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Data Mahasiswa</h1>
-          <p className="mt-1 text-slate-500">Simpan data mahasiswa agar pengisian peminjaman lebih cepat.</p>
+          <h1 className="text-2xl font-bold text-slate-900">Data Peminjam</h1>
+          <p className="mt-1 text-slate-500">Simpan data peminjam — mahasiswa, tendik, dosen, atau peminjam umum — agar pengisian peminjaman lebih cepat.</p>
         </div>
         <div className="flex shrink-0 flex-col items-stretch gap-2 sm:items-end">
           <div className="flex gap-2">
@@ -365,12 +395,31 @@ function Students() {
 
       <form onSubmit={handleSubmit} className="mb-6 grid grid-cols-1 gap-4 rounded-xl border border-slate-200 bg-white p-6 md:grid-cols-2">
         <label className="text-sm font-medium text-slate-700">
-          NIM / NIP *
-          <input required name="student_id" value={form.student_id} onChange={updateForm} placeholder="Contoh: 2211082001" className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500" />
+          Jenis Peminjam *
+          <select
+            required
+            name="type"
+            value={form.type}
+            onChange={updateForm}
+            className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500"
+          >
+            {BORROWER_TYPES.map((type) => (
+              <option key={type.value} value={type.value}>{type.label}</option>
+            ))}
+          </select>
+        </label>
+        <label className="text-sm font-medium text-slate-700">
+          {identityLabel(form.type)}
+          {' *'}
+          <input required name="student_id" value={form.student_id} onChange={updateForm} placeholder={form.type === 'mahasiswa' ? 'Contoh: 2211082001' : 'Contoh: 198001012005011001'} className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500" />
         </label>
         <label className="text-sm font-medium text-slate-700">
           Nama lengkap *
-          <input required name="name" value={form.name} onChange={updateForm} placeholder="Nama mahasiswa" className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500" />
+          <input required name="name" value={form.name} onChange={updateForm} placeholder="Nama lengkap peminjam" className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500" />
+        </label>
+        <label className="text-sm font-medium text-slate-700">
+          Jabatan / Unit Kerja
+          <input name="position" value={form.position} onChange={updateForm} placeholder={form.type === 'mahasiswa' ? 'Program studi (opsional)' : 'Contoh: Staf Bagian Keuangan'} className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500" />
         </label>
         <label className="text-sm font-medium text-slate-700">
           Email *
@@ -383,7 +432,7 @@ function Students() {
         <div className="flex gap-2 md:col-span-2">
           <button disabled={submitting} className="inline-flex items-center justify-center gap-2 rounded-lg bg-cyan-600 px-4 py-2.5 font-medium text-white hover:bg-cyan-700 disabled:opacity-50">
             {editingStudent ? <Pencil className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-            {editingStudent ? 'Simpan Perubahan' : 'Tambah Mahasiswa'}
+            {editingStudent ? 'Simpan Perubahan' : `Tambah ${borrowerTypeLabel(form.type)}`}
           </button>
           {editingStudent && <button type="button" onClick={cancelEdit} className="rounded-lg border border-slate-300 px-4 py-2.5 font-medium text-slate-600 hover:bg-slate-50">Batal</button>}
         </div>
@@ -392,17 +441,41 @@ function Students() {
       <div className="mb-4 flex flex-col gap-2 sm:flex-row">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
-          <input value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') runSearch() }} placeholder="Cari NIM, nama, atau email..." className="w-full rounded-lg border border-slate-300 py-2.5 pl-10 pr-4 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500" />
+          <input value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') runSearch() }} placeholder="Cari NIM/NIP, nama, jabatan, atau email..." className="w-full rounded-lg border border-slate-300 py-2.5 pl-10 pr-4 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500" />
         </div>
         <button type="button" onClick={runSearch} className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-800 px-5 py-2.5 font-medium text-white hover:bg-slate-900"><Search className="h-4 w-4" />Cari</button>
       </div>
 
+      {/* Tab jenis peminjam dengan jumlah data pada masing-masing jenis. */}
+      <div className="mb-4 flex flex-wrap gap-2">
+        {[{ value: '', label: 'Semua' }, ...BORROWER_TYPES].map((tab) => {
+          const active = typeFilter === tab.value
+          const count = counts[tab.value] ?? 0
+
+          return (
+            <button
+              key={tab.value || 'all'}
+              type="button"
+              onClick={() => setTypeFilter(tab.value)}
+              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
+                active
+                  ? 'border-cyan-600 bg-cyan-600 text-white'
+                  : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              {tab.label}
+              <span className={`rounded-full px-1.5 text-xs ${active ? 'bg-white/20' : 'bg-slate-100 text-slate-500'}`}>{count}</span>
+            </button>
+          )
+        })}
+      </div>
+
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-        {loading ? <p className="p-8 text-center text-slate-500">Memuat data mahasiswa...</p> : students.length === 0 ? <div className="p-8 text-center text-slate-500"><UserRound className="mx-auto mb-3 h-10 w-10 text-slate-300" />Belum ada data mahasiswa.</div> : (
+        {loading ? <p className="p-8 text-center text-slate-500">Memuat data peminjam...</p> : students.length === 0 ? <div className="p-8 text-center text-slate-500"><UserRound className="mx-auto mb-3 h-10 w-10 text-slate-300" />{search ? 'Peminjam tidak ditemukan.' : 'Belum ada data peminjam.'}</div> : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
-              <thead className="bg-slate-50"><tr><th className="w-14 px-5 py-3 text-center font-medium text-slate-500">No.</th><th className="px-5 py-3 font-medium text-slate-500">NIM / NIP</th><th className="px-5 py-3 font-medium text-slate-500">Nama</th><th className="px-5 py-3 font-medium text-slate-500">Kontak</th><th className="px-5 py-3 text-right font-medium text-slate-500">Aksi</th></tr></thead>
-              <tbody className="divide-y divide-slate-200">{students.map((student, index) => <tr key={student.id}><td className="px-5 py-3 text-center text-slate-400">{(page - 1) * PER_PAGE + index + 1}</td><td className="px-5 py-3 font-mono text-slate-700">{student.student_id}</td><td className="px-5 py-3 font-medium text-slate-900">{student.name}</td><td className="px-5 py-3 text-slate-600"><div className="flex items-center gap-1.5"><Mail className="h-3.5 w-3.5 text-slate-400" />{student.email}</div>{student.phone && <div className="mt-1 flex items-center gap-1.5 text-xs"><Phone className="h-3.5 w-3.5 text-slate-400" />{student.phone}</div>}</td><td className="px-5 py-3 text-right"><div className="inline-flex gap-2"><button type="button" onClick={() => handleEdit(student)} className="rounded-lg p-1.5 text-slate-500 hover:bg-cyan-50 hover:text-cyan-600" aria-label={`Edit ${student.name}`}><Pencil className="h-4 w-4" /></button><button type="button" onClick={() => handleDelete(student)} className="rounded-lg p-1.5 text-slate-500 hover:bg-red-50 hover:text-red-600" aria-label={`Hapus ${student.name}`}><Trash2 className="h-4 w-4" /></button></div></td></tr>)}</tbody>
+              <thead className="bg-slate-50"><tr><th className="w-14 px-5 py-3 text-center font-medium text-slate-500">No.</th><th className="px-5 py-3 font-medium text-slate-500">Jenis</th><th className="px-5 py-3 font-medium text-slate-500">NIM / NIP</th><th className="px-5 py-3 font-medium text-slate-500">Nama</th><th className="px-5 py-3 font-medium text-slate-500">Kontak</th><th className="px-5 py-3 text-right font-medium text-slate-500">Aksi</th></tr></thead>
+              <tbody className="divide-y divide-slate-200">{students.map((student, index) => <tr key={student.id}><td className="px-5 py-3 text-center text-slate-400">{(page - 1) * PER_PAGE + index + 1}</td><td className="px-5 py-3"><span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${borrowerTypeBadgeClass(student.type)}`}>{borrowerTypeLabel(student.type)}</span></td><td className="px-5 py-3 font-mono text-slate-700">{student.student_id}</td><td className="px-5 py-3 font-medium text-slate-900">{student.name}{student.position && <div className="mt-0.5 text-xs font-normal text-slate-500">{student.position}</div>}</td><td className="px-5 py-3 text-slate-600"><div className="flex items-center gap-1.5"><Mail className="h-3.5 w-3.5 text-slate-400" />{student.email}</div>{student.phone && <div className="mt-1 flex items-center gap-1.5 text-xs"><Phone className="h-3.5 w-3.5 text-slate-400" />{student.phone}</div>}</td><td className="px-5 py-3 text-right"><div className="inline-flex gap-2"><button type="button" onClick={() => handleEdit(student)} className="rounded-lg p-1.5 text-slate-500 hover:bg-cyan-50 hover:text-cyan-600" aria-label={`Edit ${student.name}`}><Pencil className="h-4 w-4" /></button><button type="button" onClick={() => handleDelete(student)} className="rounded-lg p-1.5 text-slate-500 hover:bg-red-50 hover:text-red-600" aria-label={`Hapus ${student.name}`}><Trash2 className="h-4 w-4" /></button></div></td></tr>)}</tbody>
             </table>
           </div>
         )}

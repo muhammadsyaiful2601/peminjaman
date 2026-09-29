@@ -161,6 +161,229 @@ class StudentTest extends TestCase
             ->assertJsonValidationErrors('per_page');
     }
 
+    public function test_petugas_dapat_menambah_pegawai_tendik_dosen_dan_umum(): void
+    {
+        Sanctum::actingAs($this->staff());
+
+        $cases = [
+            ['nip' => '198001012005011001', 'type' => 'tendik', 'position' => 'Staf Bagian Keuangan'],
+            ['nip' => '197505052000031002', 'type' => 'dosen', 'position' => 'Dosen Teknik Informatika'],
+            ['nip' => '081234567890', 'type' => 'umum', 'position' => null],
+        ];
+
+        foreach ($cases as $index => $case) {
+            $this->postJson('/api/students', [
+                'student_id' => $case['nip'],
+                'name' => 'Pegawai ' . ($index + 1),
+                'type' => $case['type'],
+                'position' => $case['position'],
+                'email' => 'pegawai' . ($index + 1) . '@pnp.ac.id',
+            ])->assertCreated()
+                ->assertJsonPath('student.type', $case['type'])
+                ->assertJsonPath('student.position', $case['position']);
+        }
+
+        $this->assertDatabaseHas('students', ['student_id' => '197505052000031002', 'type' => 'dosen']);
+        $this->assertDatabaseHas('students', ['student_id' => '081234567890', 'type' => 'umum']);
+    }
+
+    public function test_jenis_peminjam_tidak_dikenal_ditolak(): void
+    {
+        Sanctum::actingAs($this->staff());
+
+        $this->postJson('/api/students', [
+            'student_id' => '12345',
+            'name' => 'Orang random',
+            'type' => 'alien',
+            'email' => 'alien@example.com',
+        ])->assertStatus(422)
+            ->assertJsonValidationErrors('type');
+    }
+
+    public function test_peminjam_lama_tanpa_jenis_tetap_dibaca_sebagai_mahasiswa(): void
+    {
+        Sanctum::actingAs($this->staff());
+
+        // Pemanggil lama tidak mengirim `type` sama sekali — kolomnya defaulted
+        // "mahasiswa" oleh database, jadi data lama tidak berubah jenis.
+        Student::create([
+            'student_id' => '2211082001',
+            'name' => 'Budi Santoso',
+            'email' => 'budi@example.com',
+        ]);
+
+        $this->getJson('/api/students?per_page=10')
+            ->assertOk()
+            ->assertJsonPath('data.0.type', 'mahasiswa')
+            ->assertJsonPath('meta.by_type.mahasiswa', 1);
+
+        // Disimpan ulang tanpa mengirim `type` juga tidak mengubah jenis.
+        $student = Student::firstOrFail();
+        $this->putJson('/api/students/' . $student->id, [
+            'student_id' => '2211082001',
+            'name' => 'Budi Santoso Updated',
+            'email' => 'budi@example.com',
+        ])->assertOk()->assertJsonPath('student.type', 'mahasiswa');
+    }
+
+    public function test_daftar_peminjam_dapat_difilter_per_jenis_beserta_jumlahnya(): void
+    {
+        Sanctum::actingAs($this->staff());
+
+        $seed = [
+            ['mahasiswa', '2211082001', 'Mhs Satu'],
+            ['mahasiswa', '2211082002', 'Mhs Dua'],
+            ['tendik', '198001012005011001', 'Tendik Satu'],
+            ['dosen', '197505052000031002', 'Dosen Satu'],
+            ['umum', '081234567890', 'Umum Satu'],
+        ];
+        foreach ($seed as [$type, $id, $name]) {
+            Student::create([
+                'student_id' => $id,
+                'name' => $name,
+                'type' => $type,
+                'email' => strtolower(str_replace(' ', '', $name)) . '@pnp.ac.id',
+            ]);
+        }
+
+        $this->getJson('/api/students?type=dosen&per_page=10')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.name', 'Dosen Satu')
+            ->assertJsonPath('meta.type', 'dosen')
+            ->assertJsonPath('meta.total', 1)
+            // Jumlah jenis lain tetap dihitung agar badge pada tab tidak kosong.
+            ->assertJsonPath('meta.by_type.all', 5)
+            ->assertJsonPath('meta.by_type.mahasiswa', 2)
+            ->assertJsonPath('meta.by_type.tendik', 1)
+            ->assertJsonPath('meta.by_type.dosen', 1)
+            ->assertJsonPath('meta.by_type.umum', 1);
+
+        $this->getJson('/api/students?type=mahasiswa&per_page=10')
+            ->assertOk()
+            ->assertJsonCount(2, 'data')
+            ->assertJsonPath('meta.total', 2);
+
+        // Peminjam umum boleh tanpa jabatan.
+        $this->getJson('/api/students?type=umum&per_page=10')
+            ->assertOk()
+            ->assertJsonPath('data.0.position', null);
+
+        $this->getJson('/api/students?type=aliens&per_page=10')
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('type');
+    }
+
+    public function test_transaksi_menyimpan_jenis_peminjam_dan_membaca_lama_sebagai_mahasiswa(): void
+    {
+        Sanctum::actingAs($this->staff());
+        $item = \App\Models\Item::create([
+            'name' => 'Kabel HDMI',
+            'item_code' => 'BRG-001',
+            'category' => 'Peralatan',
+            'stock' => 10,
+        ]);
+
+        $loan = \App\Models\Loan::create([
+            'uuid' => (string) \Illuminate\Support\Str::uuid(),
+            'loan_code' => 'PJM-2026-9001',
+            'item_id' => $item->id,
+            'qty' => 1,
+            'borrower_name' => 'Siti Aminah',
+            'borrower_email' => 'siti@pnp.ac.id',
+            'borrower_type' => 'tendik',
+            'status' => 'borrowed',
+            'created_by' => $this->staff()->id,
+        ]);
+        $this->assertSame('tendik', $loan->fresh()->borrower_type);
+
+        // Transaksi lama tidak punya jenis -> dibaca sebagai mahasiswa.
+        $legacy = \App\Models\Loan::create([
+            'uuid' => (string) \Illuminate\Support\Str::uuid(),
+            'loan_code' => 'PJM-2026-9002',
+            'item_id' => $item->id,
+            'qty' => 1,
+            'borrower_name' => 'Budi Santoso',
+            'borrower_email' => 'budi@example.com',
+            'status' => 'borrowed',
+            'created_by' => $this->staff()->id,
+        ]);
+        $this->assertNull($legacy->fresh()->getRawOriginal('borrower_type'));
+        $this->assertSame('mahasiswa', $legacy->fresh()->borrower_type);
+    }
+
+    public function test_impor_menulis_jenis_dan_jabatan_dari_spreadsheet(): void
+    {
+        Sanctum::actingAs($this->staff());
+
+        $csv = "NIM/NIP,Nama,Jenis,Jabatan / Unit Kerja,Email,No. Telepon\n"
+            ."2211082001,Budi Santoso,,,budi@example.com,0812\n"
+            ."198001012005011001,Siti Aminah,Eddik,Staf Bagian Keuangan,siti@pnp.ac.id,0813\n"
+            ."197505052000031002,Andi Saputra,dosen,Dosen Teknik Informatika,andi@pnp.ac.id,0814\n"
+            ."081234567890,Peminjam Luar,masyarakat,,luar@example.com,0815\n";
+
+        $this->post('/api/students/import', [
+            'file' => \Illuminate\Http\UploadedFile::fake()->createWithContent('peminjam.csv', $csv),
+        ], ['Accept' => 'application/json'])->assertOk()
+            ->assertJsonPath('ok', true)
+            ->assertJsonPath('imported', 4);
+
+        // Jenis kosong pada spreadsheet tetap berarti mahasiswa.
+        $this->assertDatabaseHas('students', ['student_id' => '2211082001', 'type' => 'mahasiswa']);
+        // Istilah lain pada kolom "Jenis" diterjemahkan ke jenis yang benar.
+        $this->assertDatabaseHas('students', [
+            'student_id' => '198001012005011001',
+            'type' => 'tendik',
+            'position' => 'Staf Bagian Keuangan',
+        ]);
+        $this->assertDatabaseHas('students', [
+            'student_id' => '197505052000031002',
+            'type' => 'dosen',
+            'position' => 'Dosen Teknik Informatika',
+        ]);
+        $this->assertDatabaseHas('students', [
+            'student_id' => '081234567890',
+            'type' => 'umum',
+            'position' => null,
+        ]);
+    }
+
+    public function test_impor_menolak_jenis_yang_tidak_dikenal(): void
+    {
+        Sanctum::actingAs($this->staff());
+
+        $csv = "NIM/NIP,Nama,Jenis,Email\n"
+            ."2211082001,Budi Santoso,,budi@example.com\n"
+            ."12345,Orang Asing,alien,alien@example.com\n";
+
+        $this->post('/api/students/import', [
+            'file' => \Illuminate\Http\UploadedFile::fake()->createWithContent('peminjam.csv', $csv),
+        ], ['Accept' => 'application/json'])->assertOk()
+            ->assertJsonPath('imported', 1)
+            ->assertJsonPath('errors.0', 'Baris 3: Jenis peminjam "alien" tidak dikenal (pilihan: Mahasiswa, Tendik, Dosen, Umum).');
+
+        $this->assertDatabaseMissing('students', ['student_id' => '12345']);
+    }
+
+    public function test_spreadsheet_lama_tanpa_kolom_jenis_tetap_diimpor(): void
+    {
+        Sanctum::actingAs($this->staff());
+
+        // Spreadsheet lama hanya punya empat kolom awal.
+        $csv = "NIM/NIP,Nama,Email,No. Telepon\n"
+            ."2211082001,Budi Santoso,budi@example.com,0812\n";
+
+        $this->post('/api/students/import', [
+            'file' => \Illuminate\Http\UploadedFile::fake()->createWithContent('lama.csv', $csv),
+        ], ['Accept' => 'application/json'])->assertOk()
+            ->assertJsonPath('imported', 1);
+
+        $this->assertDatabaseHas('students', [
+            'student_id' => '2211082001',
+            'type' => 'mahasiswa',
+        ]);
+    }
+
     public function test_peminjam_hanya_dapat_mengelola_data_mahasiswa_dengan_role_petugas(): void
     {
         Sanctum::actingAs($this->staff('borrower'));
@@ -337,14 +560,20 @@ class StudentTest extends TestCase
         $response = $this->getJson('/api/students/import/template');
 
         $response->assertOk()
-            ->assertHeader('Content-Disposition', 'attachment; filename="template-impor-mahasiswa.xls"');
+            ->assertHeader('Content-Disposition', 'attachment; filename="template-impor-peminjam.xls"');
 
         $content = $response->getContent();
-        $this->assertStringContainsString('TEMPLATE IMPOR DATA MAHASISWA', $content);
+        $this->assertStringContainsString('TEMPLATE IMPOR DATA PEMINJAM', $content);
         $this->assertStringContainsString('NIM/NIP', $content);
         $this->assertStringContainsString('Nama', $content);
         $this->assertStringContainsString('Email', $content);
         $this->assertStringContainsString('No. Telepon', $content);
+        // Kolom pendukung pegawai: jenis peminjam & jabatan/unit kerja.
+        $this->assertStringContainsString('Jenis', $content);
+        $this->assertStringContainsString('Jabatan / Unit Kerja', $content);
+        foreach (['Mahasiswa', 'Tendik', 'Dosen', 'Umum'] as $label) {
+            $this->assertStringContainsString($label, $content);
+        }
 
         // Template tidak memuat data contoh.
         $this->assertStringNotContainsString('Budi', $content);

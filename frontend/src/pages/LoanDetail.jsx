@@ -3,6 +3,7 @@ import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import api from '../api/axios'
 import CameraCapture, { dataURLtoFile } from '../components/CameraCapture'
+import { borrowerTypeBadgeClass, borrowerTypeLabel, identityLabel } from '../utils/borrowerTypes'
 import {
   ArrowLeft,
   Undo2,
@@ -224,6 +225,12 @@ function LoanDetail() {
                 <p className="font-medium text-slate-900">{loan.borrower_name}</p>
               </div>
               <div>
+                <p className="text-sm text-slate-500">Jenis Peminjam</p>
+                <span className={`mt-0.5 inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${borrowerTypeBadgeClass(loan.borrower_type)}`}>
+                  {borrowerTypeLabel(loan.borrower_type)}
+                </span>
+              </div>
+              <div>
                 <p className="text-sm text-slate-500">Email</p>
                 <p className="font-medium text-slate-900">{loan.borrower_email}</p>
               </div>
@@ -235,7 +242,7 @@ function LoanDetail() {
               )}
               {loan.borrower_student_id && (
                 <div>
-                  <p className="text-sm text-slate-500">NIM / NIP</p>
+                  <p className="text-sm text-slate-500">{identityLabel(loan.borrower_type)}</p>
                   <p className="font-medium text-slate-900">{loan.borrower_student_id}</p>
                 </div>
               )}

@@ -107,7 +107,7 @@ function ImportStudentsModal({ open, onClose, onImported }) {
       onImported?.(response.data)
     } catch (requestError) {
       const data = requestError.response?.data
-      setError(data?.message || requestError.message || 'Gagal mengimpor data mahasiswa.')
+      setError(data?.message || requestError.message || 'Gagal mengimpor data peminjam.')
       if (data?.errors) setResult({ errors: data.errors })
     } finally {
       setImporting(false)
@@ -137,8 +137,8 @@ function ModalHeader({ handleClose }) {
   return (
     <div className="mb-4 flex items-start justify-between">
       <div>
-        <h2 className="text-lg font-bold text-slate-900">Impor Data Mahasiswa</h2>
-        <p className="mt-1 text-sm text-slate-500">Impor dari file spreadsheet atau CSV Google Sheets yang sudah dipublikasikan.</p>
+        <h2 className="text-lg font-bold text-slate-900">Impor Data Peminjam</h2>
+        <p className="mt-1 text-sm text-slate-500">Impor dari file spreadsheet atau CSV Google Sheets yang sudah dipublikasikan. Bisa berisi mahasiswa, tendik, dosen, dan peminjam umum.</p>
       </div>
       <button type="button" onClick={handleClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600" aria-label="Tutup">
         <X className="h-5 w-5" />
@@ -156,7 +156,9 @@ function TemplateSection() {
           <p className="font-medium text-cyan-900">Belum punya file?</p>
           <p className="mt-0.5 text-cyan-700">
             Unduh template Excel yang sudah berisi judul dan header kolom. Isi data mulai baris ke-4, lalu simpan sebagai CSV
-            atau unggah langsung ke Google Sheets (<em>File → Import</em>) dan unduh kembali sebagai CSV.
+            atau unggah langsung ke Google Sheets (<em>File → Import</em>) dan unduh kembali sebagai CSV. Kolom
+            <strong> Jenis</strong> dan <strong> Jabatan / Unit Kerja</strong> bersifat opsional — kosongkan bila peminjam
+            adalah mahasiswa.
           </p>
           <TemplateButton />
         </div>
@@ -172,7 +174,7 @@ function TemplateButton() {
     setDownloading(true)
     try {
       const response = await api.get('/students/import/template', { responseType: 'blob' })
-      await downloadBlob(response.data, 'template-impor-mahasiswa.xls')
+      await downloadBlob(response.data, 'template-impor-peminjam.xls')
     } catch {
       // Gagal unduh: biarkan pengguna mencoba lagi.
     } finally {
