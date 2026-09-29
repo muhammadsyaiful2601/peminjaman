@@ -62,12 +62,13 @@ export default function BorrowersPage({
 }) {
   // Kelompok yang tampil di halaman ini. Halaman mahasiswa memakai satu jenis
   // terkunci; halaman pegawai memakai tab.
-  const scope = useMemo(() => {
-    if (lockedType) return [lockedType]
-    if (allowedTypes?.length) return allowedTypes
-
-    return [DEFAULT_BORROWER_TYPE]
-  }, [lockedType, allowedTypes])
+  //
+  // Penentuannya lewat string (bukan langsung dari `allowedTypes`) supaya
+  // identitas `scope` stabil walau pemanggil menulis array literal
+  // (`allowedTypes={['tendik','dosen','umum']}` membuat array baru tiap render).
+  // Tanpa ini, efek sinkronisasi ikut berjalan ulang setiap render.
+  const scopeKey = lockedType || (allowedTypes?.length ? allowedTypes.join(',') : DEFAULT_BORROWER_TYPE)
+  const scope = useMemo(() => scopeKey.split(','), [scopeKey])
 
   const isLocked = Boolean(lockedType)
   // Hanya kelompok inilah yang punya spreadsheet, jadi hanya itu yang ikut
@@ -104,6 +105,9 @@ export default function BorrowersPage({
   const searchRef = useRef('')
   const pageRef = useRef(1)
   const typeRef = useRef(isLocked ? lockedType : '')
+  // Lingkup halaman (kelompok yang ditangani) disimpan di ref supaya
+  // `fetchStudents` tetap stabil namun selalu membaca nilai terbaru.
+  const scopeRef = useRef(scope)
   // Efek perpindahan halaman melewati run pertama (pemuatan awal sudah
   // ditangani efek lain), lalu setiap perpindahan halaman berikutnya tetap
   // mengambil data.
@@ -116,6 +120,7 @@ export default function BorrowersPage({
   useEffect(() => { searchRef.current = search }, [search])
   useEffect(() => { pageRef.current = page }, [page])
   useEffect(() => { typeRef.current = typeFilter }, [typeFilter])
+  useEffect(() => { scopeRef.current = scope }, [scope])
   useEffect(() => { modalOpenRef.current = showImportModal }, [showImportModal])
 
   const fetchStudents = useCallback(async (searchValue, silent = false, pageValue = null) => {
@@ -123,21 +128,27 @@ export default function BorrowersPage({
     // Halaman tujuan: argumen eksplisit (dipakai saat reset ke halaman 1),
     // selain itu mengikuti halaman yang sedang aktif.
     const currentPage = Number(pageValue) > 0 ? Number(pageValue) : pageRef.current
-    // Tab jenis yang sedang aktif; `typeRef` disimpan agar fungsi ini tetap
-    // stabil (useCallback dengan []) namun membaca nilai terbaru.
-    const type = typeRef.current.trim()
+    // Jenis yang diminta: tab yang aktif, atau SELURUH kelompok halaman ini
+    // saat tab "Semua" dipilih. Wajib dikirim walau hanya satu jenis supaya
+    // halaman yang jenisnya terkunci tidak pernah mengambil jenis lain.
+    const typeValue = typeRef.current
+    const requestedTypes = typeValue ? [typeValue] : scopeRef.current
 
     if (!silent) setLoading(true)
 
     try {
-      const params = { page: currentPage, per_page: PER_PAGE }
+      const params = { page: currentPage, per_page: PER_PAGE, type: requestedTypes.join(',') }
       if (term) params.search = term
-      if (type) params.type = type
       const response = await api.get('/students', { params })
       setStudents(response.data.data || [])
       setLastPage(response.data.meta?.last_page || 1)
       setTotal(response.data.meta?.total || 0)
-      setCounts(response.data.meta?.by_type || { all: 0 })
+      setCounts({
+        ...(response.data.meta?.by_type || {}),
+        // Angka tab "Semua" hanya menjumlahkan kelompok halaman ini, bukan
+        // seluruh peminjam di database.
+        scope: response.data.meta?.scope_total ?? 0,
+      })
     } catch (requestError) {
       setError(requestError.response?.data?.message || 'Gagal memuat data peminjam.')
     } finally {
@@ -557,7 +568,9 @@ export default function BorrowersPage({
         <div className="mb-4 flex flex-wrap gap-2">
           {tabs.map((tab) => {
             const active = typeFilter === tab.value
-            const count = counts[tab.value] ?? 0
+            // Tab "" (Semua) memakai jumlah kelompok halaman ini saja, tab
+            // jenis tertentu memakai jumlah jenis tersebut.
+            const count = tab.value === '' ? (counts.scope ?? 0) : (counts[tab.value] ?? 0)
 
             return (
               <button

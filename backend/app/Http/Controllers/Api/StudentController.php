@@ -17,13 +17,25 @@ class StudentController extends Controller
     {
         $validated = $request->validate([
             'search' => ['nullable', 'string', 'max:100'],
-            'type' => ['nullable', Rule::in(BorrowerType::ALL)],
+            'type' => ['nullable', 'string', 'max:100'],
             'page' => ['nullable', 'integer', 'min:1'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:1000'],
         ]);
 
         $search = trim((string) ($validated['search'] ?? ''));
-        $type = $validated['type'] ?? null;
+
+        // `type` boleh berisi beberapa jenis dipisah koma (mis.
+        // "tendik,dosen,umum"). Dipakai halaman Data Tendik/Dosen yang tab
+        // "Semua"-nya hanya boleh memuat kelompok halaman itu, bukan seluruh
+        // peminjam — tanpa ini data mahasiswa ikut tampil di halaman tersebut.
+        $types = $this->parseTypes($validated['type'] ?? null);
+
+        if ($types === null) {
+            return response()->json([
+                'message' => 'Jenis peminjam tidak dikenal. Pilihan: '.implode(', ', BorrowerType::ALL).'.',
+                'errors' => ['type' => ['Jenis peminjam tidak dikenal.']],
+            ], 422);
+        }
 
         $query = Student::query()
             ->when($search !== '', function ($query) use ($search) {
@@ -34,7 +46,7 @@ class StudentController extends Controller
                         ->orWhere('position', 'like', "%{$search}%");
                 });
             })
-            ->when($type !== null, fn ($query) => $query->where('type', $type))
+            ->when($types !== [], fn ($query) => $query->whereIn('type', $types))
             ->orderBy('name');
 
         // Jumlah per jenis untuk badge pada tab filter. Sengaja dihitung
@@ -58,9 +70,18 @@ class StudentController extends Controller
             $byType[$option] = (int) ($counts[$option] ?? 0);
         }
 
+        // Jumlah untuk kelompok yang sedang ditampilkan halaman ini. Dipakai
+        // badge tab "Semua" pada halaman Data Tendik/Dosen agar angkanya tidak
+        // menghitung kelompok di luar halaman tersebut.
+        $scopeTotal = $types === []
+            ? $byType['all']
+            : array_sum(array_intersect_key($byType, array_flip($types)));
+
+        $metaType = $types === [] ? null : implode(',', $types);
+
         // Tanpa `per_page` seluruh data dikembalikan. Pemanggil lama (mis.
         // form peminjaman yang butuh semua peminjam dalam satu daftar)
-        // tetap bekerja apa adanya; halaman tabel Data Peminjam mengirim
+        // tetap bekerja apa adanya; halaman tabel peminjam mengirim
         // `per_page` sehingga tabel cukup 10 baris per halaman.
         if (! array_key_exists('per_page', $validated) || $validated['per_page'] === null) {
             $students = $query->get();
@@ -70,8 +91,9 @@ class StudentController extends Controller
                 'meta' => [
                     'total' => $students->count(),
                     'search' => $search,
-                    'type' => $type,
+                    'type' => $metaType,
                     'by_type' => $byType,
+                    'scope_total' => $scopeTotal,
                 ],
             ]);
         }
@@ -88,13 +110,52 @@ class StudentController extends Controller
             'meta' => [
                 'total' => $paginator->total(),
                 'search' => $search,
-                'type' => $type,
+                'type' => $metaType,
                 'by_type' => $byType,
+                'scope_total' => $scopeTotal,
                 'current_page' => $paginator->currentPage(),
                 'last_page' => $paginator->lastPage(),
                 'per_page' => $paginator->perPage(),
             ],
         ]);
+    }
+
+    /**
+     * Baca parameter `type` yang boleh berisi satu atau beberapa jenis
+     * dipisah koma.
+     *
+     * @return array<int, string>|null  Daftar jenis yang sah, array kosong bila
+     *                                  parameter tidak dikirim (berarti semua
+     *                                  jenis), atau null bila ada jenis yang
+     *                                  tidak dikenal.
+     */
+    private function parseTypes(?string $raw): ?array
+    {
+        $value = trim((string) $raw);
+
+        if ($value === '') {
+            return [];
+        }
+
+        $types = [];
+
+        foreach (explode(',', $value) as $part) {
+            $type = BorrowerType::fromText($part);
+
+            // Jenis tak dikenal ditolak eksplisit: lebih baik gagal jelas
+            // daripada menampilkan daftar yang tidak diminta.
+            if ($type === null) {
+                return null;
+            }
+
+            $types[$type] = true;
+        }
+
+        // Urutkan mengikuti urutan resmi supaya query selalu sama.
+        return array_values(array_filter(
+            BorrowerType::ALL,
+            fn (string $type) => isset($types[$type]),
+        ));
     }
 
     public function store(Request $request)
@@ -525,21 +586,50 @@ class StudentController extends Controller
         // Petunjuk per kelompok: yang relevan saja yang ditampilkan.
         $notes = match ($type) {
             BorrowerType::TENDIK => [
-                'Isi <b>NIP</b> pegawai, bukan NIM mahasiswa.',
-                'Kolom <b>Jabatan / Unit Kerja</b> diisi jabatan resmi, mis. &quot;Staf Bagian Keuangan&quot; atau &quot;Asisten Lab Laboratorium Komputer&quot;.',
+                'Isi '.$this->strong('NIP').' pegawai, bukan NIM mahasiswa.',
+                'Kolom '.$this->strong('Jabatan / Unit Kerja').' diisi jabatan resmi, mis. '
+                    .$this->quote('Staf Bagian Keuangan').' atau '.$this->quote('Asisten Lab Komputer').'.',
             ],
             BorrowerType::DOSEN => [
-                'Isi <b>NIP</b> dosen, bukan NIM mahasiswa.',
-                'Kolom <b>Jabatan / Unit Kerja</b> diisi jabatan/prodi, mis. &quot;Dosen Teknik Informatika&quot;.',
+                'Isi '.$this->strong('NIP').' dosen, bukan NIM mahasiswa.',
+                'Kolom '.$this->strong('Jabatan / Unit Kerja').' diisi jabatan/program studi, mis. '
+                    .$this->quote('Dosen Teknik Informatika').'.',
             ],
             default => [
-                'Isi <b>NIM</b> mahasiswa. Kolom <b>Jabatan / Unit Kerja</b> boleh diisi nama program studi.',
+                'Isi '.$this->strong('NIM').' mahasiswa.',
+                'Kolom '.$this->strong('Jabatan / Unit Kerja').' boleh diisi nama program studi (opsional).',
             ],
         };
+
+        // Susunan baris file (penting agar nomor baris pada petunjuk tepat):
+        //   1              : judul
+        //   2              : baris kosong pemisah
+        //   3              : "PETUNJUK"
+        //   4 .. 3+N       : N butir petunjuk
+        //   4+N, 5+N       : petunjuk cara mengisi (lanjutan penomoran)
+        //   6+N            : baris kosong pemisah
+        //   7+N            : HEADER kolom
+        //   8+N            : baris kosong pemisah
+        //   9+N dan setelahnya : area data (kosong, siap diisi)
+        $noteCount = count($notes);
+        $headerRow = 7 + $noteCount;
+        $firstDataRow = $headerRow + 2;
+
         $noteRows = '';
-        foreach ($notes as $note) {
-            $noteRows .= '<tr><td colspan="5" style="font-size:10pt; color:#555555;">'.$note.'</td></tr>';
+        foreach ($notes as $index => $note) {
+            $noteRows .= '<tr>'
+                .'<td colspan="5" style="font-size:10pt; color:#475569; padding:1px 4px;">'
+                .($index + 1).'. '.$note
+                .'</td></tr>';
         }
+
+        $fillNote = $noteCount + 1;
+        $typeNote = $noteCount + 2;
+
+        $headerCell = 'background-color:#0e7490; color:#ffffff; font-weight:bold; '
+            .'border:1px solid #155e75; padding:8px 10px; white-space:nowrap;';
+
+        $spacer = '<tr><td colspan="5" style="font-size:1pt; line-height:1pt;">&nbsp;</td></tr>';
 
         $html = <<<HTML
             <html xmlns:x="urn:schemas-microsoft-com:office:excel">
@@ -553,18 +643,29 @@ class StudentController extends Controller
                 </xml><![endif]-->
             </head>
             <body>
-                <table border="0">
-                    <tr><td colspan="5" style="font-size:14pt; font-weight:bold;">TEMPLATE IMPOR DATA {$heading}</td></tr>
-                    <tr><td colspan="5" style="font-size:10pt; color:#555555;">Isi data mulai baris 4 ke bawah. Baris judul, petunjuk, dan header tidak perlu diubah.</td></tr>
-                    <tr>
-                        <td style="background-color:#0e7490; color:#ffffff; font-weight:bold; border:1px solid #155e75; padding:6px 10px;">{$identity}</td>
-                        <td style="background-color:#0e7490; color:#ffffff; font-weight:bold; border:1px solid #155e75; padding:6px 10px;">Nama</td>
-                        <td style="background-color:#4a5568; color:#ffffff; font-weight:bold; border:1px solid #2d3748; padding:6px 10px;">Jabatan / Unit Kerja</td>
-                        <td style="background-color:#0e7490; color:#ffffff; font-weight:bold; border:1px solid #155e75; padding:6px 10px;">Email</td>
-                        <td style="background-color:#0e7490; color:#ffffff; font-weight:bold; border:1px solid #155e75; padding:6px 10px;">No. Telepon</td>
-                    </tr>
+                <table border="0" cellspacing="0" cellpadding="0">
+                    <colgroup>
+                        <col style="width:150px;">
+                        <col style="width:220px;">
+                        <col style="width:240px;">
+                        <col style="width:240px;">
+                        <col style="width:130px;">
+                    </colgroup>
+                    <tr><td colspan="5" style="font-size:14pt; font-weight:bold; color:#0e7490; padding:0 4px 2px;">TEMPLATE IMPOR DATA {$heading}</td></tr>
+                    {$spacer}
+                    <tr><td colspan="5" style="font-size:11pt; font-weight:bold; color:#0f172a; padding:0 4px 2px;">PETUNJUK</td></tr>
                     {$noteRows}
-                    <tr><td colspan="5" style="font-size:10pt; color:#555555;">Kolom <b>Jenis</b> tidak ada pada template ini: seluruh baris otomatis disimpan sebagai <b>{$label}</b>.</td></tr>
+                    <tr><td colspan="5" style="font-size:10pt; color:#475569; padding:1px 4px;">{$fillNote}. Mulai mengisi data pada baris {$firstDataRow} ke bawah. Baris judul, petunjuk, dan header jangan diubah atau dihapus.</td></tr>
+                    <tr><td colspan="5" style="font-size:10pt; color:#475569; padding:1px 4px;">{$typeNote}. Seluruh baris otomatis tersimpan sebagai {$this->strong($label)}, jadi kolom {$this->strong('Jenis')} tidak perlu ditambahkan.</td></tr>
+                    {$spacer}
+                    <tr>
+                        <td style="{$headerCell}">{$identity}</td>
+                        <td style="{$headerCell}">Nama</td>
+                        <td style="{$headerCell}">Jabatan / Unit Kerja</td>
+                        <td style="{$headerCell}">Email</td>
+                        <td style="{$headerCell}">No. Telepon</td>
+                    </tr>
+                    {$spacer}
                 </table>
             </body>
             </html>
@@ -573,6 +674,18 @@ class StudentController extends Controller
         return response($html)
             ->header('Content-Type', 'application/vnd.ms-excel; charset=UTF-8')
             ->header('Content-Disposition', 'attachment; filename="template-impor-'.$type.'.xls"');
+    }
+
+    /** Tebalkan teks pada template HTML (dipakai berulang agar rapi). */
+    private function strong(string $text): string
+    {
+        return '<b style="color:#0f172a;">'.$text.'</b>';
+    }
+
+    /** Tampilkan contoh nilai sebagai kutipan pada petunjuk template. */
+    private function quote(string $text): string
+    {
+        return '&ldquo;'.$text.'&rdquo;';
     }
 
     /**

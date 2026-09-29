@@ -414,6 +414,36 @@ class StudentTest extends TestCase
         }
     }
 
+    public function test_template_impor_tersusun_rapi_dan_menunjuk_baris_data_yang_benar(): void
+    {
+        Sanctum::actingAs($this->staff());
+
+        foreach (['mahasiswa', 'tendik', 'dosen'] as $type) {
+            $content = $this->getJson('/api/students/import/template?type=' . $type)->assertOk()->getContent();
+
+            // Petunjuk berada SEBELUM header, bukan sebagai baris data di
+            // bawahnya. Tanpa ini petunjuk tampak seperti data yang harus diisi.
+            $instructionPos = strpos($content, 'PETUNJUK');
+            $headerPos = strpos($content, '>Nama<');
+            $this->assertNotFalse($instructionPos, "blok PETUNJUK ada di template {$type}");
+            $this->assertNotFalse($headerPos, "header kolom ada di template {$type}");
+            $this->assertLessThan($headerPos, $instructionPos, "PETUNJUK mendahului header pada {$type}");
+
+            // Baris data yang disebut pada petunjuk harus benar-benar berada
+            // tepat di bawah baris header. Hitung baris dari urutan <tr>.
+            preg_match('/Mulai mengisi data pada baris (\d+)/', $content, $matches);
+            $this->assertNotEmpty($matches, "petunjuk menyebut nomor baris pada {$type}");
+            $expectedFirstDataRow = (int) $matches[1];
+
+            $rowsBeforeHeader = substr_count(substr($content, 0, $headerPos), '<tr');
+            $this->assertSame(
+                $rowsBeforeHeader + 2,
+                $expectedFirstDataRow,
+                "nomor baris data pada petunjuk {$type} cocok dengan posisi header",
+            );
+        }
+    }
+
     public function test_setiap_jenis_punya_url_spreadsheet_terpisah(): void
     {
         Sanctum::actingAs($this->staff());
@@ -487,6 +517,62 @@ class StudentTest extends TestCase
             ->assertJsonPath('imported', 1);
 
         $this->assertDatabaseHas('students', ['student_id' => '197505052000031002', 'type' => 'dosen']);
+    }
+
+    public function test_daftar_peminjam_dapat_difilter_beberapa_jenis_sekaligus(): void
+    {
+        Sanctum::actingAs($this->staff());
+
+        $seed = [
+            ['mahasiswa', '2211082001', 'Mhs Satu'],
+            ['mahasiswa', '2211082002', 'Mhs Dua'],
+            ['tendik', '198001012005011001', 'Tendik Satu'],
+            ['dosen', '197505052000031002', 'Dosen Satu'],
+            ['umum', '081234567890', 'Umum Satu'],
+        ];
+        foreach ($seed as [$type, $id, $name]) {
+            Student::create([
+                'student_id' => $id,
+                'name' => $name,
+                'type' => $type,
+                'email' => strtolower(str_replace(' ', '', $name)) . '@pnp.ac.id',
+            ]);
+        }
+
+        // Halaman Data Tendik/Dosen memakai "Semua" = tendik,dosen,umum.
+        // Data mahasiswa TIDAK boleh ikut terbawa.
+        $response = $this->getJson('/api/students?type=tendik,dosen,umum&per_page=10')->assertOk();
+
+        $response->assertJsonCount(3, 'data')
+            ->assertJsonPath('meta.total', 3)
+            ->assertJsonPath('meta.type', 'tendik,dosen,umum')
+            ->assertJsonPath('meta.scope_total', 3);
+
+        $this->assertSame(
+            ['Dosen Satu', 'Tendik Satu', 'Umum Satu'],
+            array_column($response->json('data'), 'name'),
+        );
+
+        // Angka per jenis tetap dihitung seluruhnya (untuk badge tab lain),
+        // sedangkan `scope_total` hanya kelompok yang diminta.
+        $response->assertJsonPath('meta.by_type.mahasiswa', 2)
+            ->assertJsonPath('meta.by_type.all', 5);
+
+        // Halaman Data Mahasiswa memakai "Semua" = mahasiswa saja.
+        $this->getJson('/api/students?type=mahasiswa&per_page=10')
+            ->assertOk()
+            ->assertJsonCount(2, 'data')
+            ->assertJsonPath('meta.scope_total', 2)
+            ->assertJsonPath('meta.type', 'mahasiswa');
+    }
+
+    public function test_jenis_pada_filter_gabungan_tetap_divalidasi(): void
+    {
+        Sanctum::actingAs($this->staff());
+
+        $this->getJson('/api/students?type=tendik,alien&per_page=10')
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('type');
     }
 
     public function test_sinkronisasi_spreadsheet_per_jenis_tidak_saling_menimpa(): void
