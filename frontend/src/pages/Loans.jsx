@@ -2,7 +2,11 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import api from '../api/axios'
+import TablePagination from '../components/TablePagination'
 import { Plus, Eye, Pencil, PackageX, Search } from 'lucide-react'
+
+// Jumlah baris per halaman pada tabel Peminjaman.
+const PER_PAGE = 10
 
 function Loans() {
   const { user } = useAuth()
@@ -20,7 +24,7 @@ function Loans() {
   const fetchLoans = async () => {
     setLoading(true)
     try {
-      const params = { page, per_page: 10 }
+      const params = { page, per_page: PER_PAGE }
       if (status) params.status = status
       if (search) params.search = search
       const response = await api.get('/loans', { params })
@@ -123,6 +127,7 @@ function Loans() {
               <table className="w-full text-sm">
                 <thead className="bg-slate-50">
                   <tr>
+                    <th className="w-14 px-6 py-3 text-center font-medium text-slate-500">No.</th>
                     <th className="px-6 py-3 text-left font-medium text-slate-500">Kode Transaksi</th>
                     <th className="px-6 py-3 text-left font-medium text-slate-500">Peminjam</th>
                     <th className="px-6 py-3 text-left font-medium text-slate-500">Barang</th>
@@ -133,13 +138,14 @@ function Loans() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
-                  {loans.map((loan) => {
+                  {loans.map((loan, index) => {
                     const status = statusLabels[loan.status] || {
                       text: loan.status,
                       className: 'bg-gray-100 text-gray-700',
                     }
                     return (
                       <tr key={loan.id} className="hover:bg-slate-50">
+                        <td className="px-6 py-3 text-center text-slate-400">{(page - 1) * PER_PAGE + index + 1}</td>
                         <td className="px-6 py-3 font-mono text-xs text-slate-500">
                           {loan.uuid.slice(0, 8)}...
                         </td>
@@ -202,25 +208,14 @@ function Loans() {
           </div>
 
           {lastPage > 1 && (
-            <div className="mt-6 flex items-center justify-center gap-2">
-              <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="px-4 py-2 rounded-lg border border-slate-300 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50"
-              >
-                Sebelumnya
-              </button>
-              <span className="text-sm text-slate-500">
-                Halaman {page} dari {lastPage}
-              </span>
-              <button
-                onClick={() => setPage((p) => Math.min(lastPage, p + 1))}
-                disabled={page === lastPage}
-                className="px-4 py-2 rounded-lg border border-slate-300 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50"
-              >
-                Berikutnya
-              </button>
-            </div>
+            <TablePagination
+              page={page}
+              lastPage={lastPage}
+              onPageChange={setPage}
+              total={total}
+              perPage={PER_PAGE}
+              className="mt-6"
+            />
           )}
         </>
       )}

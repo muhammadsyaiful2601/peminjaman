@@ -72,7 +72,10 @@ const PREFERRED_PORT = 8642;
 //  dirapikan, jumlah foto yang hilang dilaporkan, salinan pengaman dibuat
 //  sebelum database ditimpa, dan setelah pemulihan otomatis migrate + restart
 //  backend (perbaikan "foto tak terbaca" & "halaman macet sampai restart").
-const TEMPLATE_VERSION = '1.4.5';
+//  1.4.6: semua tabel diberi kolom nomor (No.) dan paginasi 10 data per halaman
+//  dengan tombol Sebelumnya/Berikutnya. Endpoint /api/students kini menerima
+//  page & per_page (opsional — tanpa per_page tetap mengembalikan semua data).
+const TEMPLATE_VERSION = '1.4.6';
 const isDev = !app.isPackaged;
 
 /* ------------------------------------------------------------------ paths */

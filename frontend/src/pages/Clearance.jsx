@@ -3,6 +3,8 @@ import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import api from '../api/axios'
 import { downloadBlob } from '../utils/downloadBlob'
 import { ClearanceLetterModal } from '../components/ClearanceLetterModal'
+import TablePagination from '../components/TablePagination'
+import useTablePagination, { ROWS_PER_PAGE } from '../hooks/useTablePagination'
 import {
   AlertTriangle,
   ArrowLeft,
@@ -28,6 +30,10 @@ const purposeOptions = [
   'Persyaratan pindah / cuti studi',
   'Persyaratan Kerja Praktik / magang',
 ]
+
+// Jumlah baris per halaman pada dua tabel di halaman detail peminjam
+// (barang belum dikembalikan & barang yang sudah dikembalikan).
+const PER_PAGE = ROWS_PER_PAGE
 
 const emptyLetter = () => ({
   purpose: '',
@@ -430,6 +436,10 @@ function Clearance() {
   const outstanding = detail?.outstanding || []
   const history = detail?.history || []
   const hasLoans = detail?.has_loans ?? false
+  // Masing-masing tabel detail dipaginasi 10 baris per halaman dengan nomor
+  // urut yang berlanjut antar halaman.
+  const outstandingTable = useTablePagination(outstanding, { perPage: PER_PAGE, resetKey: detail })
+  const historyTable = useTablePagination(history, { perPage: PER_PAGE, resetKey: detail })
   // Peminjam tanpa tanggungan — termasuk mahasiswa yang belum pernah meminjam —
   // tetap berstatus bebas labor dan suratnya dapat diterbitkan.
   const eligible = detail?.eligible ?? false
@@ -709,6 +719,7 @@ function Clearance() {
                 <table className="w-full text-left text-sm">
                   <thead className="bg-red-50 text-red-900">
                     <tr>
+                      <th className="w-14 px-4 py-3 text-center font-medium">No.</th>
                       <th className="px-4 py-3 font-medium">Kode transaksi</th>
                       <th className="px-4 py-3 font-medium">Barang</th>
                       <th className="px-4 py-3 font-medium">Jumlah</th>
@@ -717,8 +728,9 @@ function Clearance() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-red-100">
-                    {outstanding.map((loan) => (
+                    {outstandingTable.pageItems.map((loan, index) => (
                       <tr key={loan.id}>
+                        <td className="px-4 py-3 text-center text-slate-400">{outstandingTable.rowOffset + index + 1}</td>
                         <td className="px-4 py-3 font-mono text-xs">{loan.loan_code}</td>
                         <td className="px-4 py-3">{loan.item_summary}</td>
                         <td className="px-4 py-3">{loan.qty} unit</td>
@@ -732,6 +744,15 @@ function Clearance() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+              <div className="mt-3">
+                <TablePagination
+                  page={outstandingTable.page}
+                  lastPage={outstandingTable.lastPage}
+                  onPageChange={outstandingTable.goToPage}
+                  total={outstandingTable.total}
+                  perPage={PER_PAGE}
+                />
               </div>
             </section>
           )}
@@ -862,6 +883,7 @@ function Clearance() {
                 <table className="w-full text-left text-sm">
                   <thead className="bg-slate-50">
                     <tr>
+                      <th className="w-14 px-5 py-3 text-center font-medium text-slate-500">No.</th>
                       <th className="px-5 py-3 font-medium text-slate-500">Kode transaksi</th>
                       <th className="px-5 py-3 font-medium text-slate-500">Barang</th>
                       <th className="px-5 py-3 font-medium text-slate-500">Jumlah</th>
@@ -870,8 +892,9 @@ function Clearance() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {history.map((loan) => (
+                    {historyTable.pageItems.map((loan, index) => (
                       <tr key={loan.id}>
+                        <td className="px-5 py-3 text-center text-slate-400">{historyTable.rowOffset + index + 1}</td>
                         <td className="px-5 py-3 font-mono text-xs text-slate-600">{loan.loan_code}</td>
                         <td className="px-5 py-3 text-slate-700">{loan.item_summary}</td>
                         <td className="px-5 py-3 text-slate-700">{loan.qty} unit</td>
@@ -881,6 +904,15 @@ function Clearance() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+              <div className="border-t border-slate-100 px-5 py-3">
+                <TablePagination
+                  page={historyTable.page}
+                  lastPage={historyTable.lastPage}
+                  onPageChange={historyTable.goToPage}
+                  total={historyTable.total}
+                  perPage={PER_PAGE}
+                />
               </div>
             </section>
           )}

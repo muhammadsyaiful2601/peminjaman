@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import api from '../api/axios'
+import TablePagination from '../components/TablePagination'
+import useTablePagination, { ROWS_PER_PAGE } from '../hooks/useTablePagination'
 import {
   Package,
   ArrowLeftRight,
@@ -11,6 +13,12 @@ import {
   ScanLine,
   ChevronRight,
 } from 'lucide-react'
+
+// Jumlah baris per halaman pada tabel Transaksi terbaru. Setelah 10 data
+// tombol "Berikutnya" muncul supaya petugas bisa membuka halaman berikutnya.
+const PER_PAGE = ROWS_PER_PAGE
+// Berapa transaksi terakhir yang diambil sekaligus, lalu dipaginasi 10 per halaman.
+const RECENT_LIMIT = 100
 
 function Dashboard() {
   const { user } = useAuth()
@@ -23,21 +31,35 @@ function Dashboard() {
   const [recentLoans, setRecentLoans] = useState([])
   const [loading, setLoading] = useState(true)
 
+  // Tabel 10 baris per halaman beserta nomor urut yang berlanjut antar halaman.
+  const {
+    pageItems: recentLoansPage,
+    rowOffset: recentLoansOffset,
+    page: recentLoansPageNumber,
+    lastPage: recentLoansLastPage,
+    total: recentLoansTotal,
+    goToPage: goToRecentLoansPage,
+  } = useTablePagination(recentLoans, { perPage: PER_PAGE })
+
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [itemsRes, loansRes] = await Promise.all([
+        // `per_page=1` dipakai hanya untuk mengambil nilai `total` pada kartu
+        // statistik, sehingga angka "Dipinjam"/"Dikembalikan" benar-benar
+        // seluruh transaksi — bukan hanya 100 transaksi terbaru.
+        const [itemsRes, loansRes, borrowedRes, returnedRes] = await Promise.all([
           api.get('/items?per_page=1'),
-          api.get('/loans?per_page=5'),
+          api.get(`/loans?per_page=${RECENT_LIMIT}`),
+          api.get('/loans?status=borrowed&per_page=1'),
+          api.get('/loans?status=returned&per_page=1'),
         ])
-        const loans = loansRes.data.data || []
         setStats({
           totalItems: itemsRes.data.total || 0,
           totalLoans: loansRes.data.total || 0,
-          borrowedLoans: loans.filter((l) => l.status === 'borrowed').length,
-          returnedLoans: loans.filter((l) => l.status === 'returned').length,
+          borrowedLoans: borrowedRes.data.total || 0,
+          returnedLoans: returnedRes.data.total || 0,
         })
-        setRecentLoans(loans)
+        setRecentLoans(loansRes.data.data || [])
       } catch (error) {
         // ignore
       } finally {
@@ -66,7 +88,6 @@ function Dashboard() {
     actions.push({
       to: '/loans/new',
       label: 'Buat Peminjaman',
-      desc: 'Barang Langsung Diserahkan Ke Peminjam',
       icon: PlusCircle,
       card: 'bg-cyan-600 hover:bg-cyan-700 text-white shadow-sm hover:shadow-md',
       iconBg: 'bg-white/20 text-white',
@@ -159,44 +180,58 @@ function Dashboard() {
         ) : recentLoans.length === 0 ? (
           <div className="p-6 text-center text-slate-500">Belum Ada Transaksi Peminjaman.</div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-slate-50 text-left">
-                  <th className="px-6 py-3 font-medium text-slate-500">Peminjam</th>
-                  <th className="px-6 py-3 font-medium text-slate-500">Barang</th>
-                  <th className="px-6 py-3 font-medium text-slate-500">Jumlah</th>
-                  <th className="px-6 py-3 font-medium text-slate-500">Status</th>
-                  <th className="px-6 py-3 font-medium text-slate-500">Tanggal</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {recentLoans.map((loan) => {
-                  const status = statusLabels[loan.status] || { text: loan.status, className: 'bg-gray-100 text-gray-700 ring-gray-200' }
-                  return (
-                    <tr key={loan.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-6 py-3 font-medium text-slate-900">{loan.borrower_name}</td>
-                      <td className="px-6 py-3 text-slate-600">{loan.item?.name}</td>
-                      <td className="px-6 py-3 text-slate-600">{loan.qty}</td>
-                      <td className="px-6 py-3">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ring-1 ring-inset ${status.className}`}>
-                          {status.text}
-                        </span>
-                      </td>
-                      <td className="px-6 py-3 text-slate-500">
-                        {new Date(loan.created_at).toLocaleDateString('id-ID', {
-                          timeZone: 'Asia/Jakarta',
-                          day: 'numeric',
-                          month: 'short',
-                          year: 'numeric',
-                        })}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-slate-50 text-left">
+                    <th className="w-14 px-6 py-3 text-center font-medium text-slate-500">No.</th>
+                    <th className="px-6 py-3 font-medium text-slate-500">Peminjam</th>
+                    <th className="px-6 py-3 font-medium text-slate-500">Barang</th>
+                    <th className="px-6 py-3 font-medium text-slate-500">Jumlah</th>
+                    <th className="px-6 py-3 font-medium text-slate-500">Status</th>
+                    <th className="px-6 py-3 font-medium text-slate-500">Tanggal</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {recentLoansPage.map((loan, index) => {
+                    const status = statusLabels[loan.status] || { text: loan.status, className: 'bg-gray-100 text-gray-700 ring-gray-200' }
+                    return (
+                      <tr key={loan.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-6 py-3 text-center text-slate-400">{recentLoansOffset + index + 1}</td>
+                        <td className="px-6 py-3 font-medium text-slate-900">{loan.borrower_name}</td>
+                        <td className="px-6 py-3 text-slate-600">{loan.item?.name}</td>
+                        <td className="px-6 py-3 text-slate-600">{loan.qty}</td>
+                        <td className="px-6 py-3">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ring-1 ring-inset ${status.className}`}>
+                            {status.text}
+                          </span>
+                        </td>
+                        <td className="px-6 py-3 text-slate-500">
+                          {new Date(loan.created_at).toLocaleDateString('id-ID', {
+                            timeZone: 'Asia/Jakarta',
+                            day: 'numeric',
+                            month: 'short',
+                            year: 'numeric',
+                          })}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="border-t border-slate-100 px-6 py-3">
+              <TablePagination
+                page={recentLoansPageNumber}
+                lastPage={recentLoansLastPage}
+                onPageChange={goToRecentLoansPage}
+                total={recentLoansTotal}
+                perPage={PER_PAGE}
+              />
+            </div>
+          </>
         )}
       </div>
     </div>

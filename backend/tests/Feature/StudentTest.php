@@ -60,6 +60,107 @@ class StudentTest extends TestCase
         $this->getJson('/api/students')->assertUnauthorized();
     }
 
+    public function test_daftar_mahasiswa_dapat_dipaginasi_sepuluh_data_per_halaman(): void
+    {
+        Sanctum::actingAs($this->staff());
+
+        // 25 mahasiswa; endpoint mengurutkan berdasarkan nama.
+        foreach (range(1, 25) as $index) {
+            Student::create([
+                'student_id' => sprintf('22110820%02d', $index),
+                'name' => sprintf('Mahasiswa %02d', $index),
+                'email' => sprintf('mhs%02d@example.com', $index),
+            ]);
+        }
+
+        $firstPage = $this->getJson('/api/students?page=1&per_page=10');
+        $firstPage->assertOk()
+            ->assertJsonCount(10, 'data')
+            ->assertJsonPath('meta.total', 25)
+            ->assertJsonPath('meta.current_page', 1)
+            ->assertJsonPath('meta.last_page', 3)
+            ->assertJsonPath('meta.per_page', 10)
+            // Urutan berdasarkan nama: "Mahasiswa 01" sampai "Mahasiswa 10".
+            ->assertJsonPath('data.0.name', 'Mahasiswa 01')
+            ->assertJsonPath('data.9.name', 'Mahasiswa 10');
+
+        $this->getJson('/api/students?page=2&per_page=10')
+            ->assertOk()
+            ->assertJsonCount(10, 'data')
+            ->assertJsonPath('data.0.name', 'Mahasiswa 11')
+            ->assertJsonPath('data.9.name', 'Mahasiswa 20');
+
+        // Halaman terakhir hanya berisi sisa 5 data.
+        $this->getJson('/api/students?page=3&per_page=10')
+            ->assertOk()
+            ->assertJsonCount(5, 'data')
+            ->assertJsonPath('data.0.name', 'Mahasiswa 21')
+            ->assertJsonPath('data.4.name', 'Mahasiswa 25');
+    }
+
+    public function test_paginasi_mahasiswa_tetap_memperhatikan_pencarian(): void
+    {
+        Sanctum::actingAs($this->staff());
+
+        foreach (range(1, 25) as $index) {
+            Student::create([
+                'student_id' => sprintf('22110820%02d', $index),
+                'name' => sprintf('Mahasiswa %02d', $index),
+                'email' => sprintf('mhs%02d@example.com', $index),
+            ]);
+        }
+
+        // Pencarian pada kolom email tetap ikut dipaginasi: "mhs" cocok dengan
+        // seluruh 25 data sehingga menjadi 3 halaman.
+        $this->getJson('/api/students?search=mhs&page=1&per_page=10')
+            ->assertOk()
+            ->assertJsonCount(10, 'data')
+            ->assertJsonPath('meta.total', 25)
+            ->assertJsonPath('meta.last_page', 3);
+
+        $this->getJson('/api/students?search=mhs&page=2&per_page=10')
+            ->assertOk()
+            ->assertJsonCount(10, 'data')
+            ->assertJsonPath('data.0.name', 'Mahasiswa 11')
+            ->assertJsonPath('data.9.name', 'Mahasiswa 20');
+
+        // Halaman terakhir hanya berisi sisa 5 data, bukan error.
+        $this->getJson('/api/students?search=mhs&page=3&per_page=10')
+            ->assertOk()
+            ->assertJsonCount(5, 'data')
+            ->assertJsonPath('data.4.name', 'Mahasiswa 25');
+    }
+
+    public function test_daftar_mahasiswa_tanpa_per_page_tetap_mengembalikan_seluruh_data(): void
+    {
+        Sanctum::actingAs($this->staff());
+
+        foreach (range(1, 15) as $index) {
+            Student::create([
+                'student_id' => sprintf('22110820%02d', $index),
+                'name' => sprintf('Mahasiswa %02d', $index),
+                'email' => sprintf('mhs%02d@example.com', $index),
+            ]);
+        }
+
+        // Form peminjaman (NewLoan) masih meminta seluruh mahasiswa sekaligus,
+        // jadi pemanggilan tanpa `per_page` tidak boleh ikut terpotong.
+        $this->getJson('/api/students')
+            ->assertOk()
+            ->assertJsonCount(15, 'data')
+            ->assertJsonPath('meta.total', 15)
+            ->assertJsonMissingPath('meta.last_page');
+    }
+
+    public function test_per_page_mahasiswa_ditolak_bila_di_luar_batas(): void
+    {
+        Sanctum::actingAs($this->staff());
+
+        $this->getJson('/api/students?per_page=5000')
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('per_page');
+    }
+
     public function test_peminjam_hanya_dapat_mengelola_data_mahasiswa_dengan_role_petugas(): void
     {
         Sanctum::actingAs($this->staff('borrower'));

@@ -139,7 +139,7 @@ function Login() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="w-full pl-10 pr-10 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none"
-                    placeholder="Masukkan Password Anda"
+                    placeholder="Password"
                     required
                   />
                   <button

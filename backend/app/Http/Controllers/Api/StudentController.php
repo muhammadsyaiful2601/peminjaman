@@ -15,11 +15,13 @@ class StudentController extends Controller
     {
         $validated = $request->validate([
             'search' => ['nullable', 'string', 'max:100'],
+            'page' => ['nullable', 'integer', 'min:1'],
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:1000'],
         ]);
 
         $search = trim((string) ($validated['search'] ?? ''));
 
-        $students = Student::query()
+        $query = Student::query()
             ->when($search !== '', function ($query) use ($search) {
                 $query->where(function ($subQuery) use ($search) {
                     $subQuery->where('student_id', 'like', "%{$search}%")
@@ -27,14 +29,39 @@ class StudentController extends Controller
                         ->orWhere('email', 'like', "%{$search}%");
                 });
             })
-            ->orderBy('name')
-            ->get();
+            ->orderBy('name');
+
+        // Tanpa `per_page` seluruh data dikembalikan. Pemanggil lama (mis.
+        // form peminjaman yang butuh semua mahasiswa dalam satu daftar)
+        // tetap bekerja apa adanya; halaman tabel Data Mahasiswa mengirim
+        // `per_page` sehingga tabel cukup 10 baris per halaman.
+        if (! array_key_exists('per_page', $validated) || $validated['per_page'] === null) {
+            $students = $query->get();
+
+            return response()->json([
+                'data' => $students,
+                'meta' => [
+                    'total' => $students->count(),
+                    'search' => $search,
+                ],
+            ]);
+        }
+
+        $paginator = $query->paginate(
+            (int) $validated['per_page'],
+            ['*'],
+            'page',
+            (int) ($validated['page'] ?? 1),
+        );
 
         return response()->json([
-            'data' => $students,
+            'data' => $paginator->items(),
             'meta' => [
-                'total' => $students->count(),
+                'total' => $paginator->total(),
                 'search' => $search,
+                'current_page' => $paginator->currentPage(),
+                'last_page' => $paginator->lastPage(),
+                'per_page' => $paginator->perPage(),
             ],
         ]);
     }

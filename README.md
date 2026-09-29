@@ -94,6 +94,36 @@ Website dan desktop memakai source frontend, API, migration, seeder, dan aturan 
 
 ## Fitur
 
+### Penomoran & Paginasi Tabel
+
+Seluruh tabel dan daftar data di aplikasi memakai aturan yang sama:
+
+- Kolom pertama tabel adalah **No.** berisi nomor urut yang **berlanjut antar halaman**
+  (halaman 2 mulai dari 11, 12, 13, ...), sehingga petugas bisa merujuk baris
+  tertentu tanpa ambigu.
+- Tabel menampilkan **10 data per halaman**. Begitu data melewati 10 baris, tombol
+  **Berikutnya** (dan **Sebelumnya**) otomatis muncul di bawah tabel, disertai
+  ringkasan "Menampilkan 11 - 20 dari 37 data".
+- Tabel yang hanya berisi satu halaman tidak menampilkan tombol apa pun, agar
+  tampilan tetap ringkas.
+- Mengubah kata kunci pencarian atau filter mengembalikan tampilan ke halaman 1,
+  dan menghapus baris terakhir pada halaman akhir otomatis mundur satu halaman
+  supaya tabel tidak tampil kosong.
+- Tabel **Laporan Peminjaman** tetap dicetak lengkap: paginasi hanya berlaku di
+  layar, hasil cetak (dan PDF) memuat seluruh transaksi hasil filter.
+
+Komponen yang dipakai bersama:
+
+| Berkas | Peran |
+| :--- | :--- |
+| `frontend/src/components/TablePagination.jsx` | Tombol Sebelumnya/Berikutnya + ringkasan data |
+| `frontend/src/hooks/useTablePagination.js` | Paginasi sisi-klien + `rowOffset` untuk kolom No. |
+
+Endpoint yang memakai paginasi server: `/api/loans`, `/api/users`, `/api/items`,
+dan `/api/students`. `GET /api/students` menerima `page` dan `per_page` sebagai
+parameter **opsional** — bila `per_page` tidak dikirim, seluruh data tetap
+dikembalikan agar form peminjaman yang membutuhkan semua mahasiswa tetap bekerja.
+
 ### Inventaris
 
 Petugas dapat melihat daftar barang, mencari berdasarkan nama/kode/kategori, dan melihat stok dengan pagination. Admin dan asisten dapat menambah, mengubah, dan menghapus barang. Setiap barang memiliki kode unik, nama, kategori, stok, dan gambar opsional.
@@ -1001,6 +1031,11 @@ Installer `.exe` dibagikan melalui **GitHub Release** (bukan di-commit ke source
 4. Set `APP_ENV=production` dan `APP_DEBUG=false`.
 5. Jalankan `composer install --no-dev --optimize-autoloader` di backend.
 6. Jalankan `php artisan migrate --force`.
+   > **Penting saat memperbarui aplikasi:** migrasi database harus dijalankan setiap kali
+   > ada versi baru. Contoh gejala bila terlupa: `Unknown column 'is_primary' in 'order clause'`
+   > (halaman Kelola Teknisi) — gejalanya sudah ditangani agar halaman tidak ikut gagal,
+   > tetapi fitur baru (jabatan, WhatsApp, tanda tangan digital teknisi) baru aktif setelah
+   > migrasi dijalankan. Di aplikasi desktop, migrasi berjalan otomatis saat aplikasi dibuka.
 7. Jalankan `php artisan storage:link` dan pastikan `storage` dapat ditulis oleh PHP.
 8. Jalankan `npm install` dan `npm run build` di frontend.
 9. Sajikan hasil frontend melalui web server dan arahkan `/api` serta `/storage` ke backend.

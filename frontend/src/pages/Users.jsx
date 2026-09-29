@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react'
 import api from '../api/axios'
+import TablePagination from '../components/TablePagination'
 import { Plus, Pencil, Trash2, Search, Users as UsersIcon, X } from 'lucide-react'
+
+// Jumlah baris per halaman pada tabel Kelola User.
+const PER_PAGE = 10
 
 function Users() {
   const [users, setUsers] = useState([])
@@ -18,7 +22,7 @@ function Users() {
   const fetchUsers = async () => {
     setLoading(true)
     try {
-      const params = { page, per_page: 10 }
+      const params = { page, per_page: PER_PAGE }
       if (search) params.search = search
       const response = await api.get('/users', { params })
       setUsers(response.data.data || [])
@@ -159,6 +163,7 @@ function Users() {
               <table className="w-full text-sm">
                 <thead className="bg-slate-50">
                   <tr>
+                    <th className="w-14 px-6 py-3 text-center font-medium text-slate-500">No.</th>
                     <th className="px-6 py-3 text-left font-medium text-slate-500">Nama</th>
                     <th className="px-6 py-3 text-left font-medium text-slate-500">Username</th>
                     <th className="px-6 py-3 text-left font-medium text-slate-500">Email</th>
@@ -167,8 +172,9 @@ function Users() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
-                  {users.map((user) => (
+                  {users.map((user, index) => (
                     <tr key={user.id} className="hover:bg-slate-50">
+                      <td className="px-6 py-3 text-center text-slate-400">{(page - 1) * PER_PAGE + index + 1}</td>
                       <td className="px-6 py-3 font-medium text-slate-900">{user.name}</td>
                       <td className="px-6 py-3 text-slate-600">{user.username}</td>
                       <td className="px-6 py-3 text-slate-600">{user.email}</td>
@@ -201,25 +207,14 @@ function Users() {
           </div>
 
           {lastPage > 1 && (
-            <div className="mt-6 flex items-center justify-center gap-2">
-              <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="px-4 py-2 rounded-lg border border-slate-300 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50"
-              >
-                Sebelumnya
-              </button>
-              <span className="text-sm text-slate-500">
-                Halaman {page} dari {lastPage}
-              </span>
-              <button
-                onClick={() => setPage((p) => Math.min(lastPage, p + 1))}
-                disabled={page === lastPage}
-                className="px-4 py-2 rounded-lg border border-slate-300 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50"
-              >
-                Berikutnya
-              </button>
-            </div>
+            <TablePagination
+              page={page}
+              lastPage={lastPage}
+              onPageChange={setPage}
+              total={total}
+              perPage={PER_PAGE}
+              className="mt-6"
+            />
           )}
         </>
       )}

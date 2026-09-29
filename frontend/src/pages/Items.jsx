@@ -2,7 +2,13 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import api from '../api/axios'
+import TablePagination from '../components/TablePagination'
+import { ROWS_PER_PAGE } from '../hooks/useTablePagination'
 import { Plus, Package, Search, Pencil, Trash2, PackageX, ChevronLeft, ChevronRight, Expand, X } from 'lucide-react'
+
+// Jumlah kartu per halaman pada Katalog Barang. Setelah 10 barang muncul
+// tombol "Berikutnya" supaya petugas bisa membuka halaman berikutnya.
+const PER_PAGE = ROWS_PER_PAGE
 
 function Items() {
   const { user } = useAuth()
@@ -20,7 +26,7 @@ function Items() {
   const fetchItems = async () => {
     setLoading(true)
     try {
-      const params = { page, per_page: 12 }
+      const params = { page, per_page: PER_PAGE }
       if (search) params.search = search
       const response = await api.get('/items', { params })
       setItems(response.data.data || [])
@@ -140,13 +146,17 @@ function Items() {
       ) : (
         <>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-            {items.map((item) => {
+            {items.map((item, index) => {
               const itemImages = getItemImages(item)
               const imageIndex = Math.min(activeImages[item.id] || 0, Math.max(itemImages.length - 1, 0))
 
               return (
               <div key={item.id} className="bg-white rounded-lg border border-slate-200 overflow-hidden hover:shadow-lg transition-shadow">
                 <div className="relative aspect-square bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center">
+                  {/* Nomor urut barang, dilanjutkan antar halaman (11, 12, ...). */}
+                  <span className="absolute left-1.5 top-1.5 z-10 rounded-md bg-slate-900/70 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                    {(page - 1) * PER_PAGE + index + 1}
+                  </span>
                   {itemImages.length ? (
                     <>
                     <div
@@ -224,25 +234,14 @@ function Items() {
 
           {/* Pagination */}
           {lastPage > 1 && (
-            <div className="mt-6 flex items-center justify-center gap-2">
-              <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="px-4 py-2 rounded-lg border border-slate-300 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50"
-              >
-                Sebelumnya
-              </button>
-              <span className="text-sm text-slate-500">
-                Halaman {page} dari {lastPage}
-              </span>
-              <button
-                onClick={() => setPage((p) => Math.min(lastPage, p + 1))}
-                disabled={page === lastPage}
-                className="px-4 py-2 rounded-lg border border-slate-300 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50"
-              >
-                Berikutnya
-              </button>
-            </div>
+            <TablePagination
+              page={page}
+              lastPage={lastPage}
+              onPageChange={setPage}
+              total={total}
+              perPage={PER_PAGE}
+              className="mt-6"
+            />
           )}
         </>
       )}

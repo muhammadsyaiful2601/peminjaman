@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Mail, Pencil, Phone, Plus, RefreshCw, Search, Trash2, UserRound, Upload } from 'lucide-react'
 import api from '../api/axios'
+import TablePagination from '../components/TablePagination'
 import ImportStudentsModal from '../components/ImportStudentsModal'
 
 const emptyForm = { student_id: '', name: '', email: '', phone: '' }
 const SYNC_INTERVAL_SECONDS = 5 * 60
+// Jumlah baris per halaman pada tabel Data Mahasiswa. Setelah 10 data
+// muncul tombol "Berikutnya" supaya petugas bisa membuka halaman berikutnya.
+const PER_PAGE = 10
 // URL CSV Google Sheets terpublikasi yang menjadi sumber sinkronisasi otomatis.
 const SYNC_URL_KEY = 'student_sync_csv_url'
 
@@ -38,6 +42,9 @@ function Students() {
   const [showImportModal, setShowImportModal] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [syncCountdown, setSyncCountdown] = useState(SYNC_INTERVAL_SECONDS)
+  const [page, setPage] = useState(1)
+  const [lastPage, setLastPage] = useState(1)
+  const [total, setTotal] = useState(0)
   const syncingRef = useRef(false)
   // Ref berikut membuat timer otomatis selalu memakai versi terbaru dari
   // fungsi/data terkait, sehingga interval tidak perlu dibuat ulang tiap render
@@ -45,20 +52,29 @@ function Students() {
   const syncRef = useRef(null)
   const countdownRef = useRef(SYNC_INTERVAL_SECONDS)
   const searchRef = useRef('')
+  const pageRef = useRef(1)
   const modalOpenRef = useRef(false)
   const [lastSyncedAt, setLastSyncedAt] = useState('')
 
   useEffect(() => { searchRef.current = search }, [search])
+  useEffect(() => { pageRef.current = page }, [page])
   useEffect(() => { modalOpenRef.current = showImportModal }, [showImportModal])
 
-  const fetchStudents = useCallback(async (searchValue, silent = false) => {
+  const fetchStudents = useCallback(async (searchValue, silent = false, pageValue = null) => {
     const term = String(searchValue ?? searchRef.current ?? '').trim()
+    // Halaman tujuan: argumen eksplisit (dipakai saat reset ke halaman 1),
+    // selain itu mengikuti halaman yang sedang aktif.
+    const currentPage = Number(pageValue) > 0 ? Number(pageValue) : pageRef.current
 
     if (!silent) setLoading(true)
 
     try {
-      const response = await api.get('/students', { params: term ? { search: term } : {} })
+      const params = { page: currentPage, per_page: PER_PAGE }
+      if (term) params.search = term
+      const response = await api.get('/students', { params })
       setStudents(response.data.data || [])
+      setLastPage(response.data.meta?.last_page || 1)
+      setTotal(response.data.meta?.total || 0)
     } catch (requestError) {
       setError(requestError.response?.data?.message || 'Gagal memuat data mahasiswa.')
     } finally {
@@ -139,12 +155,22 @@ function Students() {
     }
   }, [fetchStudents])
 
-  // Daftar mahasiswa diambil sekali saat halaman dibuka, lalu dimuat ulang
-  // (dengan jeda singkat) setiap kata kunci pencarian berubah.
+  // Daftar mahasiswa diambil sekali saat halaman dibuka.
   useEffect(() => { fetchStudents('') }, [fetchStudents])
 
+  // Halaman tabel diganti -> ambil 10 baris berikutnya dari server.
   useEffect(() => {
-    const timeout = window.setTimeout(() => fetchStudents(search), 300)
+    if (page <= 1) return
+    fetchStudents(undefined, false, page)
+  }, [page, fetchStudents])
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      // Kata kunci pencarian berubah -> selalu kembali ke halaman 1 supaya
+      // hasil pencarian tidak pernah tersembunyi di halaman belakang.
+      setPage(1)
+      fetchStudents(search, false, 1)
+    }, 300)
 
     return () => window.clearTimeout(timeout)
   }, [search, fetchStudents])
@@ -260,7 +286,10 @@ function Students() {
     try {
       await api.delete(`/students/${student.id}`)
       setSuccess('Data mahasiswa berhasil dihapus.')
-      fetchStudents()
+      // Baris terakhir pada halaman ini dihapus: mundur satu halaman supaya
+      // tabel tidak tampil kosong menetap.
+      if (students.length <= 1 && page > 1) setPage((current) => current - 1)
+      else fetchStudents()
     } catch (requestError) {
       setError(requestError.response?.data?.message || 'Data mahasiswa gagal dihapus.')
     }
@@ -297,7 +326,6 @@ function Students() {
             </button>
           </div>
           <span className="text-right text-xs text-slate-500">
-            <span>Refresh otomatis dalam {formatCountdown(syncCountdown)}</span>
             {lastSyncedAt && (
               <span className="block text-slate-400">Sinkron terakhir {formatClock(lastSyncedAt)}</span>
             )}
@@ -343,21 +371,30 @@ function Students() {
       <div className="mb-4 flex flex-col gap-2 sm:flex-row">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
-          <input value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && fetchStudents()} placeholder="Cari NIM, nama, atau email..." className="w-full rounded-lg border border-slate-300 py-2.5 pl-10 pr-4 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500" />
+          <input value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key !== 'Enter') return; setPage(1); fetchStudents(search, false, 1) }} placeholder="Cari NIM, nama, atau email..." className="w-full rounded-lg border border-slate-300 py-2.5 pl-10 pr-4 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500" />
         </div>
-        <button type="button" onClick={() => fetchStudents()} className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-800 px-5 py-2.5 font-medium text-white hover:bg-slate-900"><Search className="h-4 w-4" />Cari</button>
+        <button type="button" onClick={() => { setPage(1); fetchStudents(search, false, 1) }} className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-800 px-5 py-2.5 font-medium text-white hover:bg-slate-900"><Search className="h-4 w-4" />Cari</button>
       </div>
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
         {loading ? <p className="p-8 text-center text-slate-500">Memuat data mahasiswa...</p> : students.length === 0 ? <div className="p-8 text-center text-slate-500"><UserRound className="mx-auto mb-3 h-10 w-10 text-slate-300" />Belum ada data mahasiswa.</div> : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
-              <thead className="bg-slate-50"><tr><th className="px-5 py-3 font-medium text-slate-500">NIM / NIP</th><th className="px-5 py-3 font-medium text-slate-500">Nama</th><th className="px-5 py-3 font-medium text-slate-500">Kontak</th><th className="px-5 py-3 text-right font-medium text-slate-500">Aksi</th></tr></thead>
-              <tbody className="divide-y divide-slate-200">{students.map((student) => <tr key={student.id}><td className="px-5 py-3 font-mono text-slate-700">{student.student_id}</td><td className="px-5 py-3 font-medium text-slate-900">{student.name}</td><td className="px-5 py-3 text-slate-600"><div className="flex items-center gap-1.5"><Mail className="h-3.5 w-3.5 text-slate-400" />{student.email}</div>{student.phone && <div className="mt-1 flex items-center gap-1.5 text-xs"><Phone className="h-3.5 w-3.5 text-slate-400" />{student.phone}</div>}</td><td className="px-5 py-3 text-right"><div className="inline-flex gap-2"><button type="button" onClick={() => handleEdit(student)} className="rounded-lg p-1.5 text-slate-500 hover:bg-cyan-50 hover:text-cyan-600" aria-label={`Edit ${student.name}`}><Pencil className="h-4 w-4" /></button><button type="button" onClick={() => handleDelete(student)} className="rounded-lg p-1.5 text-slate-500 hover:bg-red-50 hover:text-red-600" aria-label={`Hapus ${student.name}`}><Trash2 className="h-4 w-4" /></button></div></td></tr>)}</tbody>
+              <thead className="bg-slate-50"><tr><th className="w-14 px-5 py-3 text-center font-medium text-slate-500">No.</th><th className="px-5 py-3 font-medium text-slate-500">NIM / NIP</th><th className="px-5 py-3 font-medium text-slate-500">Nama</th><th className="px-5 py-3 font-medium text-slate-500">Kontak</th><th className="px-5 py-3 text-right font-medium text-slate-500">Aksi</th></tr></thead>
+              <tbody className="divide-y divide-slate-200">{students.map((student, index) => <tr key={student.id}><td className="px-5 py-3 text-center text-slate-400">{(page - 1) * PER_PAGE + index + 1}</td><td className="px-5 py-3 font-mono text-slate-700">{student.student_id}</td><td className="px-5 py-3 font-medium text-slate-900">{student.name}</td><td className="px-5 py-3 text-slate-600"><div className="flex items-center gap-1.5"><Mail className="h-3.5 w-3.5 text-slate-400" />{student.email}</div>{student.phone && <div className="mt-1 flex items-center gap-1.5 text-xs"><Phone className="h-3.5 w-3.5 text-slate-400" />{student.phone}</div>}</td><td className="px-5 py-3 text-right"><div className="inline-flex gap-2"><button type="button" onClick={() => handleEdit(student)} className="rounded-lg p-1.5 text-slate-500 hover:bg-cyan-50 hover:text-cyan-600" aria-label={`Edit ${student.name}`}><Pencil className="h-4 w-4" /></button><button type="button" onClick={() => handleDelete(student)} className="rounded-lg p-1.5 text-slate-500 hover:bg-red-50 hover:text-red-600" aria-label={`Hapus ${student.name}`}><Trash2 className="h-4 w-4" /></button></div></td></tr>)}</tbody>
             </table>
           </div>
         )}
       </div>
+
+      <TablePagination
+        page={page}
+        lastPage={lastPage}
+        onPageChange={setPage}
+        total={total}
+        perPage={PER_PAGE}
+        className="mt-4"
+      />
     </div>
   )
 }

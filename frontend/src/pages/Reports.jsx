@@ -1,9 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import api from '../api/axios'
 import { useBranding } from '../context/BrandingContext'
+import TablePagination from '../components/TablePagination'
+import useTablePagination, { ROWS_PER_PAGE } from '../hooks/useTablePagination'
 import { CalendarDays, Download, Printer, RefreshCw } from 'lucide-react'
 import logoPnp from '../assets/Logo_Politeknik_Negeri_Padang_(2014).svg'
 import { downloadBlob } from '../utils/downloadBlob'
+
+// Jumlah baris per halaman pada tabel laporan di layar. Saat dicetak, tabel
+// tetap menampilkan seluruh transaksi hasil filter (lihat `report-print-table`).
+const PER_PAGE = ROWS_PER_PAGE
 
 const statusLabels = {
   borrowed: 'Dipinjam',
@@ -55,6 +61,20 @@ function Reports() {
     const matchesEnd = !endDate || loanDate <= endDate
     return matchesStatus && matchesStart && matchesEnd
   }), [loans, status, startDate, endDate])
+
+  // Tabel laporan di layar dibagi 10 baris per halaman. Filter tanggal/status
+  // yang berubah mengembalikan tampilan ke halaman pertama.
+  const {
+    pageItems: reportRows,
+    rowOffset: reportRowOffset,
+    page: reportPage,
+    lastPage: reportLastPage,
+    total: reportTotal,
+    goToPage: setReportPage,
+  } = useTablePagination(filteredLoans, {
+    perPage: PER_PAGE,
+    resetKey: `${status}|${startDate}|${endDate}`,
+  })
 
   const totalQuantity = filteredLoans.reduce((total, loan) => (
     total + (loan.loan_items?.length
@@ -240,39 +260,87 @@ function Reports() {
         ) : filteredLoans.length === 0 ? (
           <div className="p-12 text-center text-slate-500">Tidak ada transaksi pada filter yang dipilih.</div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="report-table w-full text-left text-sm">
-              <thead className="bg-slate-50">
-                <tr>
-                  <th className="px-6 py-3 font-medium text-slate-500">No.</th>
-                  <th className="px-6 py-3 font-medium text-slate-500">Kode transaksi</th>
-                  <th className="px-6 py-3 font-medium text-slate-500">Peminjam</th>
-                  <th className="px-6 py-3 font-medium text-slate-500">Barang</th>
-                  <th className="px-6 py-3 font-medium text-slate-500">Jumlah</th>
-                  <th className="px-6 py-3 font-medium text-slate-500">Status</th>
-                  <th className="px-6 py-3 font-medium text-slate-500">Tanggal</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filteredLoans.map((loan, index) => (
-                  <tr key={loan.id}>
-                    <td className="px-6 py-3 text-slate-500">{index + 1}</td>
-                    <td className="px-6 py-3 font-mono text-xs text-slate-600">{loan.loan_code || loan.uuid?.slice(0, 8)}</td>
-                    <td className="px-6 py-3">
-                      <p className="font-medium text-slate-900">{loan.borrower_name}</p>
-                      <p className="text-xs text-slate-500">{loan.borrower_student_id || loan.borrower_email}</p>
-                    </td>
-                    <td className="px-6 py-3 text-slate-600">
-                      {loan.loan_items?.length ? loan.loan_items.map((loanItem) => loanItem.item?.name).join(', ') : loan.item?.name}
-                    </td>
-                    <td className="px-6 py-3 text-slate-600">{loan.loan_items?.length ? loan.loan_items.reduce((total, loanItem) => total + loanItem.qty, 0) : loan.qty}</td>
-                    <td className="px-6 py-3 text-slate-600">{statusLabels[loan.status] || loan.status}</td>
-                    <td className="px-6 py-3 text-slate-500">{formatDate(loan.created_at)}</td>
+          <>
+            {/* Tabel di layar: 10 baris per halaman + tombol Berikutnya. */}
+            <div className="overflow-x-auto print:hidden">
+              <table className="report-table w-full text-left text-sm">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <th className="px-6 py-3 text-center font-medium text-slate-500">No.</th>
+                    <th className="px-6 py-3 font-medium text-slate-500">Kode transaksi</th>
+                    <th className="px-6 py-3 font-medium text-slate-500">Peminjam</th>
+                    <th className="px-6 py-3 font-medium text-slate-500">Barang</th>
+                    <th className="px-6 py-3 font-medium text-slate-500">Jumlah</th>
+                    <th className="px-6 py-3 font-medium text-slate-500">Status</th>
+                    <th className="px-6 py-3 font-medium text-slate-500">Tanggal</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {reportRows.map((loan, index) => (
+                    <tr key={loan.id}>
+                      <td className="px-6 py-3 text-center text-slate-500">{reportRowOffset + index + 1}</td>
+                      <td className="px-6 py-3 font-mono text-xs text-slate-600">{loan.loan_code || loan.uuid?.slice(0, 8)}</td>
+                      <td className="px-6 py-3">
+                        <p className="font-medium text-slate-900">{loan.borrower_name}</p>
+                        <p className="text-xs text-slate-500">{loan.borrower_student_id || loan.borrower_email}</p>
+                      </td>
+                      <td className="px-6 py-3 text-slate-600">
+                        {loan.loan_items?.length ? loan.loan_items.map((loanItem) => loanItem.item?.name).join(', ') : loan.item?.name}
+                      </td>
+                      <td className="px-6 py-3 text-slate-600">{loan.loan_items?.length ? loan.loan_items.reduce((total, loanItem) => total + loanItem.qty, 0) : loan.qty}</td>
+                      <td className="px-6 py-3 text-slate-600">{statusLabels[loan.status] || loan.status}</td>
+                      <td className="px-6 py-3 text-slate-500">{formatDate(loan.created_at)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="border-t border-slate-100 px-6 py-3 print:hidden">
+              <TablePagination
+                page={reportPage}
+                lastPage={reportLastPage}
+                onPageChange={setReportPage}
+                total={reportTotal}
+                perPage={PER_PAGE}
+              />
+            </div>
+
+            {/* Tabel khusus cetak: seluruh transaksi hasil filter, tanpa paginasi. */}
+            <div className="hidden print:block">
+              <table className="report-table w-full text-left text-sm">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <th className="px-6 py-3 text-center font-medium text-slate-500">No.</th>
+                    <th className="px-6 py-3 font-medium text-slate-500">Kode transaksi</th>
+                    <th className="px-6 py-3 font-medium text-slate-500">Peminjam</th>
+                    <th className="px-6 py-3 font-medium text-slate-500">Barang</th>
+                    <th className="px-6 py-3 font-medium text-slate-500">Jumlah</th>
+                    <th className="px-6 py-3 font-medium text-slate-500">Status</th>
+                    <th className="px-6 py-3 font-medium text-slate-500">Tanggal</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredLoans.map((loan, index) => (
+                    <tr key={loan.id}>
+                      <td className="px-6 py-3 text-center text-slate-500">{index + 1}</td>
+                      <td className="px-6 py-3 font-mono text-xs text-slate-600">{loan.loan_code || loan.uuid?.slice(0, 8)}</td>
+                      <td className="px-6 py-3">
+                        <p className="font-medium text-slate-900">{loan.borrower_name}</p>
+                        <p className="text-xs text-slate-500">{loan.borrower_student_id || loan.borrower_email}</p>
+                      </td>
+                      <td className="px-6 py-3 text-slate-600">
+                        {loan.loan_items?.length ? loan.loan_items.map((loanItem) => loanItem.item?.name).join(', ') : loan.item?.name}
+                      </td>
+                      <td className="px-6 py-3 text-slate-600">{loan.loan_items?.length ? loan.loan_items.reduce((total, loanItem) => total + loanItem.qty, 0) : loan.qty}</td>
+                      <td className="px-6 py-3 text-slate-600">{statusLabels[loan.status] || loan.status}</td>
+                      <td className="px-6 py-3 text-slate-500">{formatDate(loan.created_at)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
         <div className="hidden print:block official-signature-page">
           <div className="official-signature">
