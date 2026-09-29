@@ -8,6 +8,7 @@ function OfficialLoan() {
   const [items, setItems] = useState([])
   const [loanItems, setLoanItems] = useState([{ item_id: '', qty: 1 }])
   const [form, setForm] = useState({ borrower_name: '', borrower_email: '', borrower_nim: '', purpose: '', borrowed_date: '', return_date: '', signatory_name: '', signatory_nip: '', officer_name: '', officer_nip: '' })
+  const [technicians, setTechnicians] = useState([])
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -17,6 +18,24 @@ function OfficialLoan() {
   useEffect(() => {
     api.get('/items?per_page=100').then((response) => setItems(response.data.data || [])).catch(() => setError('Gagal memuat daftar barang.')).finally(() => setLoading(false))
   }, [])
+
+  // Daftar teknisi agar tanda tangan digital petugas ikut tercetak. Kegagalan
+  // memuat daftar ini tidak menghalangi pembuatan surat.
+  useEffect(() => {
+    api.get('/technicians').then((response) => setTechnicians(response.data || [])).catch(() => setTechnicians([]))
+  }, [])
+
+  // Memilih teknisi mengisi nama & NIP petugas sekaligus menautkan tanda tangannya.
+  const applyOfficer = (event) => {
+    const technician = technicians.find((item) => String(item.id) === event.target.value)
+    if (!technician) return
+    setForm((current) => ({
+      ...current,
+      officer_technician_id: technician.id,
+      officer_name: technician.name,
+      officer_nip: technician.nip,
+    }))
+  }
 
   const updateForm = (event) => setForm({ ...form, [event.target.name]: event.target.value })
   const updateLoanItem = (index, field, value) => setLoanItems(loanItems.map((item, itemIndex) => itemIndex === index ? { ...item, [field]: value } : item))
@@ -59,6 +78,19 @@ function OfficialLoan() {
         <section className="rounded-xl border border-slate-200 bg-white p-6">
           <h2 className="mb-4 flex items-center gap-2 font-semibold text-slate-900"><FileSignature className="h-5 w-5 text-cyan-600" />Data surat</h2>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {technicians.length > 0 && (
+              <label className="text-sm font-medium text-slate-700 md:col-span-2">
+                Petugas peminjaman dari Kelola Teknisi
+                <select onChange={applyOfficer} defaultValue="" className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500">
+                  <option value="">Pilih teknisi (mengisi nama &amp; NIP, dan menyertakan tanda tangan)</option>
+                  {technicians.map((technician) => (
+                    <option key={technician.id} value={technician.id}>
+                      {technician.name} - NIP. {technician.nip}{technician.signature_path ? ' (punya tanda tangan)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             {[
               ['borrower_name', 'Nama peminjam', 'text', 'Nama lengkap / instansi', true],
               ['borrower_email', 'Email peminjam', 'email', 'email@contoh.com', true],

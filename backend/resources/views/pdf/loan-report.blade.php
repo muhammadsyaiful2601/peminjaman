@@ -32,6 +32,8 @@
         .signature .role { margin-top: 28px; }
         .signature .space { height: 48px; }
         .signature .name { font-weight: bold; }
+        /* Tanda tangan digital menggantikan ruang kosong tanda tangan. */
+        .signature .signature-image { display: block; margin: 6px auto 2px; max-height: 42px; max-width: 150px; }
     </style>
 </head>
 <body>
@@ -73,7 +75,11 @@
         <div class="signature">
             <p>Tanah Datar, {{ now()->format('d F Y') }}</p>
             <p class="role">Teknisi</p>
-            <p class="space"></p>
+            @if(! empty($signatorySignature))
+                <img class="signature-image" src="{{ $signatorySignature }}" alt="Tanda tangan {{ $signatoryName ?: 'teknisi' }}">
+            @else
+                <p class="space"></p>
+            @endif
             <p class="name">{{ $signatoryName ?: '____________________________' }}</p>
             <p>NIP. {{ $signatoryNip ?: '________________________' }}</p>
         </div>

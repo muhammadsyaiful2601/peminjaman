@@ -31,6 +31,8 @@
         .signature { display: table-cell; width: 50%; text-align: center; vertical-align: top; }
         .signature p { margin: 0; } .signature .space { height: 58px; }
         .signature .name { font-weight: bold; text-decoration: underline; }
+        /* Tanda tangan digital menggantikan ruang kosong tanda tangan. */
+        .signature .signature-image { display: block; margin: 4px auto 0; max-height: 52px; max-width: 170px; }
     </style>
 </head>
 <body>
@@ -65,7 +67,17 @@
     <p class="closing">Peminjam bertanggung jawab menjaga barang yang dipinjam dan mengembalikannya sesuai periode yang telah ditentukan dalam kondisi baik.</p>
         <div class="signatures">
             <div class="signature"><p>Peminjam / Penanggung Jawab</p><p class="space"></p><p class="name">{{ $signatoryName }}</p><p>NIP / NIM. {{ $signatoryNip }}</p></div>
-            <div class="signature"><p>Tanah Datar, {{ date('d F Y') }}</p><p>Petugas Peminjaman</p><p class="space"></p><p class="name">{{ $officerName }}</p><p>NIP. {{ $officerNip }}</p></div>
+            <div class="signature">
+                <p>Tanah Datar, {{ date('d F Y') }}</p>
+                <p>Petugas Peminjaman</p>
+                @if(! empty($officerSignature))
+                    <img class="signature-image" src="{{ $officerSignature }}" alt="Tanda tangan {{ $officerName }}">
+                @else
+                    <p class="space"></p>
+                @endif
+                <p class="name">{{ $officerName }}</p>
+                <p>NIP. {{ $officerNip }}</p>
+            </div>
     </div>
 </body>
 </html>

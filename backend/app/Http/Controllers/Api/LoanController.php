@@ -81,6 +81,8 @@ class LoanController extends Controller
             'loans' => $loans,
             'signatoryName' => $technician?->name,
             'signatoryNip' => $technician?->nip,
+            // Tanda tangan digital teknisi penandatangan (data URI, null bila belum diunggah).
+            'signatorySignature' => $technician?->signature_data_uri,
             'startDate' => $request->start_date,
             'endDate' => $request->end_date,
         ]);
@@ -104,6 +106,9 @@ class LoanController extends Controller
             'signatory_nip' => ['required', 'string', 'max:100'],
             'officer_name' => ['required', 'string', 'max:255'],
             'officer_nip' => ['required', 'string', 'max:100'],
+            // Petugas peminjaman yang dipilih dari Kelola Teknisi. Opsional:
+            // bila diisi, tanda tangan digitalnya ikut tercetak pada surat.
+            'officer_technician_id' => ['nullable', 'integer', 'exists:technicians,id'],
         ]);
 
         $admin = $request->user();
@@ -158,6 +163,10 @@ class LoanController extends Controller
             'signatoryNip' => $validated['signatory_nip'],
             'officerName' => $validated['officer_name'],
             'officerNip' => $validated['officer_nip'],
+            // Tanda tangan digital petugas peminjaman (data URI, null bila belum diunggah).
+            'officerSignature' => empty($validated['officer_technician_id'])
+                ? null
+                : Technician::find((int) $validated['officer_technician_id'])?->signature_data_uri,
         ]);
 
         return $pdf->download('surat-peminjaman-resmi-' . $loan->loan_code . '.pdf')

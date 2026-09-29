@@ -3,6 +3,9 @@
 namespace Tests\Feature;
 
 use App\Http\Controllers\Api\TechnicianController;
+use App\Models\Item;
+use App\Models\Loan;
+use App\Models\Student;
 use App\Models\Technician;
 use App\Models\User;
 use Illuminate\Database\Schema\Blueprint;
@@ -10,6 +13,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -61,6 +65,180 @@ class TechnicianTest extends TestCase
         // Tanda tangan ikut diekspos agar frontend bisa langsung menampilkan
         // pratinjaunya tanpa menyusun URL sendiri.
         $this->assertSame('/storage/'.$technician->signature_path, $technician->signature_url);
+    }
+
+    public function test_tanda_tangan_digital_masuk_ke_laporan_dan_surat_pdf(): void
+    {
+        Storage::fake('public');
+        $admin = $this->admin();
+
+        $technician = Technician::create([
+            'name' => 'Nofa Hendrayana, S.T.',
+            'nip' => '198501012010011001',
+            'signature_path' => UploadedFile::fake()->image('tanda.png', 20, 20)->store('signatures', 'public'),
+        ]);
+
+        // Data URI harus bisa dibaca DomPDF (gambar, bukan berkas hilang).
+        $dataUri = $technician->signature_data_uri;
+        $this->assertIsString($dataUri);
+        $this->assertStringStartsWith('data:image/', $dataUri);
+        $this->assertNotFalse(base64_decode(substr($dataUri, strpos($dataUri, ',') + 1), true));
+
+        $item = Item::create([
+            'name' => 'Kabel HDMI',
+            'item_code' => 'BRG-001',
+            'category' => 'Peralatan',
+            'stock' => 5,
+        ]);
+        Loan::create([
+            'uuid' => (string) Str::uuid(),
+            'loan_code' => 'PJM-2026-7001',
+            'item_id' => $item->id,
+            'qty' => 1,
+            'borrower_name' => 'Budi Santoso',
+            'borrower_email' => 'budi@example.com',
+            'status' => 'borrowed',
+            'created_by' => $admin->id,
+        ]);
+        Student::create([
+            'student_id' => '2211082001',
+            'name' => 'Budi Santoso',
+            'email' => 'budi@example.com',
+        ]);
+
+        // PDF sudah memuat logo kop surat, jadi yang dibandingkan adalah
+        // JUMLAH objek gambar: memilih teknisi bertanda tangan harus menambah
+        // satu gambar (yaitu tanda tangannya) pada Laporan dan Surat.
+        $laporanTanpa = $this->countPdfImages($this->get('/api/loans/report/download')->assertOk()->getContent());
+        $laporanDengan = $this->countPdfImages(
+            $this->get('/api/loans/report/download?technician_id='.$technician->id)->assertOk()->getContent(),
+        );
+        $this->assertSame(
+            $laporanTanpa + 1,
+            $laporanDengan,
+            'Laporan Peminjaman memuat satu gambar tambahan berupa tanda tangan digital',
+        );
+
+        $suratTanpa = $this->countPdfImages($this->post('/api/loans/clearance/download', [
+            'student_id' => '2211082001',
+            'purpose' => 'Persyaratan wisuda',
+            'signatory_name' => 'Petugas Memduh',
+            'signatory_nip' => '2002',
+        ])->assertOk()->getContent());
+
+        $suratDengan = $this->countPdfImages($this->post('/api/loans/clearance/download', [
+            'student_id' => '2211082001',
+            'purpose' => 'Persyaratan wisuda',
+            'signatory_name' => $technician->name,
+            'signatory_nip' => $technician->nip,
+            'signatory_technician_id' => $technician->id,
+        ])->assertOk()->getContent());
+
+        $this->assertSame(
+            $suratTanpa + 1,
+            $suratDengan,
+            'Surat Bebas Labor memuat satu gambar tambahan berupa tanda tangan digital',
+        );
+
+        // Tanpa tanda tangan, technician tetap sah sebagai penandatangan teks.
+        $tanpaTanda = Technician::create(['name' => 'Tanpa Tanda Tangan', 'nip' => '2003']);
+        $suratTeknisiKosong = $this->countPdfImages($this->post('/api/loans/clearance/download', [
+            'student_id' => '2211082001',
+            'purpose' => 'Persyaratan wisuda',
+            'signatory_name' => $tanpaTanda->name,
+            'signatory_nip' => $tanpaTanda->nip,
+            'signatory_technician_id' => $tanpaTanda->id,
+        ])->assertOk()->getContent());
+        $this->assertSame($suratTanpa, $suratTeknisiKosong, 'Technisi tanpa tanda tangan tidak menambah gambar');
+    }
+
+    public function test_tanda_tangan_petugas_masuk_ke_surat_peminjaman_resmi(): void
+    {
+        Storage::fake('public');
+        $this->admin();
+
+        $technician = Technician::create([
+            'name' => 'Petugas Peminjaman',
+            'nip' => '4001',
+            'signature_path' => UploadedFile::fake()->image('tt.png', 20, 20)->store('signatures', 'public'),
+        ]);
+
+        $item = Item::create([
+            'name' => 'Kabel HDMI',
+            'item_code' => 'BRG-001',
+            'category' => 'Peralatan',
+            'stock' => 5,
+        ]);
+
+        $payload = [
+            'items' => [['item_id' => $item->id, 'qty' => 1]],
+            'borrower_name' => 'Instansi Mitra',
+            'borrower_email' => 'pinjam@example.com',
+            'purpose' => 'Kegiatan Praktikum',
+            'borrowed_date' => now()->toDateString(),
+            'return_date' => now()->addWeek()->toDateString(),
+            'signatory_name' => 'Penanggung Jawab',
+            'signatory_nip' => '5001',
+            'officer_name' => $technician->name,
+            'officer_nip' => $technician->nip,
+        ];
+
+        $tanpaTanda = $this->postJson('/api/loans/official/download', $payload)->assertOk()->getContent();
+        $denganTanda = $this->postJson('/api/loans/official/download', $payload + [
+            'officer_technician_id' => $technician->id,
+        ])->assertOk()->getContent();
+
+        $this->assertSame(
+            $this->countPdfImages($tanpaTanda) + 1,
+            $this->countPdfImages($denganTanda),
+            'Surat Peminjaman Resmi memuat tanda tangan digital petugas',
+        );
+    }
+
+    public function test_tanda_tangan_svg_berhasil_ditercetak_tanpa_menggagalkan_pdf(): void
+    {
+        Storage::fake('public');
+        $admin = $this->admin();
+
+        // Validasi menerima SVG. DomPDF sometimes gagal membaca SVG, jadi
+        // tanda tangan vektor harus diuji agar surat tetap bisa dibuat.
+        $technician = Technician::create([
+            'name' => 'Teknisi SVG',
+            'nip' => '3001',
+            'signature_path' => UploadedFile::fake()->createWithContent('tt.svg', '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="40"><path d="M5 30 C 20 5, 40 35, 60 15 S 100 30, 115 10" stroke="black" fill="none" stroke-width="2"/></svg>')
+                ->store('signatures', 'public'),
+        ]);
+
+        $image = Item::create([
+            'name' => 'Kabel HDMI',
+            'item_code' => 'BRG-001',
+            'category' => 'Peralatan',
+            'stock' => 5,
+        ]);
+        Loan::create([
+            'uuid' => (string) Str::uuid(),
+            'loan_code' => 'PJM-2026-7002',
+            'item_id' => $image->id,
+            'qty' => 1,
+            'borrower_name' => 'Budi Santoso',
+            'borrower_email' => 'budi@example.com',
+            'status' => 'borrowed',
+            'created_by' => $admin->id,
+        ]);
+
+        $pdf = $this->get('/api/loans/report/download?technician_id='.$technician->id)->assertOk()->getContent();
+        $this->assertStringStartsWith('%PDF', $pdf);
+        $this->assertGreaterThanOrEqual(
+            1,
+            substr_count($pdf, '/Subtype /Image') - 1,
+            'Tanda tangan SVG ikut dirender pada PDF',
+        );
+    }
+
+    /** Jumlah objek gambar (/Subtype /Image) di dalam berkas PDF. */
+    private function countPdfImages(string $pdf): int
+    {
+        return substr_count($pdf, '/Subtype /Image');
     }
 
     public function test_hanya_satu_teknisi_boleh_menjadi_teknisi_utama(): void

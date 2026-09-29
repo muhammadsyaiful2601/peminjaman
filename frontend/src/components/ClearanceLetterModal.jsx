@@ -96,12 +96,14 @@ export function ClearanceLetterModal({
               Pilih teknisi penandatangan
               <select
                 onChange={applyTechnician}
-                defaultValue=""
+                value={technicianId}
                 className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500"
               >
                 <option value="">Pilih teknisi</option>
                 {technicians.map((t) => (
-                  <option key={t.id} value={t.id}>{t.name} - NIP. {t.nip}</option>
+                  <option key={t.id} value={t.id}>
+                    {t.name} - NIP. {t.nip}{t.signature_path ? ' (punya tanda tangan)' : ''}
+                  </option>
                 ))}
               </select>
             </label>

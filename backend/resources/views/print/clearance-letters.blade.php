@@ -54,6 +54,8 @@
         .signature { display: table-cell; width: 50%; text-align: center; vertical-align: top; }
         .signature p { margin: 0; } .signature .space { height: 58px; }
         .signature .name { font-weight: bold; text-decoration: underline; }
+        /* Tanda tangan digital menggantikan ruang kosong tanda tangan. */
+        .signature .signature-image { display: block; margin: 4px auto 0; max-height: 52px; max-width: 170px; }
 
         @media print {
             body {

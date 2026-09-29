@@ -86,7 +86,13 @@ const PREFERRED_PORT = 8642;
 //  Dosen & Umum) memakai satu komponen BorrowersPage yang sama, jadi logikanya
 //  identik. Template impor dibuat per kelompok (student_sync_csv_url tak
 //  berubah; kolom Jenis dihapus dari template karena jenisnya sudah pasti).
-const TEMPLATE_VERSION = '1.4.9';
+//  1.4.10: tanda tangan digital teknisi akhirnya ikut tercetak. Sebelumnya
+//  berkas tanda tangan hanya tersimpan dan bisa dilihat di halaman Kelola
+//  Teknisi, tetapi tidak pernah muncul di dokumen apa pun. Sekarang
+//  Laporan Peminjaman, Surat Bebas Labor (termasuk cetak massal), dan Surat
+//  Peminjaman Resmi memakai tanda tangan sebagai data URI, dan dropdown
+//  penandatangan mengirim `signatory_technician_id` / `officer_technician_id`.
+const TEMPLATE_VERSION = '1.4.10';
 const isDev = !app.isPackaged;
 
 /* ------------------------------------------------------------------ paths */

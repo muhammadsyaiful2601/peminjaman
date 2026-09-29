@@ -121,6 +121,9 @@ function Clearance() {
   const [detail, setDetail] = useState(null)
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [technicians, setTechnicians] = useState([])
+  // Id teknisi penandatangan yang dipilih, dipakai agar tanda tangan digitalnya
+  // ikut tercetak pada surat/laporan.
+  const [signatoryTechnicianId, setSignatoryTechnicianId] = useState('')
   const [letter, setLetter] = useState(emptyLetter)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -227,7 +230,9 @@ function Clearance() {
   }
 
   const applyTechnician = (event) => {
-    const technician = technicians.find((item) => String(item.id) === event.target.value)
+    const value = event.target.value
+    setSignatoryTechnicianId(value)
+    const technician = technicians.find((item) => String(item.id) === value)
     if (!technician) return
     setLetter((current) => ({
       ...current,
@@ -329,6 +334,7 @@ function Clearance() {
           laboratory: letter.laboratory || undefined,
           signatory_name: letter.signatory_name,
           signatory_nip: letter.signatory_nip,
+          signatory_technician_id: signatoryTechnicianId || undefined,
         }, { responseType: 'text' })
 
         await printHtmlDocument(response.data)
@@ -354,6 +360,7 @@ function Clearance() {
           laboratory: letter.laboratory || undefined,
           signatory_name: letter.signatory_name,
           signatory_nip: letter.signatory_nip,
+          signatory_technician_id: signatoryTechnicianId || undefined,
         }, { responseType: 'text' })
 
         await printHtmlDocument(response.data)
@@ -401,6 +408,7 @@ function Clearance() {
         laboratory: letter.laboratory || undefined,
         signatory_name: letter.signatory_name,
         signatory_nip: letter.signatory_nip,
+        signatory_technician_id: signatoryTechnicianId || undefined,
       }, {
         responseType: 'blob',
       })
@@ -934,6 +942,7 @@ function Clearance() {
         letter={letter}
         updateLetter={updateLetter}
         technicians={technicians}
+        technicianId={signatoryTechnicianId}
         applyTechnician={applyTechnician}
         submitting={modalSubmitting}
         error={modalError}

@@ -79,5 +79,15 @@
 @endif
 <div class="signatures">
     <div class="signature"><p>Peminjam / Penanggung Jawab</p><p class="space"></p><p class="name">{{ $borrower['name'] }}</p><p>{{ $borrower['student_id'] !== '' ? 'NIM / NIP. ' . $borrower['student_id'] : 'NIM / NIP. ..........................' }}</p></div>
-    <div class="signature"><p>Tanah Datar, {{ $parsedLetterDate->locale('id')->translatedFormat('d F Y') }}</p><p>Petugas {{ $labName }}</p><p class="space"></p><p class="name">{{ $signatoryName }}</p><p>NIP. {{ $signatoryNip }}</p></div>
+    <div class="signature">
+        <p>Tanah Datar, {{ $parsedLetterDate->locale('id')->translatedFormat('d F Y') }}</p>
+        <p>Petugas {{ $labName }}</p>
+        @if(! empty($signatorySignature))
+            <img class="signature-image" src="{{ $signatorySignature }}" alt="Tanda tangan {{ $signatoryName !== '' ? $signatoryName : 'petugas' }}">
+        @else
+            <p class="space"></p>
+        @endif
+        <p class="name">{{ $signatoryName }}</p>
+        <p>NIP. {{ $signatoryNip }}</p>
+    </div>
 </div>

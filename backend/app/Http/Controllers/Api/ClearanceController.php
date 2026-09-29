@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\ClearanceLetter;
 use App\Models\Loan;
 use App\Models\Student;
+use App\Models\Technician;
 use App\Support\BorrowerType;
 use App\Support\Branding;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -175,6 +176,9 @@ class ClearanceController extends Controller
             'laboratory' => ['nullable', 'string', 'max:255'],
             'signatory_name' => ['required', 'string', 'max:255'],
             'signatory_nip' => ['required', 'string', 'max:100'],
+            // Teknisi penandatangan dari Kelola Teknisi. Opsional: bila diisi,
+            // tanda tangan digitalnya ikut tercetak pada surat.
+            'signatory_technician_id' => ['nullable', 'integer', 'exists:technicians,id'],
         ]);
 
         $student = $this->findStudent($studentId, $email, $name);
@@ -228,6 +232,7 @@ class ClearanceController extends Controller
             'laboratory' => trim((string) ($validated['laboratory'] ?? '')),
             'signatoryName' => $validated['signatory_name'],
             'signatoryNip' => $validated['signatory_nip'],
+            'signatorySignature' => $this->signatorySignature($validated['signatory_technician_id'] ?? null),
             'totals' => $this->totals($records, $outstanding, $returned),
         ]);
 
@@ -260,10 +265,13 @@ class ClearanceController extends Controller
             'laboratory' => ['nullable', 'string', 'max:255'],
             'signatory_name' => ['required', 'string', 'max:255'],
             'signatory_nip' => ['required', 'string', 'max:100'],
+            'signatory_technician_id' => ['nullable', 'integer', 'exists:technicians,id'],
         ]);
 
         $letterDate = Carbon::parse($validated['letter_date'] ?? now()->toDateString());
         $branding = Branding::printableData();
+        // Ditanda tangan sekali untuk seluruh surat pada cetak massal.
+        $signatorySignature = $this->signatorySignature($validated['signatory_technician_id'] ?? null);
         $letters = [];
 
         foreach ($validated['borrowers'] as $item) {
@@ -313,6 +321,7 @@ class ClearanceController extends Controller
                 'laboratory' => trim((string) ($validated['laboratory'] ?? '')),
                 'signatoryName' => $validated['signatory_name'],
                 'signatoryNip' => $validated['signatory_nip'],
+                'signatorySignature' => $signatorySignature,
                 'totals' => $this->totals($records, $outstanding, $returned),
             ];
         }
@@ -508,6 +517,19 @@ class ClearanceController extends Controller
         }
 
         return false;
+    }
+
+    /**
+     * Tanda tangan digital penandatangan sebagai data URI, atau null bila
+     * teknisi tidak dipilih atau belum mengunggah tanda tangan.
+     */
+    private function signatorySignature(mixed $technicianId): ?string
+    {
+        if (! $technicianId) {
+            return null;
+        }
+
+        return Technician::find((int) $technicianId)?->signature_data_uri;
     }
 
     /**
