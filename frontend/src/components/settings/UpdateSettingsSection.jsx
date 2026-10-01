@@ -110,6 +110,12 @@ export default function UpdateSettingsSection() {
               ? `Pembaruan tersedia: ${state.version}`
               : `Versi sekarang ${state?.version || '-'} - aplikasi sudah versi terbaru.`}
         </p>
+        {state?.state === 'available' && state.releaseNotes && (
+          <div className="mt-3 rounded-lg border border-cyan-100 bg-cyan-50 p-3">
+            <p className="text-xs font-semibold text-slate-700">Perbaikan versi {state.version}</p>
+            <p className="mt-1 whitespace-pre-line text-xs text-slate-600">{state.releaseNotes}</p>
+          </div>
+        )}
         <div className="mt-3 flex flex-wrap gap-2">
           <button
             type="button"

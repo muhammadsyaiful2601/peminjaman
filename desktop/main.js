@@ -166,7 +166,7 @@ let bootSucceeded = false;
 let quitting = false;
 let restartingBackend = false;
 let phpServerError = '';
-let updateState = { state: 'idle', version: null, percent: 0, message: '', currentVersion: '' };
+let updateState = { state: 'idle', version: null, percent: 0, message: '', currentVersion: '', releaseNotes: '' };
 let updateCheckInProgress = false;
 let updateCheckTimer = null;
 let updateInstallTimer = null;
@@ -905,7 +905,7 @@ function installUpdate() {
  * sedang mengunduh / menunggu instal, atau jendela utama belum siap
  * (mis. wizard konfigurasi awal sedang tampil).
  */
-async function announceUpdateAvailable(version) {
+async function announceUpdateAvailable(version, releaseNotes) {
   if (manualCheckInProgress || updatePopupShown) return;
   if (updateState.state !== 'available') return;
   if (!mainWindow || mainWindow.isDestroyed()) return;
@@ -915,10 +915,11 @@ async function announceUpdateAvailable(version) {
       type: 'info',
       title: 'Pembaruan Tersedia — Peminjaman Barang PNP',
       message: `Versi baru ${version} tersedia.`,
-      detail:
-        'Aplikasi akan mengunduh pembaruan di latar belakang, lalu dimulai ulang\n' +
-        'otomatis untuk memasangnya. Data Anda tetap aman.\n\n' +
+      detail: [
+        releaseNotes ? `Perbaikan versi ini:\n${releaseNotes}` : 'Detail perbaikan belum tersedia.',
+        'Aplikasi akan mengunduh pembaruan di latar belakang, lalu dimulai ulang otomatis untuk memasangnya. Data Anda tetap aman.',
         'Bila memilih "Nanti", unduh kapan saja lewat tombol gear (menu Pengaturan).',
+      ].join('\n\n'),
       buttons: ['Unduh & Instal', 'Nanti'],
       defaultId: 0,
       cancelId: 1,
@@ -1038,11 +1039,16 @@ function configureAutoUpdater() {
   });
   autoUpdater.on('update-available', (info) => {
     const version = info && info.version ? info.version : '';
-    setUpdateState({ state: 'available', version, percent: 0, message: '' });
+    const releaseNotes = typeof info?.releaseNotes === 'string'
+      ? info.releaseNotes.trim()
+      : Array.isArray(info?.releaseNotes)
+        ? info.releaseNotes.map((entry) => entry?.note).filter(Boolean).join('\n\n').trim()
+        : '';
+    setUpdateState({ state: 'available', version, percent: 0, message: '', releaseNotes });
     logUpdate(`Pembaruan ${version} tersedia (pengunduh manual).`);
     // Popup otomatis: hanya muncul bila benar-benar ada versi baru; tetap
     // senyap bila aplikasi sudah versi terbaru.
-    announceUpdateAvailable(version);
+    announceUpdateAvailable(version, releaseNotes);
   });
   autoUpdater.on('update-not-available', () => {
     setUpdateState({ state: 'up-to-date', version: null, percent: 0, message: '' });
@@ -1934,7 +1940,6 @@ app.on('before-quit', () => {
   killChild(queueWorker);
   killChild(phpServer);
 });
-
 
 
 

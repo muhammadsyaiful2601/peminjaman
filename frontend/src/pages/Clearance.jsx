@@ -60,7 +60,6 @@ async function printHtmlDocument(html) {
   iframe.style.width = '210mm'
   iframe.style.height = '297mm'
   iframe.style.border = '0'
-  iframe.style.visibility = 'hidden'
   document.body.appendChild(iframe)
 
   const doc = iframe.contentWindow.document
