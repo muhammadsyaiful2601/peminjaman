@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useState } from 'react'
+﻿import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import api from '../api/axios'
 import { downloadBlob } from '../utils/downloadBlob'
@@ -58,6 +58,8 @@ function Clearance() {
   const [searchParams] = useSearchParams()
   const isDetailPage = location.pathname === '/clearance/detail'
   const [searchInput, setSearchInput] = useState('')
+  const searchTimerRef = useRef(null)
+  const previousSearchInputRef = useRef(searchInput)
   const [borrowers, setBorrowers] = useState([])
   const [searching, setSearching] = useState(true)
   const [selected, setSelected] = useState(null)
@@ -111,6 +113,21 @@ function Clearance() {
     api.get('/technicians').then((response) => setTechnicians(response.data || [])).catch(() => {})
   }, [loadBorrowers])
 
+  useEffect(() => {
+    if (previousSearchInputRef.current === searchInput) return
+    previousSearchInputRef.current = searchInput
+
+    searchTimerRef.current = window.setTimeout(() => {
+      searchTimerRef.current = null
+      loadBorrowers(searchInput)
+    }, 300)
+
+    return () => {
+      if (searchTimerRef.current) window.clearTimeout(searchTimerRef.current)
+      searchTimerRef.current = null
+    }
+  }, [searchInput, loadBorrowers])
+
   const loadDetail = useCallback(async (borrower) => {
     setLoadingDetail(true)
     setError('')
@@ -148,13 +165,18 @@ function Clearance() {
 
   const handleSearch = (event) => {
     event.preventDefault()
+    if (searchTimerRef.current) window.clearTimeout(searchTimerRef.current)
+    searchTimerRef.current = null
     loadBorrowers(searchInput)
   }
 
   const handleReset = () => {
+    if (searchTimerRef.current) window.clearTimeout(searchTimerRef.current)
+    searchTimerRef.current = null
+    const hadSearch = searchInput !== ''
     setSearchInput('')
     setSelectedKeys(new Set())
-    loadBorrowers('')
+    if (!hadSearch) loadBorrowers('')
   }
 
   const handleSelect = (borrower) => {

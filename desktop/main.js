@@ -114,7 +114,8 @@ const PREFERRED_PORT = 8642;
 //  tetap naik agar backend & frontend terpasang ikut terbarui.
 //  1.4.17: perbaiki modal Bebas Labor yang gagal dirender saat daftar teknisi
 //  tersedia karena prop technicianId tidak diterima komponen modal.
-const TEMPLATE_VERSION = '1.4.17';
+//  1.4.18: pencarian daftar Bebas Labor kini otomatis saat pengguna mengetik.
+const TEMPLATE_VERSION = '1.4.18';
 const isDev = !app.isPackaged;
 
 /* ------------------------------------------------------------------ paths */
