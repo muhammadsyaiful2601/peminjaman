@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('desktop', {
   saveFile: (buffer, filename) => ipcRenderer.invoke('file:save', { buffer, filename }),
   savePdf: (bytes, filename) => ipcRenderer.invoke('file:save-pdf', { bytes: Array.from(bytes), filename }),
   previewReportPdf: (bytes) => ipcRenderer.invoke('report:preview-pdf', { bytes: Array.from(bytes) }),
+  printDocument: (html) => ipcRenderer.invoke('document:print', { html }),
   printReport: () => ipcRenderer.invoke('report:print'),
   openEmailSetup: () => ipcRenderer.invoke('setup:open'),
   getSetup: () => ipcRenderer.invoke('setup:get'),

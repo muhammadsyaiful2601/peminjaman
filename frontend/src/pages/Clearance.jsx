@@ -280,7 +280,10 @@ function Clearance() {
           signatory_technician_id: signatoryTechnicianId || undefined,
         }, { responseType: 'text' })
 
-        await printHtmlDocument(response.data)
+        const printResult = await printHtmlDocument(response.data)
+        if (printResult && printResult.ok === false && !printResult.canceled) {
+          throw new Error(printResult.message || 'Dialog cetak tidak dapat dibuka.')
+        }
         setSuccess(`Dialog cetak surat untuk ${borrower?.name || ''} telah dibuka.`)
         closeModal()
       } else if (modalAction === 'bulk-print') {
@@ -306,7 +309,10 @@ function Clearance() {
           signatory_technician_id: signatoryTechnicianId || undefined,
         }, { responseType: 'text' })
 
-        await printHtmlDocument(response.data)
+        const printResult = await printHtmlDocument(response.data)
+        if (printResult && printResult.ok === false && !printResult.canceled) {
+          throw new Error(printResult.message || 'Dialog cetak tidak dapat dibuka.')
+        }
         setSuccess(`Dialog cetak masal untuk ${selectedBorrowers.length} mahasiswa telah dibuka.`)
         closeModal()
       }

@@ -98,7 +98,14 @@ const PREFERRED_PORT = 8642;
 //  Endpoint /api/loans/report/print menyediakan dokumen cetak tersendiri
 //  beserta tanda tangan digitalnya. Tanda tangan juga dibatasi ke PNG/JPEG
 //  agar SVG lama tidak membuat dokumen gagal dirender.
-const TEMPLATE_VERSION = '1.4.13';
+//  1.4.14: cetak dokumen pada aplikasi desktop tidak lagi memakai
+//  `iframe.contentWindow.print()`. Di Electron perintah itu mencetak seluruh
+//  jendela utama (iframe-nya di luar layar) sehingga hasilnya kosong.
+//  IPC `document:print` mencetak lewat BrowserWindow khusus: dokumen ditulis ke
+//  berkas sementara, diberi <base> ke server lokal agar logo kop surat & tanda
+//  tangan tetap termuat, lalu dicetak pada ukuran A4. Berkas sementara
+//  dipakai karena URL `data:` punya batas panjang.
+const TEMPLATE_VERSION = '1.4.14';
 const isDev = !app.isPackaged;
 
 /* ------------------------------------------------------------------ paths */
@@ -1535,6 +1542,97 @@ function registerIpc() {
       return { ok: true, filePath: result.filePath };
     } catch (error) {
       return { ok: false, message: String(error && error.message ? error.message : error) };
+    }
+  });
+
+  ipcMain.handle('document:print', async (_event, data) => {
+    // Dokumen dicetak dari jendela BrowserWindow sendiri, bukan dari iframe di
+    // halaman aplikasi. Di Electron, `iframe.contentWindow.print()` mencetak
+    // seluruh jendela utama (iframe-nya berada di luar layar), sehingga hasil
+    // cetak keluar kosong.
+    const html = String(data?.html || '');
+    if (!html.trim()) return { ok: false, message: 'Dokumen kosong.' };
+    if (!backendPort) return { ok: false, message: 'Server lokal belum siap.' };
+
+    let printWindow = null;
+
+    try {
+      // Gambar pada dokumen memakai path dari server (/storage/..., /images/...),
+      // jadi halaman diberi <base> agar path itu tetap dapat diambil lewat
+      // backend lokal dan kop surat/tanda tangan tidak hilang.
+      const origin = `http://127.0.0.1:${backendPort}/`;
+      const printable = html.includes('<head>')
+        ? html.replace('<head>', `<head><base href="${origin}">`)
+        : `<base href="${origin}">${html}`;
+
+      printWindow = new BrowserWindow({
+        show: false,
+        width: 794,
+        height: 1123,
+        webPreferences: {
+          contextIsolation: true,
+          nodeIntegration: false,
+          sandbox: true,
+          spellcheck: false,
+        },
+      });
+      printWindow.setContentSize(794, 1123);
+
+      // Dokumen ditulis ke berkas sementara, bukan `data:` URL: dokumen cetak
+      // massal bisa berukuran besar (tanda tangan digital/base64) dan URL
+      // data punya batas panjang yang membuat halaman gagal dimuat.
+      const tempFile = path.join(app.getPath('temp'), `cetak-dokumen-${Date.now()}.html`);
+      fs.writeFileSync(tempFile, printable, 'utf8');
+
+      try {
+        await printWindow.loadFile(tempFile);
+      } finally {
+        // Hapus setelah selesai dimuat; berkas sudah ada di memori browser.
+        setTimeout(() => {
+          try {
+            fs.unlinkSync(tempFile);
+          } catch {
+            // berkas sementara akan dibersihkan oleh sistem bila gagal
+          }
+        }, 30000);
+      }
+
+      // Tunggu gambar & font supaya tidak ada bagian yang tercetak kosong.
+      await printWindow.webContents.executeJavaScript(`
+        new Promise((resolve) => {
+          const done = () => resolve(true);
+          const images = Array.from(document.images || []);
+          const fonts = document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve();
+          const waitImages = images.length === 0 ? Promise.resolve() : new Promise((res) => {
+            let pending = images.length;
+            const settle = () => { pending -= 1; if (pending <= 0) res(); };
+            images.forEach((img) => {
+              if (img.complete) { settle(); return; }
+              img.addEventListener('load', settle);
+              img.addEventListener('error', settle);
+            });
+            setTimeout(res, 2000);
+          });
+          Promise.all([waitImages, fonts]).then(done);
+          setTimeout(done, 3000);
+        })
+      `, true);
+
+      const result = await new Promise((resolve) => {
+        printWindow.webContents.print(
+          { silent: false, printBackground: true, pageSize: 'A4', margins: { marginType: 'default' } },
+          (success, failureReason) => resolve({ success, failureReason }),
+        );
+      });
+
+      if (result.success) return { ok: true };
+      if (/cancel/i.test(result.failureReason || '')) return { ok: false, canceled: true };
+
+      return { ok: false, message: result.failureReason || 'Dialog cetak tidak dapat dibuka.' };
+    } catch (error) {
+      return { ok: false, message: String(error && error.message ? error.message : error) };
+    } finally {
+      if (printWindow && !printWindow.isDestroyed()) printWindow.destroy();
     }
   });
 

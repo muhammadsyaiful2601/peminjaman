@@ -117,6 +117,13 @@ function Reports() {
     ? `${startDate ? formatDate(`${startDate}T00:00:00`) : 'Awal'} - ${endDate ? formatDate(`${endDate}T00:00:00`) : 'Sekarang'}`
     : 'Seluruh periode'
 
+  const reportParams = {
+    status: status || undefined,
+    start_date: startDate || undefined,
+    end_date: endDate || undefined,
+    technician_id: technicianId || undefined,
+  }
+
   const handlePrint = async () => {
     setPrintError('')
     try {
@@ -124,16 +131,23 @@ function Reports() {
       // sehingga sidebar & footer tetap tidak ikut tercetak dan isi laporan
       // tidak bergeser/terpotong akibat offset `md:pl-*` pada lebar kertas A4.
       const response = await api.get('/loans/report/print', {
-        params: {
-          status: status || undefined,
-          start_date: startDate || undefined,
-          end_date: endDate || undefined,
-          technician_id: technicianId || undefined,
-        },
+        params: reportParams,
         responseType: 'text',
       })
-      setPrintError('')
-      await printHtmlDocument(response.data)
+      const result = await printHtmlDocument(response.data)
+      if (!result || result.ok !== false || result.canceled) return
+
+      // Dialog cetak gagal (mis. tidak ada printer): daripada membuang hasil,
+      // buka PDF-nya supaya petugas tetap bisa mencetak dari penampil dokumen.
+      const preview = await window.desktop?.previewReportPdf?.(
+        new Uint8Array(await (await api.get('/loans/report/download', {
+          params: reportParams,
+          responseType: 'blob',
+        })).data.arrayBuffer()),
+      )
+      if (!preview?.ok) {
+        setPrintError(result.message || 'Dialog cetak tidak dapat dibuka.')
+      }
     } catch (requestError) {
       setPrintError(readPrintError(requestError))
     }
