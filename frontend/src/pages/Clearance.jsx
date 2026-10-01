@@ -256,12 +256,20 @@ function Clearance() {
           laboratory: letter.laboratory || undefined,
           signatory_name: letter.signatory_name,
           signatory_nip: letter.signatory_nip,
+          // Tanpa ini, tanda tangan digital teknisi yang dipilih tidak ikut
+          // tercetak karena jalur ini berbeda dari jalur unduh di halaman detail.
+          signatory_technician_id: signatoryTechnicianId || undefined,
         }, { responseType: 'blob' })
 
         const disposition = response.headers['content-disposition'] || ''
         const match = disposition.match(/filename="?([^";]+)"?/)
         const filename = match ? match[1] : 'surat-bebas-labor.pdf'
-        await downloadBlob(response.data, filename)
+        const saved = await downloadBlob(response.data, filename)
+        // Hasil penyimpanan wajib diperiksa: bila dialog simpan gagal atau
+        // pengguna membatalkan, jangan sampai tetap menampilkan "berhasil".
+        if (saved && saved.ok === false && !saved.canceled) {
+          throw new Error(saved.message || 'Surat gagal disimpan.')
+        }
         setSuccess(`Surat bebas labor ${borrower?.name || ''} berhasil diunduh.`)
         closeModal()
       } else if (modalAction === 'print') {
@@ -367,7 +375,12 @@ function Clearance() {
         ? `surat-bebas-labor-${selected.student_id || selected.name}.pdf`
         : `surat-tanggungan-labor-${selected.student_id || selected.name}.pdf`
 
-      await downloadBlob(response.data, filename)
+      const saved = await downloadBlob(response.data, filename)
+      // Sama seperti jalur lainnya: jangan tampilkan "berhasil" bila berkas
+      // sebenarnya tidak tersimpan.
+      if (saved && saved.ok === false && !saved.canceled) {
+        throw new Error(saved.message || 'Surat gagal disimpan.')
+      }
       setSuccess(isEligible
         ? 'Surat bebas labor berhasil diunduh.'
         : 'Surat keterangan tanggungan peminjaman berhasil diunduh.')

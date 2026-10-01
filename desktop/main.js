@@ -109,7 +109,10 @@ const PREFERRED_PORT = 8642;
 //  menghasilkan arraySejuta angka). Handler menyimpan dengan `toBuffer()` dan
 //  menolak berkas 0 byte, jadi pengguna tidak pernah menerima dokumen kosong
 //  yang terbuka sebagai halaman putih.
-const TEMPLATE_VERSION = '1.4.15';
+//  1.4.16: hanya frontend yang berubah (halaman Bebas Labor memeriksa hasil
+//  penyimpanan berkas & mengirim id teknisi penandatangan). TEMPLATE_VERSION
+//  tetap naik agar backend & frontend terpasang ikut terbarui.
+const TEMPLATE_VERSION = '1.4.16';
 const isDev = !app.isPackaged;
 
 /* ------------------------------------------------------------------ paths */
