@@ -26,11 +26,38 @@ export function timestampedFilename(prefix, extension, date = new Date()) {
   return `${prefix}-${stamp}.${extension}`
 }
 
+/**
+ * Pastikan respons unduhan benar-benar dokumen, bukan pesan galat.
+ *
+ * Tanpa pemeriksaan ini, galat server (401/419/500) yang dikembalikan sebagai
+ * Blob akan disimpan sebagai berkas `.pdf` dan saat dibuka tampak seperti
+ * halaman putih. Melempar galat membuat pengguna melihat pesan yang jelas.
+ */
+async function assertUsableDocument(blob, filename) {
+  if (!blob || typeof blob.size !== 'number') {
+    throw new Error('Respons unduhan tidak berisi berkas.')
+  }
+
+  if (blob.size === 0) {
+    throw new Error(`Berkas ${filename} kosong. Silakan coba lagi.`)
+  }
+
+  if (!String(filename).toLowerCase().endsWith('.pdf')) return
+
+  const head = new Uint8Array(await blob.slice(0, 5).arrayBuffer())
+  const signature = String.fromCharCode(...head)
+  if (!signature.startsWith('%PDF')) {
+    throw new Error('Server tidak mengembalikan dokumen PDF yang sah. Silakan muat ulang halaman lalu coba lagi.')
+  }
+}
+
 export async function downloadBlob(blob, filename) {
+  await assertUsableDocument(blob, filename)
+
   const isPdf = String(filename).toLowerCase().endsWith('.pdf')
 
   if (window.desktop?.isDesktop && isPdf && window.desktop.savePdf) {
-    return window.desktop.savePdf(new Uint8Array(await blob.arrayBuffer()), filename)
+    return window.desktop.savePdf(await blob.arrayBuffer(), filename)
   }
 
   if (window.desktop?.isDesktop && window.desktop.saveFile) {

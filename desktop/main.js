@@ -105,7 +105,11 @@ const PREFERRED_PORT = 8642;
 //  berkas sementara, diberi <base> ke server lokal agar logo kop surat & tanda
 //  tangan tetap termuat, lalu dicetak pada ukuran A4. Berkas sementara
 //  dipakai karena URL `data:` punya batas panjang.
-const TEMPLATE_VERSION = '1.4.14';
+//  1.4.15: PDF dikirim lewat IPC sebagai ArrayBuffer (bukan `Array.from` yang
+//  menghasilkan arraySejuta angka). Handler menyimpan dengan `toBuffer()` dan
+//  menolak berkas 0 byte, jadi pengguna tidak pernah menerima dokumen kosong
+//  yang terbuka sebagai halaman putih.
+const TEMPLATE_VERSION = '1.4.15';
 const isDev = !app.isPackaged;
 
 /* ------------------------------------------------------------------ paths */
@@ -1519,17 +1523,25 @@ function registerIpc() {
       });
       if (result.canceled || !result.filePath) return { ok: false, canceled: true };
 
-      fs.writeFileSync(result.filePath, Buffer.from(data.buffer));
+      fs.writeFileSync(result.filePath, toBuffer(data.buffer));
       return { ok: true, filePath: result.filePath };
     } catch (error) {
       return { ok: false, message: String(error && error.message ? error.message : error) };
     }
   });
 
+  // PDF dikirim sebagai ArrayBuffer (bukan array angka) agar isi dokumen utuh
+  // dan tidak menghabiskan memori saat diserialisasi lewat IPC. Berkas kosong
+  // ditolak supaya pengguna tidak pernah menerima dokumen 0 byte yang saat
+  // dibuka tampak seperti halaman putih.
   ipcMain.handle('file:save-pdf', async (_event, data) => {
     try {
-      if (!data || !Array.isArray(data.bytes) || !data.filename) {
+      if (!data || !data.filename) {
         return { ok: false, message: 'Data file tidak valid.' };
+      }
+      const buffer = toBuffer(data.buffer ?? data.bytes);
+      if (buffer.length === 0) {
+        return { ok: false, message: 'Dokumen kosong, tidak disimpan.' };
       }
       const safeName = String(data.filename).replace(/[<>:"/\\|?*]/g, '-');
       const result = await dialog.showSaveDialog({
@@ -1538,7 +1550,7 @@ function registerIpc() {
         filters: [{ name: 'Dokumen PDF', extensions: ['pdf'] }],
       });
       if (result.canceled || !result.filePath) return { ok: false, canceled: true };
-      fs.writeFileSync(result.filePath, Buffer.from(data.bytes));
+      fs.writeFileSync(result.filePath, buffer);
       return { ok: true, filePath: result.filePath };
     } catch (error) {
       return { ok: false, message: String(error && error.message ? error.message : error) };
@@ -2024,7 +2036,22 @@ if (!gotLock) {
     }
   });
 
-  app.whenReady().then(() => {
+  /**
+ * Ubah data yang datang lewat IPC menjadi Buffer.
+ *
+ * Menerima ArrayBuffer (jalur utama), TypedArray, Buffer, atau array angka
+ * agar tetap kompatibel dengan pemanggil lama.
+ */
+function toBuffer(value) {
+  if (!value) return Buffer.alloc(0);
+  if (Buffer.isBuffer(value)) return value;
+  if (value instanceof ArrayBuffer) return Buffer.from(new Uint8Array(value));
+  if (ArrayBuffer.isView(value)) return Buffer.from(value.buffer, value.byteOffset, value.byteLength);
+  if (Array.isArray(value)) return Buffer.from(value);
+  return Buffer.alloc(0);
+}
+
+app.whenReady().then(() => {
     registerIpc();
     buildMenu();
     boot();

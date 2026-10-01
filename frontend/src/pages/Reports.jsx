@@ -50,6 +50,7 @@ function Reports() {
   const [technicians, setTechnicians] = useState([])
   const [technicianId, setTechnicianId] = useState('')
   const [printError, setPrintError] = useState('')
+  const [downloadError, setDownloadError] = useState('')
 
   const selectedTechnician = technicians.find((technician) => String(technician.id) === String(technicianId))
 
@@ -154,17 +155,23 @@ function Reports() {
   }
 
   const handleDownload = async () => {
-    const response = await api.get('/loans/report/download', {
-      params: {
-        status: status || undefined,
-        start_date: startDate || undefined,
-        end_date: endDate || undefined,
-        technician_id: technicianId || undefined,
-      },
-      responseType: 'blob',
-    })
-    const result = await downloadBlob(response.data, `laporan-peminjaman-${new Date().toISOString().slice(0, 10)}.pdf`)
-    if (result && !result.ok && !result.canceled) throw new Error(result.message || 'File gagal disimpan.')
+    setDownloadError('')
+    try {
+      const response = await api.get('/loans/report/download', {
+        params: reportParams,
+        responseType: 'blob',
+      })
+      const result = await downloadBlob(response.data, `laporan-peminjaman-${new Date().toISOString().slice(0, 10)}.pdf`)
+      if (result && !result.ok && !result.canceled) throw new Error(result.message || 'File gagal disimpan.')
+    } catch (requestError) {
+      // Tanpa try/catch, galat menjadi unhandled rejection dan pengguna
+      // tidak melihat apa pun.
+      setDownloadError(
+        requestError instanceof Error
+          ? requestError.message
+          : requestError.response?.data?.message || 'Laporan gagal diunduh.',
+      )
+    }
   }
 
   return (
@@ -204,6 +211,7 @@ function Reports() {
         </div>
       </div>
       {printError && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{printError}</div>}
+      {downloadError && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{downloadError}</div>}
 
       <div className="report-filters mb-6 grid grid-cols-1 gap-4 rounded-xl border border-slate-200 bg-white p-4 md:grid-cols-3">
         <label className="text-sm font-medium text-slate-700">
