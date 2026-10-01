@@ -27,6 +27,12 @@ export function timestampedFilename(prefix, extension, date = new Date()) {
 }
 
 export async function downloadBlob(blob, filename) {
+  const isPdf = String(filename).toLowerCase().endsWith('.pdf')
+
+  if (window.desktop?.isDesktop && isPdf && window.desktop.savePdf) {
+    return window.desktop.savePdf(new Uint8Array(await blob.arrayBuffer()), filename)
+  }
+
   if (window.desktop?.isDesktop && window.desktop.saveFile) {
     // ArrayBuffer dikirim lewat IPC (bukan array angka) supaya berkas besar
     // seperti arsip backup ZIP tidak menghabiskan memori.

@@ -98,6 +98,12 @@ async function printHtmlDocument(html) {
     setTimeout(done, 2000)
   })
 
+  await Promise.race([
+    doc.fonts?.ready || Promise.resolve(),
+    new Promise((resolve) => setTimeout(resolve, 2000)),
+  ])
+  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+
   try {
     iframe.contentWindow.focus()
     iframe.contentWindow.print()
