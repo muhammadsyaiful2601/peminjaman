@@ -164,6 +164,20 @@ jobs:
           fi
           gh release edit "$TAG" --notes-file "$NOTES_FILE" --repo "${{ github.repository }}"
 
+      - name: Perbarui catatan pada release yang sudah ada
+        if: steps.gate.outputs.skip == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="v${{ steps.ver.outputs.version }}"
+          NOTES_FILE="desktop/release-notes/${{ steps.ver.outputs.version }}.md"
+          if [ ! -f "$NOTES_FILE" ]; then
+            echo "[notes] $NOTES_FILE tidak ada; catatan release yang sudah ada tidak diubah."
+            exit 0
+          fi
+          gh release edit "$TAG" --notes-file "$NOTES_FILE" --repo "${{ github.repository }}"
+
       - name: Ringkasan
         if: steps.gate.outputs.skip != 'true'
         shell: bash
