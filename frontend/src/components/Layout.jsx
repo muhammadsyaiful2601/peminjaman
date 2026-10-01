@@ -147,7 +147,7 @@ function Layout() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="app-shell min-h-screen bg-gray-50">
       {/* Sidebar */}
       <aside className={`fixed inset-y-0 left-0 hidden overflow-hidden bg-white text-slate-800 transition-[width] duration-300 ease-in-out md:flex md:flex-col ${sidebarCollapsed ? 'w-20' : 'w-64'} border-r border-slate-200`}>
         <div className={`border-b border-slate-100 py-5 ${sidebarCollapsed ? 'px-3' : 'px-6'}`}>
@@ -201,7 +201,7 @@ function Layout() {
       </aside>
 
       {/* Main content */}
-      <div className={`flex min-h-screen flex-col transition-[padding] duration-300 ease-in-out ${sidebarCollapsed ? 'md:pl-20' : 'md:pl-64'}`}>
+      <div className={`app-content flex min-h-screen flex-col transition-[padding] duration-300 ease-in-out ${sidebarCollapsed ? 'md:pl-20' : 'md:pl-64'}`}>
         {/* Mobile header */}
         <header className="md:hidden bg-white border-b border-slate-200 text-slate-900 px-4 py-3 flex items-center justify-between sticky top-0 z-30">
           <div className="flex items-center gap-3">
@@ -287,7 +287,7 @@ function Layout() {
         </main>
 
         {/* Footer */}
-        <footer className={`fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white px-4 py-3 transition-[left] duration-300 ease-in-out md:px-8 ${sidebarCollapsed ? 'md:left-20' : 'md:left-64'}`}>
+        <footer className={`app-footer fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white px-4 py-3 transition-[left] duration-300 ease-in-out md:px-8 ${sidebarCollapsed ? 'md:left-20' : 'md:left-64'}`}>
           <p className="flex items-center justify-center gap-1.5 text-xs text-slate-400">
             <CopyrightIcon className="h-3.5 w-3.5" aria-hidden="true" />
             <span>developed by Muhammad Syaiful</span>

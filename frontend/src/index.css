@@ -27,13 +27,33 @@
 		margin: 1.2cm;
 	}
 
+	/* Seluruh kerangka aplikasi disembunyikan: sidebar tetap, header, navigasi,
+	   dan footer. Footer bersifat `fixed` sehingga tanpa aturan ini ia ikut
+	   tercetak dan menutupi isi setiap halaman. */
 	aside,
-	header {
+	header,
+	footer,
+	nav {
 		display: none !important;
 	}
 
 	main {
 		padding: 0 !important;
+	}
+
+	/* Pembungkus konten memakai `md:pl-64`/`md:pl-20` (varian `md:` =
+	   min-width 768px). Lebar kertas A4 sekitar 794px, jadi aturan itu ikut
+	   aktif saat mencetak dan mendorong isi 256px ke kanan sampai terpotong
+	   atau terlihat kosong. Offset serta tinggi layar penuh dinolkan. */
+	.app-shell,
+	.app-content {
+		display: block !important;
+		min-height: 0 !important;
+		padding-left: 0 !important;
+	}
+
+	.app-content > * {
+		min-height: 0 !important;
 	}
 
 	body {

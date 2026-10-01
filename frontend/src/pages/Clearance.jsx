@@ -2,6 +2,7 @@
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import api from '../api/axios'
 import { downloadBlob } from '../utils/downloadBlob'
+import { printHtmlDocument } from '../utils/printHtml'
 import { ClearanceLetterModal } from '../components/ClearanceLetterModal'
 import TablePagination from '../components/TablePagination'
 import useTablePagination, { ROWS_PER_PAGE } from '../hooks/useTablePagination'
@@ -50,69 +51,6 @@ const formatDate = (value) => (value ? new Date(value).toLocaleDateString('id-ID
   month: 'short',
   year: 'numeric',
 }) : '-')
-
-async function printHtmlDocument(html) {
-  const iframe = document.createElement('iframe')
-  iframe.setAttribute('aria-hidden', 'true')
-  iframe.style.position = 'fixed'
-  iframe.style.left = '-10000px'
-  iframe.style.top = '0'
-  iframe.style.width = '210mm'
-  iframe.style.height = '297mm'
-  iframe.style.border = '0'
-  document.body.appendChild(iframe)
-
-  const doc = iframe.contentWindow.document
-  doc.open()
-  doc.write(html)
-  doc.close()
-
-  await new Promise((resolve) => {
-    let resolved = false
-    const done = () => {
-      if (resolved) return
-      resolved = true
-      resolve()
-    }
-    const images = Array.from(doc.images || [])
-    if (images.length === 0 || images.every((img) => img.complete)) {
-      setTimeout(done, 150)
-      return
-    }
-    let pending = images.length
-    images.forEach((img) => {
-      if (img.complete) {
-        pending -= 1
-        if (pending === 0) done()
-      } else {
-        img.addEventListener('load', () => {
-          pending -= 1
-          if (pending === 0) done()
-        })
-        img.addEventListener('error', () => {
-          pending -= 1
-          if (pending === 0) done()
-        })
-      }
-    })
-    setTimeout(done, 2000)
-  })
-
-  await Promise.race([
-    doc.fonts?.ready || Promise.resolve(),
-    new Promise((resolve) => setTimeout(resolve, 2000)),
-  ])
-  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
-
-  try {
-    iframe.contentWindow.focus()
-    iframe.contentWindow.print()
-  } finally {
-    setTimeout(() => {
-      iframe.remove()
-    }, 60000)
-  }
-}
 
 function Clearance() {
   const navigate = useNavigate()

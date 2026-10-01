@@ -264,7 +264,7 @@ function Technicians() {
                       <Upload className="h-3.5 w-3.5" />Ganti berkas
                       <input
                         type="file"
-                        accept=".png,.jpg,.jpeg,.svg,image/png,image/jpeg,image/svg+xml"
+                        accept=".png,.jpg,.jpeg,image/png,image/jpeg"
                         onChange={handleSignatureChange}
                         className="sr-only"
                       />
@@ -274,10 +274,10 @@ function Technicians() {
                   <label className="mt-1.5 flex cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3 py-5 text-center transition hover:border-cyan-400 hover:bg-cyan-50/40">
                     <Upload className="h-5 w-5 text-slate-400" />
                     <span className="text-xs font-medium text-slate-600">Pilih berkas tanda tangan</span>
-                    <span className="text-[11px] text-slate-400">PNG, JPG, atau SVG - maksimal 2 MB</span>
+                    <span className="text-[11px] text-slate-400">PNG atau JPG - maksimal 2 MB</span>
                     <input
                       type="file"
-                      accept=".png,.jpg,.jpeg,.svg,image/png,image/jpeg,image/svg+xml"
+                      accept=".png,.jpg,.jpeg,image/png,image/jpeg"
                       onChange={handleSignatureChange}
                       className="sr-only"
                     />

@@ -86,7 +86,8 @@ class TechnicianController extends Controller
 
     /**
      * Aturan validasi. NIP tetap unik (kecuali saat mengubah teknisi itu
-     * sendiri), dan tanda tangan dibatasi gambar ringan atau vektor SVG.
+     * sendiri), dan tanda tangan dibatasi ke format raster yang didukung PDF
+     * (PNG/JPEG) karena SVG membuat dokumen gagal dirender.
      *
      * @return array<string, array<int, mixed>>
      */
@@ -102,7 +103,7 @@ class TechnicianController extends Controller
             'whatsapp' => ['nullable', 'string', 'max:30'],
             'is_primary' => ['sometimes', 'boolean'],
             'remove_signature' => ['sometimes', 'boolean'],
-            'signature' => ['nullable', 'file', 'mimes:png,jpg,jpeg,svg', 'max:2048'],
+            'signature' => ['nullable', 'file', 'mimes:png,jpg,jpeg', 'max:2048'],
         ];
     }
 

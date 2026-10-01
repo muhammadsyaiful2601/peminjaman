@@ -48,7 +48,7 @@ class Technician extends Model
 
         $mime = (string) ($disk->mimeType($this->signature_path) ?: 'image/png');
 
-        if (! str_starts_with($mime, 'image/')) {
+        if (! in_array($mime, ['image/png', 'image/jpeg'], true)) {
             return null;
         }
 

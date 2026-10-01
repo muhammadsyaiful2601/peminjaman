@@ -244,6 +244,20 @@ class ClearanceLetterTest extends TestCase
         $this->assertStringNotContainsString('WIB', $text);
     }
 
+    /**
+     * Nomor surat bulan berjalan: `001/BEBAS-LAB/PNP/{bulan romawi}/{tahun}`.
+     *
+     * Dihitung dari tanggal sistem, bukan ditulis tetap, supaya pengujian tidak
+     * gagal hanya karena bulan berganti.
+     */
+    private function currentLetterNumber(): string
+    {
+        $romans = [1 => 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'];
+        $today = now();
+
+        return sprintf('001/BEBAS-LAB/PNP/%s/%s', $romans[(int) $today->month], $today->year);
+    }
+
     public function test_unduh_surat_bebas_labor_menghasilkan_pdf_berkop_surat(): void
     {
         Sanctum::actingAs($this->staff());
@@ -264,7 +278,7 @@ class ClearanceLetterTest extends TestCase
 
         $response->assertStatus(200);
         $response->assertHeader('X-Clearance-Eligible', '1');
-        $response->assertHeader('X-Clearance-Letter-Number', '001/BEBAS-LAB/PNP/IX/2026');
+        $response->assertHeader('X-Clearance-Letter-Number', $this->currentLetterNumber());
         $this->assertStringContainsString('application/pdf', (string) $response->headers->get('content-type'));
         $this->assertStringContainsString('surat-bebas-labor-Budi-Santoso', (string) $response->headers->get('content-disposition'));
 
@@ -287,7 +301,7 @@ class ClearanceLetterTest extends TestCase
         $this->assertStringNotContainsString('Dicetak dari sistem', $text);
         $this->assertStringNotContainsString('WIB', $text);
         $this->assertStringContainsString($loan->loan_code, $text);
-        $this->assertStringContainsString('001/BEBAS-LAB/PNP/IX/2026', $text);
+        $this->assertStringContainsString($this->currentLetterNumber(), $text);
         $this->assertStringContainsString('Nofa Hendrayana', $text);
         // Surat bebas labor tidak boleh memuat pernyataan tanggungan.
         $this->assertStringNotContainsString('masih memiliki tanggungan', $text);

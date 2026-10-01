@@ -22,7 +22,7 @@ use Tests\TestCase;
  *
  * Teknisi adalah pilihan penandatangan dokumen PDF (Laporan, Surat Bebas
  * Labor, Surat Peminjaman Skala Besar). Selain nama & NIP, tiap teknisi punya
- * jabatan/peran lab, nomor WhatsApp, dan tanda tangan digital (PNG/JPG/SVG).
+ * jabatan/peran lab, nomor WhatsApp, dan tanda tangan digital (PNG/JPG).
  * Hanya satu teknisi yang boleh berstatus "Teknisi Utama".
  */
 class TechnicianTest extends TestCase
@@ -195,13 +195,22 @@ class TechnicianTest extends TestCase
         );
     }
 
-    public function test_tanda_tangan_svg_berhasil_ditercetak_tanpa_menggagalkan_pdf(): void
+    public function test_tanda_tangan_svg_ditolak_dan_svg_lama_tidak_merusak_pdf(): void
     {
         Storage::fake('public');
         $admin = $this->admin();
 
-        // Validasi menerima SVG. DomPDF sometimes gagal membaca SVG, jadi
-        // tanda tangan vektor harus diuji agar surat tetap bisa dibuat.
+        $this->withHeader('Accept', 'application/json')->post('/api/technicians', [
+            'name' => 'Unggahan SVG',
+            'nip' => '3002',
+            'signature' => UploadedFile::fake()->createWithContent(
+                'tt.svg',
+                '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="40"></svg>',
+            ),
+        ])->assertUnprocessable()->assertJsonValidationErrors('signature');
+
+        // Data lama yang sudah tersimpan sebagai SVG harus diabaikan oleh
+        // DomPDF agar tidak membuat dokumen gagal dirender.
         $technician = Technician::create([
             'name' => 'Teknisi SVG',
             'nip' => '3001',
@@ -226,12 +235,14 @@ class TechnicianTest extends TestCase
             'created_by' => $admin->id,
         ]);
 
-        $pdf = $this->get('/api/loans/report/download?technician_id='.$technician->id)->assertOk()->getContent();
-        $this->assertStringStartsWith('%PDF', $pdf);
-        $this->assertGreaterThanOrEqual(
-            1,
-            substr_count($pdf, '/Subtype /Image') - 1,
-            'Tanda tangan SVG ikut dirender pada PDF',
+        $pdfWithoutSignature = $this->get('/api/loans/report/download')->assertOk()->getContent();
+        $pdfWithLegacySvg = $this->get('/api/loans/report/download?technician_id='.$technician->id)->assertOk()->getContent();
+
+        $this->assertStringStartsWith('%PDF', $pdfWithLegacySvg);
+        $this->assertSame(
+            $this->countPdfImages($pdfWithoutSignature),
+            $this->countPdfImages($pdfWithLegacySvg),
+            'Tanda tangan SVG lama tidak disematkan ke PDF',
         );
     }
 
@@ -239,6 +250,77 @@ class TechnicianTest extends TestCase
     private function countPdfImages(string $pdf): int
     {
         return substr_count($pdf, '/Subtype /Image');
+    }
+
+    public function test_cetak_laporan_menghasilkan_dokumen_berdiri_sendiri(): void
+    {
+        Storage::fake('public');
+        $admin = $this->admin();
+
+        $item = Item::create([
+            'name' => 'Kabel HDMI', 'item_code' => 'BRG-001', 'category' => 'Peralatan', 'stock' => 5,
+        ]);
+        Loan::create([
+            'uuid' => (string) Str::uuid(),
+            'loan_code' => 'PJM-2026-8001',
+            'item_id' => $item->id,
+            'qty' => 2,
+            'borrower_name' => 'Budi Santoso',
+            'borrower_email' => 'budi@example.com',
+            'status' => 'borrowed',
+            'created_by' => $admin->id,
+        ]);
+
+        $technician = Technician::create([
+            'name' => 'Nofa Hendrayana, S.T.',
+            'nip' => '198501012010011001',
+            'signature_path' => UploadedFile::fake()->image('tanda.png', 40, 20)->store('signatures', 'public'),
+        ]);
+
+        $response = $this->get('/api/loans/report/print?technician_id='.$technician->id);
+
+        $response->assertOk();
+        $html = $response->getContent();
+
+        // Dokumen berdiri sendiri: memuat kop surat, tabel, dan tanda tangan
+        // digital, tanpa kerangka aplikasi apa pun.
+        $this->assertStringContainsString('LAPORAN PEMINJAMAN BARANG', $html);
+        $this->assertStringContainsString('POLITEKNIK NEGERI PADANG', $html);
+        $this->assertStringContainsString('PJM-2026-8001', $html);
+        $this->assertStringContainsString('Budi Santoso', $html);
+        $this->assertStringContainsString('Nofa Hendrayana, S.T.', $html);
+        $this->assertStringContainsString('signature-image', $html);
+        $this->assertStringContainsString('data:image/', $html);
+
+        // Kerangka aplikasi tidak boleh ikut: itulah sebab hasil cetak sebelumnya
+        // kosong/tergeser karena sidebar & footer tetap serta offset `md:pl-*`.
+        $this->assertStringNotContainsString('app-shell', $html);
+        $this->assertStringNotContainsString('app-content', $html);
+        $this->assertStringNotContainsString('developed by Muhammad Syaiful', $html);
+    }
+
+    public function test_cetak_laporan_tanpa_tanda_tangan_tetap_berisi_dokumen(): void
+    {
+        $this->admin();
+
+        $response = $this->get('/api/loans/report/print');
+
+        $response->assertOk();
+        $html = $response->getContent();
+
+        $this->assertStringContainsString('LAPORAN PEMINJAMAN BARANG', $html);
+        // Tanpa transaksi tetap terbit dengan keterangan kosong, bukan halaman blank.
+        $this->assertStringContainsString('Tidak ada transaksi pada filter yang dipilih.', $html);
+        // Tanpa teknisi bertanda tangan, tidak ada elemen gambar tanda tangan.
+        $this->assertStringNotContainsString('<img class="signature-image"', $html);
+        $this->assertStringContainsString('____________________________', $html);
+    }
+
+    public function test_cetak_laporan_hanya_untuk_pengguna_terautentikasi(): void
+    {
+        // Memakai Accept JSON agar permintaan tanpa sesi dijawab 401, bukan
+        // dialihkan ke halaman login yang tidak dipakai API ini.
+        $this->getJson('/api/loans/report/print')->assertStatus(401);
     }
 
     public function test_hanya_satu_teknisi_boleh_menjadi_teknisi_utama(): void

@@ -47,6 +47,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Loans - all staff can view
     Route::get('/loans', [LoanController::class, 'index']);
     Route::get('/loans/report/download', [LoanController::class, 'downloadReport']);
+    Route::get('/loans/report/print', [LoanController::class, 'printReport']);
 
     // Bebas labor: data peminjaman per peminjam + kelayakan surat
     Route::get('/loans/clearance/borrowers', [ClearanceController::class, 'borrowers']);

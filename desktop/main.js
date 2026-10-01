@@ -92,7 +92,13 @@ const PREFERRED_PORT = 8642;
 //  Laporan Peminjaman, Surat Bebas Labor (termasuk cetak massal), dan Surat
 //  Peminjaman Resmi memakai tanda tangan sebagai data URI, dan dropdown
 //  penandatangan mengirim `signatory_technician_id` / `officer_technician_id`.
-const TEMPLATE_VERSION = '1.4.10';
+//  1.4.13: cetak Laporan Peminjaman tidak lagi mencetak kerangka aplikasi
+//  (sidebar & footer tetap serta offset `md:pl-*` yang ikut aktif pada lebar
+//  kertas A4) yang membuat hasil cetak bergeser sampai tampak kosong.
+//  Endpoint /api/loans/report/print menyediakan dokumen cetak tersendiri
+//  beserta tanda tangan digitalnya. Tanda tangan juga dibatasi ke PNG/JPEG
+//  agar SVG lama tidak membuat dokumen gagal dirender.
+const TEMPLATE_VERSION = '1.4.13';
 const isDev = !app.isPackaged;
 
 /* ------------------------------------------------------------------ paths */

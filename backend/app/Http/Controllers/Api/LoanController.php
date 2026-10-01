@@ -50,6 +50,53 @@ class LoanController extends Controller
 
     public function downloadReport(Request $request)
     {
+        [$loans, $technician, $startDate, $endDate] = $this->reportData($request);
+
+        $pdf = Pdf::loadView('pdf.loan-report', [
+            'branding' => Branding::pdfData(),
+            'loans' => $loans,
+            'signatoryName' => $technician?->name,
+            'signatoryNip' => $technician?->nip,
+            // Tanda tangan digital teknisi penandatangan (data URI, null bila belum diunggah).
+            'signatorySignature' => $technician?->signature_data_uri,
+            'startDate' => $startDate,
+            'endDate' => $endDate,
+        ]);
+
+        return $pdf->download('laporan-peminjaman-' . now()->format('Y-m-d') . '.pdf');
+    }
+
+    /**
+     * Laporan versi HTML untuk dicetak langsung dari browser.
+     *
+     * Halaman laporan tidak dicetak dengan `window.print()` karena cara itu
+     * mencetak kerangka aplikasi (sidebar & footer tetap, plus offset
+     * `md:pl-64` yang ikut aktif pada lebar kertas A4) sehingga hasilnya
+     * bergeser/terpotong bahkan tampak kosong. Halaman memakai jendela cetak
+     * sendiri yang berisi dokumen ini.
+     */
+    public function printReport(Request $request)
+    {
+        [$loans, $technician, $startDate, $endDate] = $this->reportData($request);
+
+        return response()->view('print.loan-report', [
+            'branding' => Branding::printableData(),
+            'loans' => $loans,
+            'signatoryName' => $technician?->name,
+            'signatoryNip' => $technician?->nip,
+            'signatorySignature' => $technician?->signature_data_uri,
+            'startDate' => $startDate,
+            'endDate' => $endDate,
+        ]);
+    }
+
+    /**
+     * Data laporan yang sama untuk versi PDF maupun versi cetak (HTML).
+     *
+     * @return array{0: \Illuminate\Support\Collection<int, Loan>, 1: Technician|null, 2: string|null, 3: string|null}
+     */
+    private function reportData(Request $request): array
+    {
         $request->validate([
             'status' => ['nullable', 'in:pending,borrowed,returned,rejected'],
             'start_date' => ['nullable', 'date'],
@@ -72,22 +119,11 @@ class LoanController extends Controller
             $query->whereDate('created_at', '<=', $request->end_date);
         }
 
-        $loans = $query->get();
         $technician = $request->filled('technician_id')
             ? Technician::find($request->integer('technician_id'))
             : null;
-        $pdf = Pdf::loadView('pdf.loan-report', [
-            'branding' => Branding::pdfData(),
-            'loans' => $loans,
-            'signatoryName' => $technician?->name,
-            'signatoryNip' => $technician?->nip,
-            // Tanda tangan digital teknisi penandatangan (data URI, null bila belum diunggah).
-            'signatorySignature' => $technician?->signature_data_uri,
-            'startDate' => $request->start_date,
-            'endDate' => $request->end_date,
-        ]);
 
-        return $pdf->download('laporan-peminjaman-' . now()->format('Y-m-d') . '.pdf');
+        return [$query->get(), $technician, $request->start_date, $request->end_date];
     }
 
     public function downloadOfficialLoan(Request $request)

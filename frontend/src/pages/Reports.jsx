@@ -6,6 +6,7 @@ import useTablePagination, { ROWS_PER_PAGE } from '../hooks/useTablePagination'
 import { CalendarDays, Download, Printer, RefreshCw } from 'lucide-react'
 import logoPnp from '../assets/Logo_Politeknik_Negeri_Padang_(2014).svg'
 import { downloadBlob } from '../utils/downloadBlob'
+import { printHtmlDocument } from '../utils/printHtml'
 
 // Jumlah baris per halaman pada tabel laporan di layar. Saat dicetak, tabel
 // tetap menampilkan seluruh transaksi hasil filter (lihat `report-print-table`).
@@ -16,6 +17,26 @@ const statusLabels = {
   returned: 'Dikembalikan',
   pending: 'Menunggu',
   rejected: 'Ditolak',
+}
+
+/**
+ * Pesan kesalahan yang bisa dibaca dari respons gagal.
+ *
+ * Saat mencetak, respons bertipe teks sehingga badan kesalahan Laravel berupa
+ * JSON dalam bentuk teks (bukan objek) dan harus diuraikan sendiri.
+ */
+function readPrintError(requestError) {
+  const data = requestError?.response?.data
+  if (typeof data === 'string') {
+    try {
+      const parsed = JSON.parse(data)
+      return parsed.message || Object.values(parsed.errors || {})[0]?.[0] || 'Dokumen laporan gagal dibuat.'
+    } catch {
+      return 'Dokumen laporan gagal dibuat.'
+    }
+  }
+
+  return data?.message || requestError?.message || 'Dokumen laporan gagal dibuat.'
 }
 
 function Reports() {
@@ -98,34 +119,24 @@ function Reports() {
 
   const handlePrint = async () => {
     setPrintError('')
-    if (window.desktop?.isDesktop) {
-      try {
-        const response = await api.get('/loans/report/download', {
-          params: {
-            status: status || undefined,
-            start_date: startDate || undefined,
-            end_date: endDate || undefined,
-            technician_id: technicianId || undefined,
-          },
-          responseType: 'blob',
-        })
-        const result = await window.desktop.previewReportPdf(new Uint8Array(await response.data.arrayBuffer()))
-        if (!result?.ok) setPrintError(result?.message || 'PDF laporan tidak dapat dibuka.')
-      } catch (requestError) {
-        setPrintError(requestError.response?.data?.message || requestError.message || 'PDF laporan gagal dibuat.')
-      }
-      return
+    try {
+      // Dokumen dicetak dari jendela cetak terpisah (bukan kerangka aplikasi),
+      // sehingga sidebar & footer tetap tidak ikut tercetak dan isi laporan
+      // tidak bergeser/terpotong akibat offset `md:pl-*` pada lebar kertas A4.
+      const response = await api.get('/loans/report/print', {
+        params: {
+          status: status || undefined,
+          start_date: startDate || undefined,
+          end_date: endDate || undefined,
+          technician_id: technicianId || undefined,
+        },
+        responseType: 'text',
+      })
+      setPrintError('')
+      await printHtmlDocument(response.data)
+    } catch (requestError) {
+      setPrintError(readPrintError(requestError))
     }
-
-    const originalTitle = document.title
-    const restoreTitle = () => {
-      document.title = originalTitle
-      window.removeEventListener('afterprint', restoreTitle)
-    }
-
-    document.title = ''
-    window.addEventListener('afterprint', restoreTitle)
-    window.print()
   }
 
   const handleDownload = async () => {
