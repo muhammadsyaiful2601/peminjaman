@@ -15,6 +15,7 @@ export function ClearanceLetterModal({
   letter,
   updateLetter,
   technicians = [],
+  technicianId = '',
   applyTechnician,
   submitting = false,
   error = '',

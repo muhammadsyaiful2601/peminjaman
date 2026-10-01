@@ -112,7 +112,9 @@ const PREFERRED_PORT = 8642;
 //  1.4.16: hanya frontend yang berubah (halaman Bebas Labor memeriksa hasil
 //  penyimpanan berkas & mengirim id teknisi penandatangan). TEMPLATE_VERSION
 //  tetap naik agar backend & frontend terpasang ikut terbarui.
-const TEMPLATE_VERSION = '1.4.16';
+//  1.4.17: perbaiki modal Bebas Labor yang gagal dirender saat daftar teknisi
+//  tersedia karena prop technicianId tidak diterima komponen modal.
+const TEMPLATE_VERSION = '1.4.17';
 const isDev = !app.isPackaged;
 
 /* ------------------------------------------------------------------ paths */
