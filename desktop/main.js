@@ -18,6 +18,7 @@ const fs = require('fs');
 const crypto = require('crypto');
 const net = require('net');
 const http = require('http');
+const { formatReleaseNotes } = require('./update-notes');
 
 // Pembaruan otomatis dari GitHub Releases (electron-updater). Kosong saat
 // paket tidak bisa dilaya (mode dev) — fitur tetap aktif pada versi terinstal.
@@ -114,9 +115,9 @@ const PREFERRED_PORT = 8642;
 //  tetap naik agar backend & frontend terpasang ikut terbarui.
 //  1.4.17: perbaiki modal Bebas Labor yang gagal dirender saat daftar teknisi
 //  tersedia karena prop technicianId tidak diterima komponen modal.
-//  1.4.19: reset sistem, kategori pegawai dari Jabatan / Unit Kerja, dan
-//  pemilihan font PDF tanpa font berlisensi pihak ketiga.
-const TEMPLATE_VERSION = '1.4.19';
+//  1.4.19: reset sistem dan kategori pegawai dari Jabatan / Unit Kerja.
+//  1.4.20: catatan pembaruan diformat menjadi teks agar dialog native rapi.
+const TEMPLATE_VERSION = '1.4.20';
 const isDev = !app.isPackaged;
 
 /* ------------------------------------------------------------------ paths */
@@ -935,12 +936,13 @@ async function announceUpdateAvailable(version, releaseNotes) {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   updatePopupShown = true;
   try {
+    const notes = formatReleaseNotes(releaseNotes);
     const choice = await dialog.showMessageBox(mainWindow, {
       type: 'info',
       title: 'Pembaruan Tersedia — Peminjaman Barang PNP',
       message: `Versi baru ${version} tersedia.`,
       detail: [
-        releaseNotes ? `Perbaikan versi ini:\n${releaseNotes}` : 'Detail perbaikan belum tersedia.',
+        notes ? `Perbaikan versi ini:\n${notes}` : 'Detail perbaikan belum tersedia.',
         'Aplikasi akan mengunduh pembaruan di latar belakang, lalu dimulai ulang otomatis untuk memasangnya. Data Anda tetap aman.',
         'Bila memilih "Nanti", unduh kapan saja lewat tombol gear (menu Pengaturan).',
       ].join('\n\n'),
@@ -2078,6 +2080,5 @@ app.on('before-quit', () => {
   killChild(queueWorker);
   killChild(phpServer);
 });
-
 
 

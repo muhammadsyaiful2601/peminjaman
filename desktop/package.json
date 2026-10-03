@@ -1,7 +1,7 @@
 {
   "name": "peminjaman-pnp-desktop",
   "productName": "Peminjaman Barang PNP",
-  "version": "1.4.19",
+  "version": "1.4.20",
   "description": "Aplikasi Desktop Sistem Peminjaman Barang Politeknik Negeri Padang (offline, tanpa XAMPP/Laragon) — pembaruan manual dari GitHub Releases (menu gear).",
   "main": "main.js",
   "author": "Muhammad Syaiful (24)",
@@ -13,6 +13,7 @@
   "private": true,
   "scripts": {
     "start": "electron .",
+    "test": "node --test tests/*.test.js",
     "icons": "node scripts/generate-icons.mjs",
     "prepare-build": "node scripts/prepare-build.mjs",
     "prepare-cloudflared": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-cloudflared.ps1",
@@ -38,6 +39,7 @@
     },
     "files": [
       "main.js",
+      "update-notes.js",
       "preload.js",
       "setup.html",
       "setup.js",
