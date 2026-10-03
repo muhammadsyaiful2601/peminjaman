@@ -10,7 +10,7 @@
         }
         * { box-sizing: border-box; }
         body {
-            font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+            font-family: 'DejaVu Sans', Arial, sans-serif;
             color: #111827;
             font-size: 11px;
             line-height: 1.5;

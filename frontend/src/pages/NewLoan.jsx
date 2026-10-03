@@ -50,7 +50,7 @@ function NewLoan() {
   // kosong/transaksi lama menjadi "mahasiswa".
   const typeMatches = students.filter((student) => (
     (student.type || DEFAULT_BORROWER_TYPE) === borrowerType
-    && `${student.student_id} ${student.name} ${student.email} ${student.position || ''}`
+    && `${student.student_id || ''} ${student.name} ${student.email} ${student.role || ''} ${student.position || ''}`
       .toLowerCase()
       .includes(studentSearch.toLowerCase().trim())
   ))
@@ -152,7 +152,7 @@ function NewLoan() {
 
   const handleStudentSelect = (student) => {
     setSelectedStudentId(String(student.id))
-    setStudentSearch(`${student.student_id} - ${student.name}`)
+    setStudentSearch(`${student.student_id ? `${student.student_id} - ` : ''}${student.name}`)
 
     setBorrowerName(student.name || '')
     setBorrowerEmail(student.email || '')
@@ -447,7 +447,8 @@ function NewLoan() {
                     >
                       <span>
                         <span className="block text-sm font-medium text-slate-900">{student.name}</span>
-                        <span className="block text-xs text-slate-500">{student.student_id} · {student.email}</span>
+                        <span className="block text-xs text-slate-500">{student.student_id || 'Tanpa NIP'} · {student.email}</span>
+                        {student.role && <span className="block text-xs text-slate-500">{student.role}{student.position ? ` · ${student.position}` : ''}</span>}
                       </span>
                       {String(student.id) === selectedStudentId && <span className="text-xs font-semibold text-cyan-700">Terpilih</span>}
                     </button>
@@ -607,7 +608,6 @@ function NewLoan() {
 }
 
 export default NewLoan
-
 
 
 

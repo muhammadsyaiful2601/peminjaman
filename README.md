@@ -123,19 +123,20 @@ tab per jenis:
 | Jenis | Identitas | Keterangan |
 | :--- | :--- | :--- |
 | **Mahasiswa** | NIM | Jenis bawaan, dipakai seluruh data lama |
-| **Tendik** | NIP | Tenaga pendidik & kependidikan PNP |
-| **Dosen** | NIP | Dosen PNP |
+| **Tendik** | NIP (opsional) | Pegawai non-dosen, termasuk Tendik dan Rumah Tangga |
+| **Dosen** | NIP (opsional) | Dosen PNP |
 | **Umum** | Nomor identitas | Peminjam dari luar kampus |
 
-Setiap jenis juga menyimpan **Jabatan / Unit Kerja** (jabatan pegawai, program
-studi, atau unit kerja) yang boleh dikosongkan.
+Setiap data dapat menyimpan **Role** dan **Jabatan / Unit Kerja** secara
+terpisah. Role adalah peran seperti Dosen, Tendik, atau Rumah Tangga; Jabatan /
+Unit Kerja menjelaskan tugas atau unit kerja.
 
 - Tab menampilkan **jumlah data** pada masing-masing jenis, dan angkanya ikut
   mengikuti kata kunci pencarian.
 - Kolom **Jenis** tampil sebagai badge berwarna di tabel Data Peminjam, daftar
   Peminjaman, detail transaksi, dan halaman Surat Bebas Labor.
 - Kolom identitas menyesuaikan otomatis: `NIM` untuk mahasiswa, `NIP` untuk
-  tendik/dosen, dan `Nomor Identitas` untuk peminjam umum.
+  pegawai (opsional), dan `Nomor Identitas` untuk peminjam umum.
 - Form **Buat Peminjaman** punya pemilih jenis; daftar peminjam tersimpan yang
   muncul hanya berisi jenis yang dipilih, dan memilih salah satu otomatis
   mengisi nama/email/NIP beserta jenisnya.
@@ -152,72 +153,74 @@ Parameter baru pada API:
 | :--- | :--- | :--- |
 | `GET /api/students` | `type` | Filter jenis: `mahasiswa`, `tendik`, `dosen`, atau `umum`. Kosong = semua. |
 | `GET /api/students` | — | `meta.by_type` berisi jumlah per jenis (ikut memperhitungkan `search`). |
-| `POST`/`PUT /api/students` | `type`, `position` | Jenis dan jabatan/unit kerja. `type` opsional — bila tidak dikirim, jenis lama dipertahankan. |
+| `POST`/`PUT /api/students` | `type`, `role`, `position` | Kategori peminjam, role, dan jabatan/unit kerja. NIP opsional untuk Tendik/Dosen. |
 | `POST /api/loans` | `borrower_type` | Jenis peminjam pada transaksi. Opsional; kosong dibaca sebagai `mahasiswa`. |
 
-Impor spreadsheet (CSV/XLSX/Google Sheets) menerima dua kolom baru yang
-**opsional** — `Jenis` dan `Jabatan / Unit Kerja`. Kolom `Jenis` mengenali juga
-istilah lain seperti `Eddik`, `Mhs`, `dosen`, atau `masyarakat`. Kolom kosong
-berarti mahasiswa, dan spreadsheet lama tanpa kedua kolom ini tetap bisa
-diimpor. Jenis yang tidak dikenali akan ditolak dengan pesan yang jelas, bukan
-disimpan diam-diam sebagai mahasiswa.
+Impor spreadsheet (CSV/XLSX/Google Sheets) dapat memuat kolom `Role` dan
+`Jabatan / Unit Kerja`. Untuk spreadsheet Tendik & Dosen, `Role` diisi bebas
+dengan peran seperti Dosen, Tendik, Rumah Tangga, atau peran lainnya. Peran
+yang diawali "Dosen" dikelompokkan sebagai Dosen; role pegawai lainnya
+dikelompokkan sebagai Tendik. Jabatan / Unit Kerja dapat menjelaskan tugas
+atau unit kerja. Role boleh dikosongkan; jika kosong, data dikategorikan sebagai
+Tendik. Kolom NIP boleh kosong; nama dan email wajib diisi, dan email
+digunakan untuk mencocokkan pembaruan data. Kolom `Jenis` pada berkas lama
+tetap dikenali.
 
-Daftar istilah yang dikenali pada kolom `Jenis` ada di
+Daftar kategori internal peminjam ada di
 [`backend/app/Support/BorrowerType.php`](backend/app/Support/BorrowerType.php).
 
 ### Spreadsheet per Kelompok (Google Sheets)
 
-Mahasiswa, **tendik**, dan **dosen** masing-masing punya spreadsheet Google
-Sheets sendiri dengan **logika yang persis sama** seperti mahasiswa: tautan
-CSV terpublikasi, impor otomatis saat aplikasi dibuka lalu diulang tiap
-5 menit, tombol **Refresh Data**, dan penanda waktu sinkron terakhir. Peminjam
-umum tidak memakai spreadsheet (dicatat manual lewat form).
+Mahasiswa memakai spreadsheet tersendiri, sedangkan **tendik dan dosen memakai
+satu spreadsheet bersama**. Sinkronisasi menggunakan CSV terpublikasi, impor
+otomatis saat aplikasi dibuka lalu diulang tiap 5 menit, tombol **Refresh
+Data**, dan penanda waktu sinkron terakhir. Peminjam umum tidak memakai
+spreadsheet (dicatat manual lewat form).
 
 Cara memakai:
 
-1. Buat spreadsheet untuk tiap kelompok (**File → Bagikan → Publikasikan ke
-   web** → format CSV), lalu salin URL-nya.
-2. Buka **Data Peminjam → Impor Spreadsheet**, pilih kelompoknya
-   (Mahasiswa / Tendik / Dosen), lalu tempel URL tersebut.
-3. Desde itu tautan otomatis ditarik tiap 5 menit. Status tiap kelompok
+1. Buat spreadsheet mahasiswa dan spreadsheet gabungan Tendik & Dosen
+   (**File → Bagikan → Publikasikan ke web** → format CSV), lalu salin URL-nya.
+2. Buka **Data Peminjam → Impor Spreadsheet**, pilih kelompok, lalu tempel
+   URL spreadsheet yang sesuai.
+3. Setelah itu, tautan otomatis ditarik tiap 5 menit. Status tiap kelompok
    terlihat di bawah tombol Refresh Data.
 
-Kolom yang dikenali di spreadsheet: `NIM/NIP`, `Nama`, `Email`,
-`No. Telepon` (wajib), serta `Jenis` dan `Jabatan / Unit Kerja` (opsional).
-**Begitu spreadsheet ditautkan ke suatu kelompok, seluruh barisnya otomatis
-disimpan sebagai kelompok itu** sehingga kolom `Jenis` tidak perlu diisi di
-file tendik/dosen.
+Kolom yang dikenali di spreadsheet: `NIM/NIP`, `Nama`, `Email`, `No. Telepon`,
+`Role`, dan `Jabatan / Unit Kerja`. Pada spreadsheet mahasiswa, NIM wajib dan
+Role tidak diperlukan. Pada spreadsheet Tendik & Dosen, Role dan NIP opsional,
+sedangkan Nama dan Email wajib. Kategori pegawai ditentukan dari Jabatan / Unit
+Kerja: jika memuat kata "Dosen", data dikategorikan sebagai Dosen; selain itu
+dikategorikan sebagai Tendik. Role hanya menjelaskan peran kerja. Email menjadi
+kunci pencocokan jika NIP kosong.
 
 ### Template Spreadsheet
 
-Tersedia template siap pakai per kelompok, bisa diunduh dari
-**Impor Spreadsheet → Unduh Template (Excel)**. Nama berkas menyesuaikan
-kelompok: `template-impor-mahasiswa.xls`, `template-impor-tendik.xls`,
-`template-impor-dosen.xls`.
+Tersedia template siap pakai yang dapat diunduh dari
+**Impor Spreadsheet → Unduh Template (Excel)**. Mahasiswa memakai
+`template-impor-mahasiswa.xls`, sedangkan Tendik dan Dosen menggunakan satu
+template bersama, `template-impor-tendik-dosen.xls`.
 
-| Template | Judul di file | Kolom identitas | Petunjuk di dalam file |
+| Template | Judul di file | Kolom identitas | Panduan pengisian |
 | :--- | :--- | :--- | :--- |
-| Mahasiswa | `TEMPLATE IMPOR DATA MAHASISWA` | `NIM` | Isi NIM; Jabatan boleh diisi program studi. |
-| Tendik | `TEMPLATE IMPOR DATA TENDIK` | `NIP` | Isi NIP pegawai, bukan NIM. |
-| Dosen | `TEMPLATE IMPOR DATA DOSEN` | `NIP` | Isi NIP dosen, bukan NIM. |
+| Mahasiswa | `TEMPLATE IMPOR DATA MAHASISWA` | `NIM` | Gunakan NIM; kolom Jabatan / Unit Kerja dapat diisi dengan program studi (opsional). |
+| Tendik & Dosen | `TEMPLATE IMPOR DATA TENDIK & DOSEN` | `NIP (opsional)` | Kategori Dosen jika Jabatan / Unit Kerja memuat kata "Dosen"; selain itu Tendik. Role hanya menjelaskan peran kerja dan opsional. Email wajib diisi. |
 
-Semua template memakai kolom yang sama —
-`{NIM/NIP} | Nama | Jabatan / Unit Kerja | Email | No. Telepon` — dan **tidak
-memuat kolom `Jenis`**, karena kelompoknya sudah pasti dari template itu
-sendiri. Template juga sengaja **tanpa baris data contoh** supaya contoh tidak
-ikut terimpor saat petugas lupa menghapusnya.
+Template mahasiswa menggunakan kolom
+`NIM | Nama | Jabatan / Unit Kerja | Email | No. Telepon`. Template Tendik &
+Dosen menggunakan kolom
+`Role | NIP (opsional) | Nama | Jabatan / Unit Kerja | Email | No. Telepon`.
+Templat tidak menyertakan baris data contoh agar data contoh tidak ikut
+terimpor.
 
 | Jenis | Kunci `app_settings` (URL) | Kunci (waktu sinkron) |
 | :--- | :--- | :--- |
 | Mahasiswa | `student_sync_csv_url` | `student_sync_last_at` |
-| Tendik | `tendik_sync_csv_url` | `tendik_sync_last_at` |
-| Dosen | `dosen_sync_csv_url` | `dosen_sync_last_at` |
+| Tendik & Dosen | `employee_sync_csv_url` | `employee_sync_last_at` |
 
-Kunci mahasiswa sengaja memakai nama lamanya, jadi spreadsheet yang sudah
-tertaut tidak perlu disetel ulang. Setiap kelompok berjalan berurutan (bukan
-bersamaan) supaya server tidak terbebani, dan hasilnya digabung jadi satu
-pesan — bila satu kelompok gagal, hasil kelompok lain tetap tersimpan dan
-petugas diberi tahu kelompok mana yang gagal.
+URL lama Tendik dan Dosen tetap digunakan sebagai cadangan sampai URL gabungan
+diatur. Setiap kelompok sinkronisasi berjalan berurutan agar server tidak
+terbebani; kegagalan satu kelompok tidak membatalkan hasil kelompok lain.
 
 Endpoint yang memakai `type`:
 
@@ -225,9 +228,59 @@ Endpoint yang memakai `type`:
 | :--- | :--- | :--- |
 | `GET /api/students/import/source` | `type` | URL + waktu sinkron kelompok tersebut. Tanpa `type` = mahasiswa. |
 | `POST /api/students/import/source` | `url`, `type` | Simpan URL kelompok tersebut. |
-| `POST /api/students/import/csv-url` | `url`, `type` | Tarik CSV, paksa jenis, lalu simpan URL-nya. |
-| `POST /api/students/import` | `file`, `type` | Impor berkas; `type` memaksa jenis seluruh baris. |
+| `POST /api/students/import/csv-url` | `url`, `type` | Tarik CSV; spreadsheet pegawai bersama mengelompokkan baris berdasarkan Role. |
+| `POST /api/students/import` | `file`, `type` | Impor berkas; `type` menentukan kelompok spreadsheet yang dipakai. |
 | `GET /api/students/import/template` | `type` | Unduh template kelompok tersebut. |
+
+### Tulis Balik Jabatan ke Spreadsheet (Google Apps Script)
+
+Jabatan / Unit Kerja pada Data Tendik & Dosen **dapat diedit** di aplikasi dan
+dibaca dari spreadsheet. Namun, CSV yang dipublikasikan Google Sheets bersifat
+**hanya-baca**. Karena itu, sinkronisasi secara bawaan hanya berjalan satu arah
+(Spreadsheet → Aplikasi): perubahan jabatan di aplikasi akan ditimpa saat
+sinkronisasi berikutnya.
+
+Agar perubahan jabatan juga dikirim ke spreadsheet, pasang Google Apps Script.
+Panduan lengkap tanpa API key tersedia di dalam aplikasi (**Impor Spreadsheet
+→ Tutorial Lengkap**):
+
+1. Buka Google Sheets yang berisi data tendik/dosen, lalu pilih **Ekstensi → Apps Script**.
+2. Klik **+** → **Script**, hapus kode bawaan, lalu tempel kode dari panduan.
+3. Tekan **Ctrl+S** untuk menyimpan skrip.
+4. Pilih **Deploy → New deployment**, pilih tipe **Web app**, lalu klik **Next**.
+5. Atur **Execute as** ke akun Anda sendiri dan **Who has access** ke **Anyone**.
+6. Klik **Deploy**, lalu salin **Web app URL** yang berakhir dengan `/exec`.
+7. Tempel URL tersebut pada kolom **Tulis balik Jabatan ke spreadsheet**.
+8. Klik **Simpan Webhook**, lalu **Uji Kirim** untuk memastikan koneksi berhasil.
+
+Kode skrip mencari baris berdasarkan kolom NIM/NIP lalu menulis ulang kolomnya
+(memperbarui bila ada, menambahkan bila belum). Nama kolom dikenali dengan
+normalisasi huruf kecil tanpa tanda baca, jadi `Jabatan / Unit Kerja`, `Jabatan`,
+`Unit Kerja`, `Prodi`, dan `Program Studi` semuanya bisa dipakai.
+
+| Jenis | Kunci `app_settings` (URL webhook) | Kunci (waktu tulis terakhir) |
+| :--- | :--- | :--- |
+| Mahasiswa | `student_sheets_webhook_url` | `student_sheets_push_last_at` |
+| Tendik | `tendik_sheets_webhook_url` | `tendik_sheets_push_last_at` |
+| Dosen | `dosen_sheets_webhook_url` | `dosen_sheets_push_last_at` |
+
+Catatan penting:
+
+- **Kegagalan tidak merusak data.** Spreadsheet adalah pelengkap, bukan sumber
+  kebenaran. Bila webhook gagal, jabatan tetap tersimpan di aplikasi dan petugas
+  diberi tahu lewat peringatan terpisah.
+- **Webhook opsional.** Tanpa URL, aplikasi tetap bekerja seperti sebelumnya
+  (sinkronisasi satu arah).
+- **URL divalidasi.** Hanya host resmi Google Apps Script
+  (`script.google.com` / `script.googleusercontent.com`) dengan pola
+  `/macros/.../exec` yang diterima, agar `app_settings` tidak bisa dipakai
+  memanggil alamat arbitrer dari server.
+- Endpoint konfigurasi hanya untuk **Admin/Asisten** dan memerlukan login.
+
+| Endpoint | Parameter | Keterangan |
+| :--- | :--- | :--- |
+| `POST /api/students/webhook` | `url`, `type` | Simpan URL webhook kelompok tersebut. URL kosong mematikan. |
+| `POST /api/students/webhook/test` | `type` | Uji kirim satu baris contoh ke spreadsheet. |
 
 ### Penomoran & Paginasi Tabel
 
@@ -831,6 +884,15 @@ Semua endpoint berada di bawah prefix `/api`. Kecuali login dan download PDF QR,
 - `POST /api/desktop/branding` (khusus desktop, header `X-Desktop-Key`): menyimpan nama & logo aplikasi dari wizard konfigurasi awal — dipakai sebelum admin login karena `POST /api/branding` butuh sesi admin.
 | GET | `/api/loans/qr/{uuid}/download` | Publik | Mengunduh PDF; UUID berfungsi sebagai token akses |
 
+### Pengaturan Sistem
+
+| Method | Endpoint | Akses | Keterangan |
+| :--- | :--- | :--- | :--- |
+| GET | `/api/branding` | Publik | Identitas aplikasi, instansi, dan logo |
+| POST | `/api/branding` | Admin | Menyimpan identitas, alamat kop surat, dan logo |
+| GET | `/api/pdf-font` | Auth | Daftar font PDF yang dapat dipilih beserta font aktif |
+| POST | `/api/pdf-font` | Admin | Mengganti font seluruh dokumen PDF (`pdf_font`) |
+
 ### User
 
 | Method | Endpoint | Akses |
@@ -886,6 +948,15 @@ GET /api/loans/qr/{uuid}/download
 ```
 
 UUID harus diperlakukan sebagai rahasia karena siapa pun yang memiliki UUID dapat mengunduh PDF transaksi tersebut.
+
+### Font PDF
+
+Seluruh dokumen PDF (surat bebas/tanggungan labor, surat peminjaman resmi, laporan peminjaman, dan bukti peminjaman QR) memakai huruf yang dapat dipilih admin pada **Pengaturan Sistem → Font PDF**. Pilihan disimpan di `app_settings` (kunci `pdf_font`) dan berlaku untuk semua dokumen.
+
+Pilihan yang tersedia menggunakan font bawaan Dompdf/PDF: DejaVu Sans, DejaVu
+Serif, DejaVu Sans Mono, Times, Helvetica, dan Courier. Font sistem yang tidak
+disertakan Dompdf tidak ditawarkan agar hasil dokumen tidak berubah diam-diam.
+Rincian teknis ada di [`backend/README.md`](backend/README.md#font-pdf-dapat-dipilih-pengguna).
 
 ## Perintah Verifikasi
 

@@ -9,7 +9,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bukti Pengembalian Barang</title>
 </head>
-<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f1f5f9; color: #1e293b;">
+<body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f1f5f9; color: #1e293b;">
 
     <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
 

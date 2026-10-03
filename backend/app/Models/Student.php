@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Model;
     'student_id',
     'name',
     'type',
+    'role',
     'position',
     'email',
     'phone',
@@ -22,6 +23,7 @@ class Student extends Model
         return [
             'student_id' => 'string',
             'name' => 'string',
+            'role' => 'string',
             'position' => 'string',
             'email' => 'string',
             'phone' => 'string',

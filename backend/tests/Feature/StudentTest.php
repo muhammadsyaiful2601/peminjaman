@@ -3,11 +3,17 @@
 namespace Tests\Feature;
 
 use App\Models\AppSetting;
+use App\Models\Item;
+use App\Models\Loan;
 use App\Models\Student;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
+use PhpOffice\PhpSpreadsheet\IOFactory;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use Tests\TestCase;
 
 class StudentTest extends TestCase
@@ -41,14 +47,14 @@ class StudentTest extends TestCase
             ->assertJsonPath('meta.total', 1)
             ->assertJsonPath('data.0.email', 'budi@example.com');
 
-        $this->putJson('/api/students/' . $student->id, [
+        $this->putJson('/api/students/'.$student->id, [
             'student_id' => '2211082001',
             'name' => 'Budi Santoso Updated',
             'email' => 'budi.updated@example.com',
             'phone' => null,
         ])->assertOk()->assertJsonPath('student.name', 'Budi Santoso Updated');
 
-        $this->deleteJson('/api/students/' . $student->id)
+        $this->deleteJson('/api/students/'.$student->id)
             ->assertOk()
             ->assertJsonPath('message', 'Data peminjam berhasil dihapus.');
 
@@ -166,18 +172,20 @@ class StudentTest extends TestCase
         Sanctum::actingAs($this->staff());
 
         $cases = [
-            ['nip' => '198001012005011001', 'type' => 'tendik', 'position' => 'Staf Bagian Keuangan'],
-            ['nip' => '197505052000031002', 'type' => 'dosen', 'position' => 'Dosen Teknik Informatika'],
-            ['nip' => '081234567890', 'type' => 'umum', 'position' => null],
+            ['nip' => '198001012005011001', 'type' => 'tendik', 'role' => 'Tendik', 'position' => 'Staf Bagian Keuangan'],
+            ['nip' => '197505052000031002', 'type' => 'dosen', 'role' => 'Dosen', 'position' => 'Dosen Teknik Informatika'],
+            ['nip' => '081234567890', 'type' => 'umum', 'role' => null, 'position' => null],
+            ['nip' => null, 'type' => 'tendik', 'role' => 'Rumah Tangga', 'position' => 'Melayani kebutuhan rumah tangga'],
         ];
 
         foreach ($cases as $index => $case) {
             $this->postJson('/api/students', [
                 'student_id' => $case['nip'],
-                'name' => 'Pegawai ' . ($index + 1),
+                'name' => 'Pegawai '.($index + 1),
                 'type' => $case['type'],
+                'role' => $case['role'],
                 'position' => $case['position'],
-                'email' => 'pegawai' . ($index + 1) . '@pnp.ac.id',
+                'email' => 'pegawai'.($index + 1).'@pnp.ac.id',
             ])->assertCreated()
                 ->assertJsonPath('student.type', $case['type'])
                 ->assertJsonPath('student.position', $case['position']);
@@ -185,6 +193,57 @@ class StudentTest extends TestCase
 
         $this->assertDatabaseHas('students', ['student_id' => '197505052000031002', 'type' => 'dosen']);
         $this->assertDatabaseHas('students', ['student_id' => '081234567890', 'type' => 'umum']);
+        $this->assertDatabaseHas('students', [
+            'student_id' => null,
+            'type' => 'tendik',
+            'role' => 'Rumah Tangga',
+            'email' => 'pegawai4@pnp.ac.id',
+        ]);
+    }
+
+    public function test_jabatan_unit_kerja_menentukan_kategori_pegawai_tanpa_mengubah_mahasiswa(): void
+    {
+        Sanctum::actingAs($this->staff());
+
+        $dosenResponse = $this->postJson('/api/students', [
+            'student_id' => null,
+            'name' => 'Dosen Pegawai',
+            'type' => 'tendik',
+            'role' => 'Tendik',
+            'position' => 'Dosen/D3 Sistem Informasi',
+            'email' => 'dosen-pegawai@example.com',
+        ])->assertCreated()
+            ->assertJsonPath('student.type', 'dosen');
+
+        $this->putJson('/api/students/'.$dosenResponse->json('student.id'), [
+            'student_id' => null,
+            'name' => 'Dosen Pegawai',
+            'type' => 'tendik',
+            'role' => 'Rumah Tangga',
+            'position' => 'Teknisi / D3 Sistem Informasi',
+            'email' => 'dosen-pegawai@example.com',
+        ])->assertOk()
+            ->assertJsonPath('student.type', 'tendik');
+
+        $this->postJson('/api/students', [
+            'student_id' => null,
+            'name' => 'Pegawai Rumah Tangga',
+            'type' => 'dosen',
+            'role' => 'Dosen',
+            'position' => 'Rumah Tangga',
+            'email' => 'rumah-tangga@example.com',
+        ])->assertCreated()
+            ->assertJsonPath('student.type', 'tendik');
+
+        $this->postJson('/api/students', [
+            'student_id' => '2211082001',
+            'name' => 'Mahasiswa Dosen',
+            'type' => 'mahasiswa',
+            'role' => 'Dosen wali',
+            'position' => 'Dosen/D3 Sistem Informasi',
+            'email' => 'mahasiswa@example.com',
+        ])->assertCreated()
+            ->assertJsonPath('student.type', 'mahasiswa');
     }
 
     public function test_jenis_peminjam_tidak_dikenal_ditolak(): void
@@ -219,7 +278,7 @@ class StudentTest extends TestCase
 
         // Disimpan ulang tanpa mengirim `type` juga tidak mengubah jenis.
         $student = Student::firstOrFail();
-        $this->putJson('/api/students/' . $student->id, [
+        $this->putJson('/api/students/'.$student->id, [
             'student_id' => '2211082001',
             'name' => 'Budi Santoso Updated',
             'email' => 'budi@example.com',
@@ -242,7 +301,7 @@ class StudentTest extends TestCase
                 'student_id' => $id,
                 'name' => $name,
                 'type' => $type,
-                'email' => strtolower(str_replace(' ', '', $name)) . '@pnp.ac.id',
+                'email' => strtolower(str_replace(' ', '', $name)).'@pnp.ac.id',
             ]);
         }
 
@@ -277,15 +336,15 @@ class StudentTest extends TestCase
     public function test_transaksi_menyimpan_jenis_peminjam_dan_membaca_lama_sebagai_mahasiswa(): void
     {
         Sanctum::actingAs($this->staff());
-        $item = \App\Models\Item::create([
+        $item = Item::create([
             'name' => 'Kabel HDMI',
             'item_code' => 'BRG-001',
             'category' => 'Peralatan',
             'stock' => 10,
         ]);
 
-        $loan = \App\Models\Loan::create([
-            'uuid' => (string) \Illuminate\Support\Str::uuid(),
+        $loan = Loan::create([
+            'uuid' => (string) Str::uuid(),
             'loan_code' => 'PJM-2026-9001',
             'item_id' => $item->id,
             'qty' => 1,
@@ -298,8 +357,8 @@ class StudentTest extends TestCase
         $this->assertSame('tendik', $loan->fresh()->borrower_type);
 
         // Transaksi lama tidak punya jenis -> dibaca sebagai mahasiswa.
-        $legacy = \App\Models\Loan::create([
-            'uuid' => (string) \Illuminate\Support\Str::uuid(),
+        $legacy = Loan::create([
+            'uuid' => (string) Str::uuid(),
             'loan_code' => 'PJM-2026-9002',
             'item_id' => $item->id,
             'qty' => 1,
@@ -312,40 +371,87 @@ class StudentTest extends TestCase
         $this->assertSame('mahasiswa', $legacy->fresh()->borrower_type);
     }
 
-    public function test_impor_menulis_jenis_dan_jabatan_dari_spreadsheet(): void
+    public function test_impor_menyimpan_role_dan_unit_kerja_dengan_nip_opsional(): void
     {
         Sanctum::actingAs($this->staff());
 
-        $csv = "NIM/NIP,Nama,Jenis,Jabatan / Unit Kerja,Email,No. Telepon\n"
-            ."2211082001,Budi Santoso,,,budi@example.com,0812\n"
-            ."198001012005011001,Siti Aminah,Eddik,Staf Bagian Keuangan,siti@pnp.ac.id,0813\n"
-            ."197505052000031002,Andi Saputra,dosen,Dosen Teknik Informatika,andi@pnp.ac.id,0814\n"
-            ."081234567890,Peminjam Luar,masyarakat,,luar@example.com,0815\n";
+        $csv = "Role,Nama,Jabatan / Unit Kerja,Email,No. Telepon\n"
+            ."Rumah Tangga,Siti Aminah,Menangani kebersihan gedung,siti@pnp.ac.id,0813\n"
+            ."Rumah Tangga,Andi Saputra,Dosen/D3 Sistem Informasi,andi@pnp.ac.id,0814\n";
 
         $this->post('/api/students/import', [
-            'file' => \Illuminate\Http\UploadedFile::fake()->createWithContent('peminjam.csv', $csv),
+            'file' => UploadedFile::fake()->createWithContent('peminjam.csv', $csv),
+            'type' => 'tendik',
         ], ['Accept' => 'application/json'])->assertOk()
             ->assertJsonPath('ok', true)
-            ->assertJsonPath('imported', 4);
+            ->assertJsonPath('imported', 2);
 
-        // Jenis kosong pada spreadsheet tetap berarti mahasiswa.
-        $this->assertDatabaseHas('students', ['student_id' => '2211082001', 'type' => 'mahasiswa']);
-        // Istilah lain pada kolom "Jenis" diterjemahkan ke jenis yang benar.
         $this->assertDatabaseHas('students', [
-            'student_id' => '198001012005011001',
+            'student_id' => null,
             'type' => 'tendik',
-            'position' => 'Staf Bagian Keuangan',
+            'role' => 'Rumah Tangga',
+            'position' => 'Menangani kebersihan gedung',
+            'email' => 'siti@pnp.ac.id',
         ]);
         $this->assertDatabaseHas('students', [
-            'student_id' => '197505052000031002',
+            'student_id' => null,
             'type' => 'dosen',
-            'position' => 'Dosen Teknik Informatika',
+            'role' => 'Rumah Tangga',
+            'position' => 'Dosen/D3 Sistem Informasi',
+            'email' => 'andi@pnp.ac.id',
         ]);
-        $this->assertDatabaseHas('students', [
-            'student_id' => '081234567890',
-            'type' => 'umum',
-            'position' => null,
+    }
+
+    public function test_impor_pegawai_mengategorikan_dari_jabatan_bukan_role(): void
+    {
+        Sanctum::actingAs($this->staff());
+
+        $csv = "Role,Nama,Jabatan / Unit Kerja,Email\n"
+            ."Tendik,Andi Saputra,Wakil Direktur / Dosen D3 Sistem Informasi,andi@example.com\n"
+            ."Dosen,Siti Aminah,Rumah Tangga,siti@example.com\n";
+
+        $this->post('/api/students/import', [
+            'file' => UploadedFile::fake()->createWithContent('pegawai.csv', $csv),
+            'type' => 'tendik',
+        ], ['Accept' => 'application/json'])->assertOk()
+            ->assertJsonPath('imported', 2);
+
+        $this->assertDatabaseHas('students', ['email' => 'andi@example.com', 'type' => 'dosen']);
+        $this->assertDatabaseHas('students', ['email' => 'siti@example.com', 'type' => 'tendik']);
+    }
+
+    public function test_migrasi_mengategorikan_ulang_pegawai_dari_jabatan_tanpa_mengubah_mahasiswa(): void
+    {
+        Student::create([
+            'student_id' => null,
+            'name' => 'Dosen Lama',
+            'type' => 'tendik',
+            'role' => 'Tendik',
+            'position' => 'Dosen/D3 Sistem Informasi',
+            'email' => 'dosen-lama@example.com',
         ]);
+        Student::create([
+            'student_id' => null,
+            'name' => 'Tendik Lama',
+            'type' => 'dosen',
+            'role' => 'Dosen',
+            'position' => 'Rumah Tangga',
+            'email' => 'tendik-lama@example.com',
+        ]);
+        Student::create([
+            'student_id' => '2211082001',
+            'name' => 'Mahasiswa',
+            'type' => 'mahasiswa',
+            'position' => 'Dosen wali',
+            'email' => 'mahasiswa-posisi@example.com',
+        ]);
+
+        $migration = require database_path('migrations/2026_10_03_000000_reclassify_employees_from_position.php');
+        $migration->up();
+
+        $this->assertDatabaseHas('students', ['email' => 'dosen-lama@example.com', 'type' => 'dosen']);
+        $this->assertDatabaseHas('students', ['email' => 'tendik-lama@example.com', 'type' => 'tendik']);
+        $this->assertDatabaseHas('students', ['email' => 'mahasiswa-posisi@example.com', 'type' => 'mahasiswa']);
     }
 
     public function test_impor_menolak_jenis_yang_tidak_dikenal(): void
@@ -357,7 +463,7 @@ class StudentTest extends TestCase
             ."12345,Orang Asing,alien,alien@example.com\n";
 
         $this->post('/api/students/import', [
-            'file' => \Illuminate\Http\UploadedFile::fake()->createWithContent('peminjam.csv', $csv),
+            'file' => UploadedFile::fake()->createWithContent('peminjam.csv', $csv),
         ], ['Accept' => 'application/json'])->assertOk()
             ->assertJsonPath('imported', 1)
             ->assertJsonPath('errors.0', 'Baris 3: Jenis peminjam "alien" tidak dikenal (pilihan: Mahasiswa, Tendik, Dosen, Umum).');
@@ -374,7 +480,7 @@ class StudentTest extends TestCase
             ."2211082001,Budi Santoso,budi@example.com,0812\n";
 
         $this->post('/api/students/import', [
-            'file' => \Illuminate\Http\UploadedFile::fake()->createWithContent('lama.csv', $csv),
+            'file' => UploadedFile::fake()->createWithContent('lama.csv', $csv),
         ], ['Accept' => 'application/json'])->assertOk()
             ->assertJsonPath('imported', 1);
 
@@ -388,17 +494,21 @@ class StudentTest extends TestCase
     {
         Sanctum::actingAs($this->staff());
 
+        // Mahasiswa punya template sendiri. Tendik & Dosen memakai satu
+        // template gabungan dengan Role bebas dan NIP opsional.
         $expected = [
             'mahasiswa' => ['title' => 'TEMPLATE IMPOR DATA MAHASISWA', 'identity' => '>NIM<'],
-            'tendik' => ['title' => 'TEMPLATE IMPOR DATA TENDIK', 'identity' => '>NIP<'],
-            'dosen' => ['title' => 'TEMPLATE IMPOR DATA DOSEN', 'identity' => '>NIP<'],
+            'tendik' => ['title' => 'TEMPLATE IMPOR DATA TENDIK & DOSEN', 'identity' => '>NIP (opsional)<'],
+            'dosen' => ['title' => 'TEMPLATE IMPOR DATA TENDIK & DOSEN', 'identity' => '>NIP (opsional)<'],
         ];
 
         foreach ($expected as $type => $expect) {
-            $response = $this->getJson('/api/students/import/template?type=' . $type);
+            $shared = $type !== 'mahasiswa';
+            $filename = $shared ? 'tendik-dosen' : $type;
+            $response = $this->getJson('/api/students/import/template?type='.$type);
 
             $response->assertOk()
-                ->assertHeader('Content-Disposition', 'attachment; filename="template-impor-'.$type.'.xls"');
+                ->assertHeader('Content-Disposition', 'attachment; filename="template-impor-'.$filename.'.xls"');
 
             $content = $response->getContent();
             $this->assertStringContainsString($expect['title'], $content, "judul template {$type}");
@@ -406,9 +516,17 @@ class StudentTest extends TestCase
             $this->assertStringContainsString('Jabatan / Unit Kerja', $content);
             $this->assertStringContainsString('Email', $content);
             $this->assertStringContainsString('No. Telepon', $content);
-            // Template per kelompok tidak punya kolom header "Jenis" karena
-            // jenisnya sudah pasti dari template itu sendiri.
-            $this->assertStringNotContainsString('padding:6px 10px;">Jenis<', $content);
+
+            if ($shared) {
+                $this->assertStringContainsString('">Role</td>', $content, "kolom Role pada template {$type}");
+                $this->assertStringContainsString('background-color:#0e7490;', $content);
+                $this->assertStringContainsString('Rumah Tangga', $content);
+            } else {
+                // Template mahasiswa tidak punya kolom Role karena jenisnya
+                // sudah pasti.
+                $this->assertStringNotContainsString('>Role</td>', $content);
+            }
+
             // Tetap tanpa data contoh supaya tidak ikut terimpor.
             $this->assertStringNotContainsString('Budi', $content);
         }
@@ -419,19 +537,19 @@ class StudentTest extends TestCase
         Sanctum::actingAs($this->staff());
 
         foreach (['mahasiswa', 'tendik', 'dosen'] as $type) {
-            $content = $this->getJson('/api/students/import/template?type=' . $type)->assertOk()->getContent();
+            $content = $this->getJson('/api/students/import/template?type='.$type)->assertOk()->getContent();
 
-            // Petunjuk berada SEBELUM header, bukan sebagai baris data di
-            // bawahnya. Tanpa ini petunjuk tampak seperti data yang harus diisi.
-            $instructionPos = strpos($content, 'PETUNJUK');
+            // Panduan pengisian berada SEBELUM header, bukan sebagai baris
+            // data di bawahnya.
+            $instructionPos = strpos($content, 'PANDUAN PENGISIAN');
             $headerPos = strpos($content, '>Nama<');
-            $this->assertNotFalse($instructionPos, "blok PETUNJUK ada di template {$type}");
+            $this->assertNotFalse($instructionPos, "blok panduan ada di template {$type}");
             $this->assertNotFalse($headerPos, "header kolom ada di template {$type}");
-            $this->assertLessThan($headerPos, $instructionPos, "PETUNJUK mendahului header pada {$type}");
+            $this->assertLessThan($headerPos, $instructionPos, "panduan mendahului header pada {$type}");
 
             // Baris data yang disebut pada petunjuk harus benar-benar berada
             // tepat di bawah baris header. Hitung baris dari urutan <tr>.
-            preg_match('/Mulai mengisi data pada baris (\d+)/', $content, $matches);
+            preg_match('/Masukkan data mulai baris (\d+)/', $content, $matches);
             $this->assertNotEmpty($matches, "petunjuk menyebut nomor baris pada {$type}");
             $expectedFirstDataRow = (int) $matches[1];
 
@@ -442,6 +560,23 @@ class StudentTest extends TestCase
                 "nomor baris data pada petunjuk {$type} cocok dengan posisi header",
             );
         }
+    }
+
+    public function test_template_gabungan_menggunakan_role_dan_tidak_mengulang_petunjuknya(): void
+    {
+        Sanctum::actingAs($this->staff());
+
+        $content = $this->getJson('/api/students/import/template?type=tendik')
+            ->assertOk()
+            ->getContent();
+
+        $this->assertStringContainsString('>Role</b> opsional', $content);
+        $this->assertStringContainsString('Rumah Tangga', $content);
+        $this->assertStringContainsString('opsional', $content);
+        $this->assertStringContainsString('tidak menentukan kategori', $content);
+        $this->assertStringContainsString('selain itu masuk Tendik', $content);
+        $this->assertStringContainsString('NIP (opsional)', $content);
+        $this->assertStringContainsString('background-color:#0e7490;', $content);
     }
 
     public function test_setiap_jenis_punya_url_spreadsheet_terpisah(): void
@@ -455,20 +590,39 @@ class StudentTest extends TestCase
             ->assertJsonPath('supported', true)
             ->assertJsonPath('url', '');
 
-        foreach (['mahasiswa' => 'MHS', 'tendik' => 'TENDIK', 'dosen' => 'DOSEN'] as $type => $id) {
-            $this->postJson('/api/students/import/source', [
-                'url' => "https://docs.google.com/spreadsheets/d/{$id}/edit#gid=0",
-                'type' => $type,
-            ])->assertOk()->assertJsonPath('type', $type);
+        // Mahasiswa memakai spreadsheetnya sendiri dan TIDAK boleh ikut
+        // tersentuh oleh URL kelompok pegawai.
+        $this->postJson('/api/students/import/source', [
+            'url' => 'https://docs.google.com/spreadsheets/d/MHS/edit#gid=0',
+            'type' => 'mahasiswa',
+        ])->assertOk();
+
+        $this->getJson('/api/students/import/source?type=mahasiswa')
+            ->assertOk()
+            ->assertJsonPath('url', 'https://docs.google.com/spreadsheets/d/MHS/edit#gid=0');
+
+        // Tendik & Dosen memakai spreadsheet yang sama, sehingga menautkan
+        // salah satu langsung berlaku untuk keduanya.
+        $this->postJson('/api/students/import/source', [
+            'url' => 'https://docs.google.com/spreadsheets/d/PEGAWAI/edit#gid=0',
+            'type' => 'tendik',
+        ])->assertOk()->assertJsonPath('type', 'tendik');
+
+        $this->postJson('/api/students/import/source', [
+            'url' => 'https://docs.google.com/spreadsheets/d/PEGAWAI/edit#gid=0',
+            'type' => 'dosen',
+        ])->assertOk();
+
+        foreach (['tendik', 'dosen'] as $type) {
+            $this->getJson('/api/students/import/source?type='.$type)
+                ->assertOk()
+                ->assertJsonPath('url', 'https://docs.google.com/spreadsheets/d/PEGAWAI/edit#gid=0');
         }
 
-        // Tiap jenis mengembalikan URL-nya sendiri, tidak saling menimpa.
-        foreach (['mahasiswa' => 'MHS', 'tendik' => 'TENDIK', 'dosen' => 'DOSEN'] as $type => $id) {
-            $this->getJson('/api/students/import/source?type=' . $type)
-                ->assertOk()
-                ->assertJsonPath('type', $type)
-                ->assertJsonPath('url', "https://docs.google.com/spreadsheets/d/{$id}/edit#gid=0");
-        }
+        // Sheet pegawai tidak boleh menimpa spreadsheet mahasiswa.
+        $this->getJson('/api/students/import/source?type=mahasiswa')
+            ->assertOk()
+            ->assertJsonPath('url', 'https://docs.google.com/spreadsheets/d/MHS/edit#gid=0');
 
         // Peminjam umum tidak memakai sinkronisasi spreadsheet.
         $this->getJson('/api/students/import/source?type=umum')
@@ -481,41 +635,70 @@ class StudentTest extends TestCase
         ])->assertStatus(422);
     }
 
-    public function test_spreadsheet_tendik_dipaksa_berjenis_tanpa_kolom_jenis(): void
+    public function test_spreadsheet_pegawai_mengizinkan_role_kosong(): void
     {
         Sanctum::actingAs($this->staff());
 
-        // Berkas tendik/dosen tidak perlu kolom "Jenis": backend memaksa
-        // seluruh baris menjadi jenis yang dipilih.
-        $csv = "NIM/NIP,Nama,Jenis,Email\n"
-            ."198001012005011001,Siti Aminah,,siti@pnp.ac.id\n"
-            ."198001012005011002,Rahmat,tendik,rahmat@pnp.ac.id\n";
+        // Role kosong tetap diimpor sebagai Tendik karena Jabatan / Unit Kerja
+        // tidak memuat "Dosen".
+        $csv = "NIM/NIP,Nama,Role,Jabatan / Unit Kerja,Email\n"
+            ."198001012005011001,Siti Aminah,,Rumah Tangga,siti@pnp.ac.id\n"
+            ."198001012005011002,Rahmat,Tendik,Staf Administrasi,rahmat@pnp.ac.id\n";
 
-        $this->post('/api/students/import', [
-            'file' => \Illuminate\Http\UploadedFile::fake()->createWithContent('tendik.csv', $csv),
+        $response = $this->post('/api/students/import', [
+            'file' => UploadedFile::fake()->createWithContent('pegawai.csv', $csv),
             'type' => 'tendik',
-        ], ['Accept' => 'application/json'])->assertOk()
-            ->assertJsonPath('imported', 2);
+        ], ['Accept' => 'application/json'])->assertOk();
 
-        $this->assertDatabaseHas('students', ['student_id' => '198001012005011001', 'type' => 'tendik']);
+        $response->assertJsonPath('imported', 2)
+            ->assertJsonPath('errors', []);
+
+        $this->assertDatabaseHas('students', [
+            'student_id' => '198001012005011001',
+            'type' => 'tendik',
+            'role' => null,
+        ]);
         $this->assertDatabaseHas('students', ['student_id' => '198001012005011002', 'type' => 'tendik']);
     }
 
-    public function test_spreadsheet_dosen_mengabaikan_kolom_jenis_bila_jenis_dipaksa(): void
+    public function test_spreadsheet_dosen_menggunakan_jabatan_di_sheet_bersama(): void
     {
         Sanctum::actingAs($this->staff());
 
-        // Nilai kolom "Jenis" diabaikan karena petugas menautkan spreadsheet
-        // ini sebagai spreadsheet dosen.
-        $csv = "NIM/NIP,Nama,Jenis,Email\n"
-            ."197505052000031002,Andi Saputra,tendik,andi@pnp.ac.id\n";
+        // Jabatan / Unit Kerja menentukan kategori, bukan Role.
+        $csv = "NIM/NIP,Nama,Role,Jabatan / Unit Kerja,Email\n"
+            ."197505052000031002,Andi Saputra,Tendik,Dosen/D3 Sistem Informasi,andi@pnp.ac.id\n";
 
         $this->post('/api/students/import', [
-            'file' => \Illuminate\Http\UploadedFile::fake()->createWithContent('dosen.csv', $csv),
+            'file' => UploadedFile::fake()->createWithContent('dosen.csv', $csv),
             'type' => 'dosen',
         ], ['Accept' => 'application/json'])->assertOk()
             ->assertJsonPath('imported', 1);
 
+        $this->assertDatabaseHas('students', ['student_id' => '197505052000031002', 'type' => 'dosen']);
+    }
+
+    public function test_spreadsheet_gabungan_menolak_role_mahasiswa(): void
+    {
+        Sanctum::actingAs($this->staff());
+
+        // Sheet Tendik & Dosen tidak boleh dipakai memasukkan data mahasiswa.
+        $csv = "NIM/NIP,Nama,Role,Jabatan / Unit Kerja,Email\n"
+            ."2211082001,Budi Santoso,mahasiswa,Mahasiswa D3,budi@example.com\n"
+            ."197505052000031002,Andi Saputra,Tendik,Dosen/D3 Sistem Informasi,andi@pnp.ac.id\n";
+
+        $response = $this->post('/api/students/import', [
+            'file' => UploadedFile::fake()->createWithContent('pegawai.csv', $csv),
+            'type' => 'tendik',
+        ], ['Accept' => 'application/json'])->assertOk();
+
+        $response->assertJsonPath('imported', 1);
+        $this->assertStringContainsString(
+            'tidak boleh ada di spreadsheet',
+            (string) $response->json('errors.0')
+        );
+
+        $this->assertDatabaseMissing('students', ['student_id' => '2211082001']);
         $this->assertDatabaseHas('students', ['student_id' => '197505052000031002', 'type' => 'dosen']);
     }
 
@@ -535,7 +718,7 @@ class StudentTest extends TestCase
                 'student_id' => $id,
                 'name' => $name,
                 'type' => $type,
-                'email' => strtolower(str_replace(' ', '', $name)) . '@pnp.ac.id',
+                'email' => strtolower(str_replace(' ', '', $name)).'@pnp.ac.id',
             ]);
         }
 
@@ -579,38 +762,50 @@ class StudentTest extends TestCase
     {
         Sanctum::actingAs($this->staff());
 
+        // Sheet pegawai memakai kolom "Jenis" karena Tendik & Dosen disatukan.
         Http::fake([
             'docs.google.com/*' => Http::response(
-                "NIM/NIP,Nama,Email\n197505052000031002,Andi Saputra,andi@pnp.ac.id\n",
+                "NIM/NIP,Nama,Role,Jabatan / Unit Kerja,Email\n"
+                ."197505052000031002,Andi Saputra,Tendik,Dosen/D3 Sistem Informasi,andi@pnp.ac.id\n"
+                ."198001012005011001,Siti Aminah,Dosen,Rumah Tangga,siti@pnp.ac.id\n",
                 200
             ),
         ]);
 
         $this->postJson('/api/students/import/csv-url', [
-            'url' => 'https://docs.google.com/spreadsheets/d/DOSEN/edit#gid=0',
+            'url' => 'https://docs.google.com/spreadsheets/d/PEGAWAI/edit#gid=0',
             'type' => 'dosen',
-        ])->assertOk()->assertJsonPath('imported', 1);
+        ])->assertOk()
+            ->assertJsonPath('imported', 2)
+            ->assertJsonPath('updated', 0);
 
+        // Satu sheet memuat dua jenis sekaligus.
         $this->assertDatabaseHas('students', ['student_id' => '197505052000031002', 'type' => 'dosen']);
+        $this->assertDatabaseHas('students', ['student_id' => '198001012005011001', 'type' => 'tendik']);
 
-        // URL & waktu sinkron dosen tersimpan pada kuncinya sendiri, dan
-        // spreadsheet mahasiswa tidak ikut berubah.
+        // URL & waktu sinkron dipakai bersama Tendik & Dosen.
         $dosenSource = $this->getJson('/api/students/import/source?type=dosen')->assertOk();
-        $dosenSource->assertJsonPath('url', 'https://docs.google.com/spreadsheets/d/DOSEN/edit#gid=0');
+        $dosenSource->assertJsonPath('url', 'https://docs.google.com/spreadsheets/d/PEGAWAI/edit#gid=0');
         $this->assertNotNull($dosenSource->json('last_synced_at'));
 
+        // Tendik melihat sheet yang sama karena memang spreadsheet-nya sama.
+        $this->getJson('/api/students/import/source?type=tendik')
+            ->assertOk()
+            ->assertJsonPath('url', 'https://docs.google.com/spreadsheets/d/PEGAWAI/edit#gid=0');
+
+        // Spreadsheet mahasiswa TIDAK ikut tersentuh oleh sheet pegawai.
         $this->getJson('/api/students/import/source?type=mahasiswa')
             ->assertOk()
             ->assertJsonPath('url', '')
             ->assertJsonPath('last_synced_at', null);
 
-        // Sinkron ulang pada jenis yang sama tidak menggandakan data.
+        // Sinkron ulang tidak menggandakan data.
         $this->postJson('/api/students/import/csv-url', [
-            'url' => 'https://docs.google.com/spreadsheets/d/DOSEN/edit#gid=0',
-            'type' => 'dosen',
+            'url' => 'https://docs.google.com/spreadsheets/d/PEGAWAI/edit#gid=0',
+            'type' => 'tendik',
         ])->assertOk()
             ->assertJsonPath('imported', 0)
-            ->assertJsonPath('unchanged', 1);
+            ->assertJsonPath('unchanged', 2);
     }
 
     public function test_peminjam_hanya_dapat_mengelola_data_mahasiswa_dengan_role_petugas(): void
@@ -838,17 +1033,17 @@ class StudentTest extends TestCase
         Sanctum::actingAs($this->staff());
 
         $path = tempnam(sys_get_temp_dir(), 'xlsx_').'.xlsx';
-        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $spreadsheet = new Spreadsheet;
         $spreadsheet->getActiveSheet()->fromArray([
             ['NIM/NIP', 'Nama', 'Email', 'No. Telepon'],
             ['2211082001', 'Budi Santoso', 'budi@example.com', '081234567890'],
             ['2211082002', 'Siti Aminah', 'siti@example.com', null],
         ], null, 'A1');
-        \PhpOffice\PhpSpreadsheet\IOFactory::createWriter($spreadsheet, 'Xlsx')->save($path);
+        IOFactory::createWriter($spreadsheet, 'Xlsx')->save($path);
         $spreadsheet->disconnectWorksheets();
 
         $response = $this->post('/api/students/import', [
-            'file' => new \Illuminate\Http\UploadedFile($path, 'mahasiswa.xlsx', null, null, true),
+            'file' => new UploadedFile($path, 'mahasiswa.xlsx', null, null, true),
         ]);
 
         $response->assertOk()
@@ -870,7 +1065,7 @@ class StudentTest extends TestCase
         Sanctum::actingAs($this->staff());
 
         $this->postJson('/api/students/import', [
-            'file' => \Illuminate\Http\UploadedFile::fake()->createWithContent('data.pdf', '%PDF-1.4 dummy'),
+            'file' => UploadedFile::fake()->createWithContent('data.pdf', '%PDF-1.4 dummy'),
         ])->assertStatus(422);
 
         $this->assertDatabaseCount('students', 0);
@@ -1037,8 +1232,8 @@ class StudentTest extends TestCase
         });
     }
 
-    private function fakeCsvUpload(string $content, string $filename): \Illuminate\Http\UploadedFile
+    private function fakeCsvUpload(string $content, string $filename): UploadedFile
     {
-        return \Illuminate\Http\UploadedFile::fake()->createWithContent($filename, $content);
+        return UploadedFile::fake()->createWithContent($filename, $content);
     }
 }

@@ -63,6 +63,8 @@ fs.cpSync(backendSrc, backendDest, {
       'storage/logs',
       'storage/app/private',
       'storage/app/public',
+      // Folder cache font Dompdf wajib ada dan dapat ditulis saat runtime.
+      'storage/fonts',
     ]) {
       if (rel === keep) return true;
       if (rel.startsWith(keep + '/')) return false;

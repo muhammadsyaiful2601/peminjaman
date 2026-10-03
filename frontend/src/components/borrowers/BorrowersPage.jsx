@@ -3,9 +3,9 @@ import { Mail, Pencil, Phone, Plus, RefreshCw, Search, Trash2, UserRound, Upload
 import api from '../../api/axios'
 import TablePagination from '../TablePagination'
 import ImportStudentsModal from '../ImportStudentsModal'
-import { BORROWER_TYPES, DEFAULT_BORROWER_TYPE, SPREADSHEET_BORROWER_TYPES, borrowerTypeBadgeClass, borrowerTypeLabel, identityLabel, normalizeBorrowerType, syncStorageKey } from '../../utils/borrowerTypes'
+import { BORROWER_TYPES, DEFAULT_BORROWER_TYPE, SPREADSHEET_BORROWER_TYPES, borrowerTypeBadgeClass, borrowerTypeLabel, employeeTypeFromPosition, identityLabel, normalizeBorrowerType, spreadsheetSyncGroups, syncStorageKey } from '../../utils/borrowerTypes'
 
-const emptyForm = { student_id: '', name: '', type: DEFAULT_BORROWER_TYPE, position: '', email: '', phone: '' }
+const emptyForm = { student_id: '', name: '', type: DEFAULT_BORROWER_TYPE, role: '', position: '', email: '', phone: '' }
 const SYNC_INTERVAL_SECONDS = 5 * 60
 // Jumlah baris per halaman pada tabel Data Peminjam. Setelah 10 data
 // muncul tombol "Berikutnya" supaya petugas bisa membuka halaman berikutnya.
@@ -71,11 +71,17 @@ export default function BorrowersPage({
   const scope = useMemo(() => scopeKey.split(','), [scopeKey])
 
   const isLocked = Boolean(lockedType)
-  // Hanya kelompok inilah yang punya spreadsheet, jadi hanya itu yang ikut
-  // disinkronkan dari halaman ini.
+  // Kelompok spreadsheet yang dibaca halaman ini. Tendik & Dosen satu grup
+  // karena memakai spreadsheet yang sama — tanpa itu keduanya menarik CSV
+  // yang sama dua kali per siklus dan jumlah barisnya terhitung dobel.
+  const syncGroups = useMemo(
+    () => spreadsheetSyncGroups(scope),
+    [scopeKey], // eslint-disable-line react-hooks/exhaustive-deps
+  )
+  // Seluruh jenis yang tercakup grup di atas (untuk badge & pemuatan status).
   const syncTypes = useMemo(
-    () => SPREADSHEET_BORROWER_TYPES.filter((type) => scope.includes(type.value)),
-    [scope],
+    () => syncGroups.flatMap((group) => group.types),
+    [syncGroups],
   )
 
   const [students, setStudents] = useState([])
@@ -163,8 +169,12 @@ export default function BorrowersPage({
    *
    * @returns {Promise<{ok: boolean, skipped?: boolean, message?: string, label?: string, imported?: number, updated?: number, unchanged?: number, errors?: string[]}>}
    */
-  const syncOneType = useCallback(async (type) => {
-    const label = borrowerTypeLabel(type)
+  const syncOneGroup = useCallback(async (group) => {
+    // Kelompok gabungan (Tendik & Dosen) memakai satu spreadsheet, jadi cukup
+    // satu request. Jenis yang dikirim ke backend menentukan spreadsheet mana
+    // yang dibaca, sedangkan kolom "Jenis" pada sheet memisahkan barisnya.
+    const type = group.types[0]
+    const label = group.label
     const storageKey = syncStorageKey(type)
     let csvUrl = (localStorage.getItem(storageKey) || '').trim()
 
@@ -195,6 +205,8 @@ export default function BorrowersPage({
     return {
       ok: true,
       label,
+      groupKey: group.key,
+      types: group.types,
       imported: result.imported || 0,
       updated: result.updated || 0,
       unchanged: result.unchanged || 0,
@@ -218,8 +230,8 @@ export default function BorrowersPage({
     try {
       const results = []
 
-      for (const type of syncTypes) {
-        results.push(await syncOneType(type.value))
+      for (const group of syncGroups) {
+        results.push(await syncOneGroup(group))
       }
 
       const done = results.filter((result) => result.ok)
@@ -238,14 +250,17 @@ export default function BorrowersPage({
 
       setError('')
 
-      // Waktu sinkron terakhir per jenis disimpan terpisah supaya setiap tab
-      // bisa menampilkan waktunya sendiri.
+      // Waktu sinkron terakhir disimpan per kelompok. Kelompok gabungan
+      // (Tendik & Dosen) menulis ke kedua jenisnya karena spreadsheetnya sama.
       setSyncSources((current) => {
         const next = { ...current }
         done.forEach((result) => {
-          const entry = SPREADSHEET_BORROWER_TYPES.find((type) => borrowerTypeLabel(type.value) === result.label)
-          const key = entry?.value || DEFAULT_BORROWER_TYPE
-          next[key] = { ...(next[key] || { url: '' }), lastSyncedAt: result.syncedAt }
+          const keys = result.types?.length
+            ? result.types
+            : [DEFAULT_BORROWER_TYPE]
+          keys.forEach((key) => {
+            next[key] = { ...(next[key] || { url: '', webhookUrl: '' }), lastSyncedAt: result.syncedAt }
+          })
         })
 
         return next
@@ -285,7 +300,7 @@ export default function BorrowersPage({
       syncingRef.current = false
       setSyncing(false)
     }
-  }, [fetchStudents, syncOneType, syncTypes])
+  }, [fetchStudents, syncOneGroup, syncGroups])
 
   // Daftar mahasiswa diambil sekali saat halaman dibuka.
   useEffect(() => { fetchStudents('') }, [fetchStudents])
@@ -351,6 +366,9 @@ export default function BorrowersPage({
         return [value, {
           url: String(response.data?.url || '').trim(),
           lastSyncedAt: String(response.data?.last_synced_at || ''),
+          // URL webhook tulis-balik ikut dimuat supaya panel pengaturan Jabatan
+          // di modal impor menampilkan URL yang sudah tersimpan.
+          webhookUrl: String(response.data?.webhook_url || '').trim(),
         }]
       } catch {
         // URL belum tersimpan atau server belum tersedia.
@@ -362,7 +380,7 @@ export default function BorrowersPage({
       const loaded = {}
       entries.forEach(([value, data]) => {
         if (data?.url) localStorage.setItem(syncStorageKey(value), data.url)
-        loaded[value] = data || { url: '', lastSyncedAt: '' }
+        loaded[value] = data || { url: '', lastSyncedAt: '', webhookUrl: '' }
       })
       setSyncSources((current) => ({ ...current, ...loaded }))
     })
@@ -442,8 +460,14 @@ export default function BorrowersPage({
     setSubmitting(true)
     try {
       if (editingStudent) {
-        await api.put(`/students/${editingStudent.id}`, form)
-        setSuccess(`Data ${borrowerTypeLabel(form.type).toLowerCase()} berhasil diperbarui.`)
+        const response = await api.put(`/students/${editingStudent.id}`, form)
+        setSuccess(response.data?.message || `Data ${borrowerTypeLabel(form.type).toLowerCase()} berhasil diperbarui.`)
+        // Pesan backend sudah menyebut bila jabatan gagal dikirim ke
+        // spreadsheet. Tampilkan sebagai peringatan agar petugas tahu nilainya
+        // aman di aplikasi tapi belum sampai ke spreadsheet.
+        if (response.data?.spreadsheet && !response.data.spreadsheet.ok && !response.data.spreadsheet.skipped) {
+          setError(response.data.spreadsheet.message)
+        }
       } else {
         await api.post('/students', form)
         setSuccess(`Data ${borrowerTypeLabel(form.type).toLowerCase()} berhasil ditambahkan.`)
@@ -465,6 +489,7 @@ export default function BorrowersPage({
       student_id: student.student_id,
       name: student.name,
       type: student.type || DEFAULT_BORROWER_TYPE,
+      role: student.role || '',
       position: student.position || '',
       email: student.email,
       phone: student.phone || '',
@@ -493,7 +518,17 @@ export default function BorrowersPage({
     }
   }
 
-  const updateForm = (event) => setForm((current) => ({ ...current, [event.target.name]: event.target.value }))
+  const updateForm = (event) => {
+    const { name, value } = event.target
+
+    setForm((current) => ({
+      ...current,
+      [name]: value,
+      ...(name === 'position' && ['tendik', 'dosen'].includes(current.type)
+        ? { type: employeeTypeFromPosition(value) }
+        : {}),
+    }))
+  }
 
   // Jenis yang spreadsheet-nya sudah ditautkan — ditampilkan sebagai ringkasan
   // supaya petugas tahu kelompok mana saja yang ikut tersinkron otomatis.
@@ -608,10 +643,16 @@ export default function BorrowersPage({
             </select>
           </label>
         )}
+        {['tendik', 'dosen'].includes(form.type) && (
+          <label className="text-sm font-medium text-slate-700">
+            Role (opsional)
+            <input name="role" value={form.role} onChange={updateForm} placeholder="Contoh: Dosen, Tendik, Rumah Tangga" className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500" />
+          </label>
+        )}
         <label className="text-sm font-medium text-slate-700">
           {identityLabel(form.type)}
-          {' *'}
-          <input required name="student_id" value={form.student_id} onChange={updateForm} placeholder={form.type === 'mahasiswa' ? 'Contoh: 2211082001' : 'Contoh: 198001012005011001'} className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500" />
+          {['tendik', 'dosen'].includes(form.type) ? ' (opsional)' : ' *'}
+          <input required={!['tendik', 'dosen'].includes(form.type)} name="student_id" value={form.student_id || ''} onChange={updateForm} placeholder={form.type === 'mahasiswa' ? 'Contoh: 2211082001' : 'Kosongkan jika tidak ada'} className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500" />
         </label>
         <label className="text-sm font-medium text-slate-700">
           Nama lengkap *
@@ -619,7 +660,7 @@ export default function BorrowersPage({
         </label>
         <label className="text-sm font-medium text-slate-700">
           Jabatan / Unit Kerja
-          <input name="position" value={form.position} onChange={updateForm} placeholder={form.type === 'mahasiswa' ? 'Program studi (opsional)' : 'Contoh: Staf Bagian Keuangan'} className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500" />
+          <input name="position" value={form.position} onChange={updateForm} placeholder={form.type === 'mahasiswa' ? 'Program studi (opsional)' : 'Tugas atau unit kerja'} className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500" />
         </label>
         <label className="text-sm font-medium text-slate-700">
           Email *
@@ -642,7 +683,7 @@ export default function BorrowersPage({
       <div className="mb-4 flex flex-col gap-2 sm:flex-row">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
-          <input value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') runSearch() }} placeholder="Cari NIM/NIP, nama, jabatan, atau email..." className="w-full rounded-lg border border-slate-300 py-2.5 pl-10 pr-4 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500" />
+          <input value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') runSearch() }} placeholder="Cari NIM/NIP, nama, role, unit kerja, atau email..." className="w-full rounded-lg border border-slate-300 py-2.5 pl-10 pr-4 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500" />
         </div>
         <button type="button" onClick={runSearch} className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-800 px-5 py-2.5 font-medium text-white hover:bg-slate-900"><Search className="h-4 w-4" />Cari</button>
       </div>
@@ -651,8 +692,8 @@ export default function BorrowersPage({
         {loading ? <p className="p-8 text-center text-slate-500">Memuat data peminjam...</p> : students.length === 0 ? <div className="p-8 text-center text-slate-500"><UserRound className="mx-auto mb-3 h-10 w-10 text-slate-300" />{search ? 'Peminjam tidak ditemukan.' : 'Belum ada data peminjam.'}</div> : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
-              <thead className="bg-slate-50"><tr><th className="w-14 px-5 py-3 text-center font-medium text-slate-500">No.</th><th className="px-5 py-3 font-medium text-slate-500">Jenis</th><th className="px-5 py-3 font-medium text-slate-500">NIM / NIP</th><th className="px-5 py-3 font-medium text-slate-500">Nama</th><th className="px-5 py-3 font-medium text-slate-500">Kontak</th><th className="px-5 py-3 text-right font-medium text-slate-500">Aksi</th></tr></thead>
-              <tbody className="divide-y divide-slate-200">{students.map((student, index) => <tr key={student.id}><td className="px-5 py-3 text-center text-slate-400">{(page - 1) * PER_PAGE + index + 1}</td><td className="px-5 py-3"><span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${borrowerTypeBadgeClass(student.type)}`}>{borrowerTypeLabel(student.type)}</span></td><td className="px-5 py-3 font-mono text-slate-700">{student.student_id}</td><td className="px-5 py-3 font-medium text-slate-900">{student.name}{student.position && <div className="mt-0.5 text-xs font-normal text-slate-500">{student.position}</div>}</td><td className="px-5 py-3 text-slate-600"><div className="flex items-center gap-1.5"><Mail className="h-3.5 w-3.5 text-slate-400" />{student.email}</div>{student.phone && <div className="mt-1 flex items-center gap-1.5 text-xs"><Phone className="h-3.5 w-3.5 text-slate-400" />{student.phone}</div>}</td><td className="px-5 py-3 text-right"><div className="inline-flex gap-2"><button type="button" onClick={() => handleEdit(student)} className="rounded-lg p-1.5 text-slate-500 hover:bg-cyan-50 hover:text-cyan-600" aria-label={`Edit ${student.name}`}><Pencil className="h-4 w-4" /></button><button type="button" onClick={() => handleDelete(student)} className="rounded-lg p-1.5 text-slate-500 hover:bg-red-50 hover:text-red-600" aria-label={`Hapus ${student.name}`}><Trash2 className="h-4 w-4" /></button></div></td></tr>)}</tbody>
+              <thead className="bg-slate-50"><tr><th className="w-14 px-5 py-3 text-center font-medium text-slate-500">No.</th><th className="px-5 py-3 font-medium text-slate-500">Kategori / Role</th><th className="px-5 py-3 font-medium text-slate-500">NIM / NIP</th><th className="px-5 py-3 font-medium text-slate-500">Nama</th><th className="px-5 py-3 font-medium text-slate-500">Kontak</th><th className="px-5 py-3 text-right font-medium text-slate-500">Aksi</th></tr></thead>
+              <tbody className="divide-y divide-slate-200">{students.map((student, index) => <tr key={student.id}><td className="px-5 py-3 text-center text-slate-400">{(page - 1) * PER_PAGE + index + 1}</td><td className="px-5 py-3"><span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${borrowerTypeBadgeClass(student.type)}`}>{borrowerTypeLabel(student.type)}</span>{student.role && <div className="mt-1 text-xs text-slate-500">{student.role}</div>}</td><td className="px-5 py-3 font-mono text-slate-700">{student.student_id || '—'}</td><td className="px-5 py-3 font-medium text-slate-900">{student.name}{student.position && <div className="mt-0.5 text-xs font-normal text-slate-500">{student.position}</div>}</td><td className="px-5 py-3 text-slate-600"><div className="flex items-center gap-1.5"><Mail className="h-3.5 w-3.5 text-slate-400" />{student.email}</div>{student.phone && <div className="mt-1 flex items-center gap-1.5 text-xs"><Phone className="h-3.5 w-3.5 text-slate-400" />{student.phone}</div>}</td><td className="px-5 py-3 text-right"><div className="inline-flex gap-2"><button type="button" onClick={() => handleEdit(student)} className="rounded-lg p-1.5 text-slate-500 hover:bg-cyan-50 hover:text-cyan-600" aria-label={`Edit ${student.name}`}><Pencil className="h-4 w-4" /></button><button type="button" onClick={() => handleDelete(student)} className="rounded-lg p-1.5 text-slate-500 hover:bg-red-50 hover:text-red-600" aria-label={`Hapus ${student.name}`}><Trash2 className="h-4 w-4" /></button></div></td></tr>)}</tbody>
             </table>
           </div>
         )}

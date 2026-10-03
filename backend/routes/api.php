@@ -1,8 +1,5 @@
 <?php
 
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BackupController;
 use App\Http\Controllers\Api\BrandingController;
@@ -10,9 +7,14 @@ use App\Http\Controllers\Api\ClearanceController;
 use App\Http\Controllers\Api\HybridController;
 use App\Http\Controllers\Api\ItemController;
 use App\Http\Controllers\Api\LoanController;
+use App\Http\Controllers\Api\PdfFontController;
 use App\Http\Controllers\Api\StudentController;
-use App\Http\Controllers\Api\UserController;
+use App\Http\Controllers\Api\SystemResetController;
 use App\Http\Controllers\Api\TechnicianController;
+use App\Http\Controllers\Api\UserController;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Route;
 
 // Public routes
@@ -31,7 +33,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/email/verification-notification', [AuthController::class, 'sendVerificationNotification']);
     Route::middleware('role:admin')->group(function () {
         Route::post('/branding', [BrandingController::class, 'update']);
+        // Hanya admin yang boleh mengganti font PDF.
+        Route::post('/pdf-font', [PdfFontController::class, 'update']);
     });
+
+    // Daftar font PDF dibaca semua petugas (mis. untuk pratinjau), sehingga
+    // route ini berada di luar penjaga role admin.
+    Route::get('/pdf-font', [PdfFontController::class, 'index']);
 
     // Items - all authenticated users can view
     Route::get('/items', [ItemController::class, 'index']);
@@ -58,9 +66,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/technicians', [TechnicianController::class, 'index']);
     Route::get('/students', [StudentController::class, 'index']);
     Route::get('/students/import/source', [StudentController::class, 'importSource']);
-
     // Loan management - admin & assistant only (petugas creates & verifies)
     Route::middleware('role:admin,assistant')->group(function () {
+        // Webhook Google Apps Script: menulis balik Jabatan / Unit Kerja yang
+        // diubah di aplikasi ke spreadsheet. Hanya petugas yang boleh
+        // mengonfigurasi dan mengujinya.
+        Route::post('/students/webhook', [StudentController::class, 'saveWebhook']);
+        Route::post('/students/webhook/test', [StudentController::class, 'testWebhook']);
         Route::post('/loans', [LoanController::class, 'store']);
         Route::post('/loans/official/download', [LoanController::class, 'downloadOfficialLoan']);
         Route::post('/loans/clearance/download', [ClearanceController::class, 'download']);
@@ -78,6 +90,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware('role:admin')->group(function () {
         Route::get('/users', [UserController::class, 'index']);
         Route::get('/backups/status', [BackupController::class, 'status']);
+        Route::post('/system-reset', [SystemResetController::class, 'reset']);
+        Route::get('/backups/reset-download/{filename}', [SystemResetController::class, 'downloadBackup']);
 
         // Urutan penting: rute khusus didaftarkan sebelum /backups/{type}
         // agar "full" dan "restore" tidak tertangkap sebagai jenis backup.

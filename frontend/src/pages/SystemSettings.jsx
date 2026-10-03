@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { DatabaseBackup, Download, Image, Info, KeyRound, Mail, Save, Server, Settings2, Upload, X } from 'lucide-react'
+import { AlertTriangle, DatabaseBackup, Download, Image, Info, KeyRound, Mail, RotateCcw, Save, Server, Settings2, Type, Upload, X } from 'lucide-react'
 import api from '../api/axios'
+import { useAuth } from '../context/AuthContext'
 import { useBranding } from '../context/BrandingContext'
 import { downloadBlob, filenameFromResponse, timestampedFilename } from '../utils/downloadBlob'
 import HybridSyncSection from '../components/settings/HybridSyncSection'
 import EmailSettingsSection from '../components/settings/EmailSettingsSection'
+import PdfFontSection from '../components/settings/PdfFontSection'
 import UpdateSettingsSection from '../components/settings/UpdateSettingsSection'
 
 const textFields = [
@@ -27,6 +29,7 @@ const fileFields = [
 // desktop (Hosting & Sinkronisasi, Tentang & Pembaruan) disembunyikan di web.
 const SECTIONS = [
   { key: 'identity', label: 'Identitas Aplikasi', icon: Settings2, desktopOnly: false },
+  { key: 'pdffont', label: 'Font PDF', icon: Type, desktopOnly: false },
   { key: 'email', label: 'Email (SMTP)', icon: Mail, desktopOnly: false },
   { key: 'sync', label: 'Hosting & Sinkronisasi', icon: Server, desktopOnly: true },
   { key: 'backup', label: 'Backup & Pemulihan', icon: DatabaseBackup, desktopOnly: false },
@@ -60,6 +63,9 @@ function formatBytes(bytes) {
 
 function SystemSettings() {
   const branding = useBranding()
+  const { user } = useAuth()
+  // Hanya admin yang boleh mengganti font PDF (dijaga juga oleh backend).
+  const canManagePdfFont = user?.role === 'admin'
   const isDesktop = Boolean(window.desktop?.isDesktop)
   const [tab, setTab] = useState('identity')
   const [form, setForm] = useState(branding)
@@ -80,6 +86,12 @@ function SystemSettings() {
   // pesan sukses agar mudah dikenali dan tidak dianggap "semuanya beres".
   const [restoreWarnings, setRestoreWarnings] = useState([])
   const [finalizing, setFinalizing] = useState(false)
+  const [resetDialogOpen, setResetDialogOpen] = useState(false)
+  const [resetting, setResetting] = useState(false)
+  const [resetPassword, setResetPassword] = useState('')
+  const [resetConfirmation, setResetConfirmation] = useState('')
+  const [resetError, setResetError] = useState('')
+  const [resetResult, setResetResult] = useState(null)
   const restoreInputRef = useRef(null)
 
   // Tab khusus desktop disembunyikan di web; bila tab aktif tidak tersedia
@@ -258,6 +270,44 @@ function SystemSettings() {
     }
   }
 
+  const handleSystemReset = async (event) => {
+    event.preventDefault()
+    setResetError('')
+    setResetting(true)
+
+    try {
+      const response = await api.post('/system-reset', {
+        password: resetPassword,
+        confirmation: resetConfirmation,
+      }, { timeout: 15 * 60 * 1000 })
+      setResetResult(response.data)
+      setResetPassword('')
+      setResetConfirmation('')
+      setResetDialogOpen(false)
+    } catch (requestError) {
+      const data = requestError.response?.data
+      setResetError(data?.errors ? Object.values(data.errors).flat().join(', ') : data?.message || 'Reset sistem gagal.')
+    } finally {
+      setResetting(false)
+    }
+  }
+
+  const downloadResetBackup = async () => {
+    if (!resetResult?.backup) return
+
+    try {
+      const response = await api.get(`/backups/reset-download/${encodeURIComponent(resetResult.backup)}`, {
+        responseType: 'blob',
+      })
+      const result = await downloadBlob(response.data, filenameFromResponse(response, resetResult.backup))
+      if (result && !result.ok && !result.canceled) {
+        setResetError(result.message || 'Backup sebelum reset gagal diunduh.')
+      }
+    } catch {
+      setResetError('Backup sudah dibuat di server, tetapi gagal diunduh. Coba kembali melalui tombol unduh backup.')
+    }
+  }
+
   return (
     <div className="max-w-4xl space-y-6">
       <div>
@@ -332,6 +382,8 @@ function SystemSettings() {
         )}
 
         {activeTab === 'email' && <EmailSettingsSection />}
+
+        {activeTab === 'pdffont' && <PdfFontSection canEdit={canManagePdfFont} />}
 
         {activeTab === 'sync' && <HybridSyncSection />}
 
@@ -478,6 +530,58 @@ function SystemSettings() {
       </form>
       )}
 
+      {activeTab === 'backup' && canManagePdfFont && (
+        <section className="rounded-xl border border-red-300 bg-white p-6 shadow-sm">
+          <div className="mb-4 flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-600" />
+            <div>
+              <h2 className="font-semibold text-red-900">Reset Sistem</h2>
+              <p className="mt-1 text-sm text-slate-600">
+                Hapus seluruh data operasional (barang, peminjaman, peminjam, teknisi, dan surat bebas labor).
+                Akun admin/asisten serta pengaturan aplikasi tetap dipertahankan. Dalam mode hybrid, database lokal
+                dan hosting ikut direset. Cache aplikasi juga dibersihkan.
+              </p>
+              <p className="mt-2 text-sm font-semibold text-red-700">
+                Sebelum menghapus data, sistem membuat backup lengkap database dan file unggahan.
+              </p>
+            </div>
+          </div>
+
+          {resetResult && (
+            <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+              <p className="font-semibold">{resetResult.message}</p>
+              <p className="mt-1">Backup disimpan sebagai <code>{resetResult.backup}</code>.</p>
+              {resetResult.warnings?.map((warning) => (
+                <p key={warning} className="mt-2 text-amber-800"><strong>Perhatian:</strong> {warning}</p>
+              ))}
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button type="button" onClick={downloadResetBackup} className="inline-flex items-center gap-2 rounded-lg border border-emerald-300 px-3 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-100">
+                  <Download className="h-4 w-4" />Unduh backup sebelum reset
+                </button>
+                <button type="button" onClick={() => window.location.reload()} className="rounded-lg bg-emerald-700 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-800">
+                  Muat ulang aplikasi
+                </button>
+              </div>
+            </div>
+          )}
+          {resetError && <p className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{resetError}</p>}
+
+          <button
+            type="button"
+            onClick={() => {
+              setResetError('')
+              setResetPassword('')
+              setResetConfirmation('')
+              setResetDialogOpen(true)
+            }}
+            disabled={resetting}
+            className="inline-flex items-center gap-2 rounded-lg bg-red-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-800 disabled:opacity-50"
+          >
+            <RotateCcw className="h-4 w-4" />Reset seluruh data operasional
+          </button>
+        </section>
+      )}
+
       {activeTab === 'about' && (
         <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="mb-5">
@@ -512,9 +616,57 @@ function SystemSettings() {
           </form>
         </div>
       )}
+
+      {resetDialogOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4">
+          <form onSubmit={handleSystemReset} className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="mt-0.5 h-6 w-6 shrink-0 text-red-600" />
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">Konfirmasi Reset Sistem</h2>
+                <p className="mt-1 text-sm text-slate-600">
+                  Reset ini akan menghapus data operasional di database lokal dan hosting (jika mode hybrid aktif).
+                  Akun dan pengaturan sistem tetap ada. Backup lengkap dibuat terlebih dahulu.
+                </p>
+              </div>
+            </div>
+            <label className="mt-5 block text-sm font-medium text-slate-700">
+              Password admin
+              <input
+                autoFocus
+                required
+                type="password"
+                value={resetPassword}
+                onChange={(event) => setResetPassword(event.target.value)}
+                autoComplete="current-password"
+                className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-red-500 focus:ring-2 focus:ring-red-100"
+              />
+            </label>
+            <label className="mt-4 block text-sm font-medium text-slate-700">
+              Ketik <code className="rounded bg-red-50 px-1 text-red-700">RESET</code> untuk mengonfirmasi
+              <input
+                required
+                value={resetConfirmation}
+                onChange={(event) => setResetConfirmation(event.target.value)}
+                autoComplete="off"
+                className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-red-500 focus:ring-2 focus:ring-red-100"
+              />
+            </label>
+            {resetError && <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{resetError}</p>}
+            <div className="mt-5 flex justify-end gap-2">
+              <button type="button" onClick={() => setResetDialogOpen(false)} disabled={resetting} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">
+                Batal
+              </button>
+              <button type="submit" disabled={resetting || resetConfirmation !== 'RESET'} className="inline-flex items-center gap-2 rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:opacity-50">
+                <RotateCcw className={`h-4 w-4 ${resetting ? 'animate-spin' : ''}`} />
+                {resetting ? 'Membuat backup dan mereset...' : 'Backup & Reset Sistem'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   )
 }
 
 export default SystemSettings
-

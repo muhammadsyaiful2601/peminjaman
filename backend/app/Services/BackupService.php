@@ -265,9 +265,10 @@ class BackupService
     /**
      * Dump MySQL portabel (tanpa membutuhkan mysqldump).
      */
-    public function mysqlDump(): string
+    public function mysqlDump(?string $connectionName = null): string
     {
-        $connection = $this->driver() === 'mysql' ? 'mysql' : Hybrid::CONNECTION;
+        $connection = $connectionName
+            ?? ($this->driver() === 'mysql' ? 'mysql' : Hybrid::CONNECTION);
 
         if ($connection === Hybrid::CONNECTION) {
             Hybrid::applyConnection();

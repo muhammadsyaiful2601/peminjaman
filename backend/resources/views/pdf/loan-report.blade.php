@@ -3,8 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <style>
+        @include('pdf.partials.pdf-fonts')
         * { box-sizing: border-box; }
-        body { font-family: DejaVu Sans, sans-serif; color: #111827; font-size: 10px; margin: 28px 34px; }
+        body { font-family: {!! \App\Support\PdfFont::stack() !!}; color: #111827; font-size: 10px; margin: 28px 34px; }
         .letterhead { display: table; width: 100%; min-height: 72px; text-align: center; }
         .logo-cell { display: table-cell; width: 78px; vertical-align: middle; text-align: left; }
         .logo { width: 66px; height: 70px; object-fit: contain; }

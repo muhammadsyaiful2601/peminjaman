@@ -6,10 +6,14 @@ use App\Http\Controllers\Controller;
 use App\Models\AppSetting;
 use App\Models\Student;
 use App\Support\BorrowerType;
+use App\Support\SheetsWebhook;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 
 class StudentController extends Controller
 {
@@ -43,6 +47,7 @@ class StudentController extends Controller
                     $subQuery->where('student_id', 'like', "%{$search}%")
                         ->orWhere('name', 'like', "%{$search}%")
                         ->orWhere('email', 'like', "%{$search}%")
+                        ->orWhere('role', 'like', "%{$search}%")
                         ->orWhere('position', 'like', "%{$search}%");
                 });
             })
@@ -59,6 +64,7 @@ class StudentController extends Controller
                     $subQuery->where('student_id', 'like', "%{$search}%")
                         ->orWhere('name', 'like', "%{$search}%")
                         ->orWhere('email', 'like', "%{$search}%")
+                        ->orWhere('role', 'like', "%{$search}%")
                         ->orWhere('position', 'like', "%{$search}%");
                 });
             })
@@ -124,10 +130,10 @@ class StudentController extends Controller
      * Baca parameter `type` yang boleh berisi satu atau beberapa jenis
      * dipisah koma.
      *
-     * @return array<int, string>|null  Daftar jenis yang sah, array kosong bila
-     *                                  parameter tidak dikirim (berarti semua
-     *                                  jenis), atau null bila ada jenis yang
-     *                                  tidak dikenal.
+     * @return array<int, string>|null Daftar jenis yang sah, array kosong bila
+     *                                 parameter tidak dikirim (berarti semua
+     *                                 jenis), atau null bila ada jenis yang
+     *                                 tidak dikenal.
      */
     private function parseTypes(?string $raw): ?array
     {
@@ -171,11 +177,56 @@ class StudentController extends Controller
     public function update(Request $request, Student $student)
     {
         $student->update($this->validatedData($request, $student));
+        $student->refresh();
+
+        // Perubahan data peminjam ikut ditulis balik ke spreadsheet bila
+        // kelompok ini punya webhook Apps Script terpasang.
+        // Kegagalan tidak membatalkan penyimpanan lokal: spreadsheet adalah
+        // pelengkap, bukan sumber kebenaran.
+        $push = $this->pushToSpreadsheet($student);
 
         return response()->json([
-            'message' => 'Data peminjam berhasil diperbarui.',
-            'student' => $student->refresh(),
+            'message' => 'Data peminjam berhasil diperbarui.'
+                .($push['skipped'] ?? false ? '' : ' '.$push['message']),
+            'student' => $student,
+            'spreadsheet' => $push,
         ]);
+    }
+
+    /**
+     * Kirim data peminjam ke spreadsheet lewat webhook, lalu catat waktu
+     * keberhasilannya.
+     *
+     * @return array{ok: bool, skipped: bool, message: string}
+     */
+    private function pushToSpreadsheet(Student $student): array
+    {
+        $webhookKey = BorrowerType::webhookKey($student->type);
+
+        if ($webhookKey === null) {
+            return ['ok' => false, 'skipped' => true, 'message' => ''];
+        }
+
+        $result = SheetsWebhook::push($student, BorrowerType::webhookUrl($student->type));
+
+        if ($result['ok']) {
+            $lastKey = BorrowerType::webhookLastKey($student->type);
+
+            if ($lastKey !== null) {
+                AppSetting::setValue($lastKey, now()->toIso8601String());
+            }
+        }
+
+        return [
+            'ok' => $result['ok'],
+            'skipped' => (bool) ($result['skipped'] ?? false),
+            // Kegagalan disembunyikan dari pesan utama supaya petugas tidak
+            // mengira datanya gagal disimpan, tapi tetap dikembalikan agar UI
+            // bisa memberi tahu bahwa spreadsheet belum ikut ter-update.
+            'message' => $result['ok']
+                ? 'Perubahan data juga dikirim ke spreadsheet.'
+                : 'Tersimpan di aplikasi, tetapi gagal dikirim ke spreadsheet: '.($result['message'] ?? 'tidak diketahui'),
+        ];
     }
 
     public function destroy(Student $student)
@@ -211,12 +262,126 @@ class StudentController extends Controller
         return response()->json([
             'type' => $type,
             'supported' => true,
-            'url' => AppSetting::getValue($urlKey, ''),
+            // Tendik & Dosen membaca satu spreadsheet yang sama, jadi URL-nya
+            // juga sama. `syncUrl()` otomatis memakai URL lama per jenis sebagai
+            // cadangan bila kunci gabungan masih kosong.
+            'url' => BorrowerType::syncUrl($type),
             // Waktu sinkronisasi otomatis terakhir yang berhasil, agar halaman
             // Data Peminjam dapat menampilkan "sinkron terakhir" walaupun
             // halaman baru dibuka/dimuat ulang.
             'last_synced_at' => AppSetting::getValue(BorrowerType::syncLastKey($type)),
+            // Webhook tulis-balik: kalau terisi, Jabatan / Unit Kerja yang
+            // diubah di aplikasi ikut dikirim ke spreadsheet.
+            'webhook_url' => BorrowerType::webhookUrl($type),
+            'webhook_last_pushed_at' => AppSetting::getValue(BorrowerType::webhookLastKey($type)),
         ]);
+    }
+
+    /**
+     * Simpan URL webhook Google Apps Script untuk menulis balik ke spreadsheet.
+     *
+     * URL kosong menghapus webhook (kembali ke sinkronisasi satu arah).
+     * Hanya host resmi Google Apps Script yang diterima agar nilai ini tidak
+     * bisa dipakai memanggil alamat lain dari server.
+     */
+    public function saveWebhook(Request $request)
+    {
+        $validated = $request->validate([
+            // `nullable` membuat string kosong berubah jadi null, sehingga
+            // string kosong (mematikan webhook) dibaca lewat `has()` agar
+            // tidak tertukar dengan "parameter tidak dikirim".
+            'url' => ['nullable', 'string', 'max:2000'],
+            'type' => ['nullable', 'string', Rule::in(BorrowerType::SPREADSHEET_TYPES)],
+        ]);
+
+        $type = BorrowerType::clean($validated['type'] ?? null);
+        $key = BorrowerType::webhookKey($type);
+
+        if ($key === null) {
+            return response()->json([
+                'message' => 'Jenis peminjam ini tidak memakai sinkronisasi spreadsheet.',
+            ], 422);
+        }
+
+        $raw = $request->input('url');
+        $url = SheetsWebhook::cleanUrl(is_string($raw) ? $raw : '');
+
+        if ($url === '') {
+            AppSetting::setValue($key, null);
+
+            return response()->json([
+                'message' => 'Webhook ditulis balik dimatikan untuk '.BorrowerType::label($type).'.',
+                'type' => $type,
+                'webhook_url' => '',
+            ]);
+        }
+
+        if (! SheetsWebhook::isValidUrl($url)) {
+            return response()->json([
+                'message' => 'URL webhook tidak dikenali. Tempel URL Web App Google Apps Script '
+                    .'(https://script.google.com/macros/s/.../exec).',
+            ], 422);
+        }
+
+        AppSetting::setValue($key, $url);
+
+        return response()->json([
+            'message' => 'Webhook spreadsheet untuk '.BorrowerType::label($type).' berhasil disimpan.',
+            'type' => $type,
+            'webhook_url' => $url,
+        ]);
+    }
+
+    /**
+     * Uji webhook dengan mengirim satu baris contoh.
+     *
+     * Memakai data peminjam yang benar-benar ada bila ada, supaya hasil uji
+     * mencerminkan isi spreadsheet. Bila belum ada data sama sekali, tetap
+     * dikembalikan "ok"=false dengan pesan jelas, bukan error 500.
+     */
+    public function testWebhook(Request $request)
+    {
+        $validated = $request->validate([
+            'type' => ['nullable', 'string', Rule::in(BorrowerType::SPREADSHEET_TYPES)],
+        ]);
+
+        $type = BorrowerType::clean($validated['type'] ?? null);
+        $url = BorrowerType::webhookUrl($type);
+
+        if ($url === '' || ! SheetsWebhook::isValidUrl($url)) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Webhook belum dikonfigurasi untuk '.BorrowerType::label($type).'.',
+            ], 422);
+        }
+
+        $student = Student::where('type', $type)->first();
+
+        if ($student === null) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Belum ada data '.BorrowerType::label($type).' untuk diuji. '
+                    .'Tambahkan satu data lebih dulu, lalu coba lagi.',
+            ], 422);
+        }
+
+        $result = SheetsWebhook::push($student, $url);
+
+        if ($result['ok']) {
+            $lastKey = BorrowerType::webhookLastKey($type);
+
+            if ($lastKey !== null) {
+                AppSetting::setValue($lastKey, now()->toIso8601String());
+            }
+        }
+
+        return response()->json([
+            'ok' => $result['ok'],
+            'message' => $result['ok']
+                ? 'Berhasil menulis ke spreadsheet. Baris contoh: '.$student->name
+                    .' ('.($student->student_id ?: $student->email).').'
+                : ($result['message'] ?? 'Gagal menghubungi spreadsheet.'),
+        ], $result['ok'] ? 200 : 422);
     }
 
     public function saveImportSource(Request $request)
@@ -246,11 +411,11 @@ class StudentController extends Controller
 
     /**
      * Impor data dari file spreadsheet (CSV hasil unduhan Google Sheets /
-     * Excel). Baris dengan NIM/NIP yang sudah ada akan diperbarui, baris baru
-     * akan ditambahkan.
+     * Excel). Baris yang cocok berdasarkan NIM/NIP atau email akan diperbarui;
+     * baris baru akan ditambahkan.
      *
-     * Parameter `type` memaksa seluruh baris menjadi jenis peminjam tertentu,
-     * jadi file tendik/dosen tidak wajib punya kolom "Jenis".
+     * Untuk spreadsheet Tendik & Dosen, Role per baris menentukan peran;
+     * NIP opsional dan email menjadi kunci pencocokan.
      */
     public function import(Request $request)
     {
@@ -267,16 +432,21 @@ class StudentController extends Controller
             ], 422);
         }
 
-        return $this->importRows($rows, $validated['type'] ?? null);
+        $type = $validated['type'] ?? null;
+
+        return $this->importRows(
+            $rows,
+            $type === null ? null : BorrowerType::forcedType($type),
+            $type !== null && BorrowerType::usesSharedSheet($type),
+        );
     }
 
-    /**
     /**
      * Ambil CSV Google Sheets yang sudah dipublikasikan untuk penggunaan web.
      * Tidak menggunakan Google Sheets API atau API key.
      *
-     * Parameter `type` menentukan spreadsheet mana yang diambil sekaligus
-     * memaksa semua baris hasil impor menjadi jenis tersebut.
+     * Parameter `type` menentukan spreadsheet yang diambil. Pada spreadsheet
+     * pegawai bersama, Role menentukan kategori dosen atau tendik.
      */
     public function importFromPublishedCsv(Request $request)
     {
@@ -311,11 +481,15 @@ class StudentController extends Controller
             ], 422);
         }
 
-        $result = $this->importRows($rows, $type);
+        $result = $this->importRows(
+            $rows,
+            BorrowerType::forcedType($type),
+            BorrowerType::usesSharedSheet($type),
+        );
 
         if ($result->getStatusCode() < 300) {
-            // URL & waktu sinkron disimpan pada kunci milik jenis tersebut,
-            // sehingga tiap kelompok punya spreadsheet sendiri.
+            // URL & waktu sinkron disimpan pada kunci kelompoknya, sehingga
+            // Tendik & Dosen berbagi satu kunci sedangkan mahasiswa terpisah.
             $urlKey = BorrowerType::syncUrlKey($type);
 
             if ($urlKey !== null) {
@@ -349,12 +523,18 @@ class StudentController extends Controller
     /**
      * @param  string|null  $forcedType  Bila diisi, seluruh baris dipaksa
      *                                   menjadi jenis tersebut dan kolom
-     *                                   "Jenis" di spreadsheet diabaikan.
-     *                                   Dipakai saat petugas menautkan satu
-     *                                   spreadsheet khusus tendik/dosen.
+     *                                   Role di spreadsheet diabaikan.
+     *                                   Dipakai untuk spreadsheet mahasiswa.
+     *
+     *                                   Untuk spreadsheet gabungan Tendik &
+     *                                   Dosen nilainya null sehingga Role
+     *                                   dibaca per baris.
      */
-    private function importRows(array $rows, ?string $forcedType = null)
+    private function importRows(array $rows, ?string $forcedType = null, bool $sharedSheet = false)
     {
+        // Kategori internal Tendik/Dosen untuk spreadsheet pegawai bersama.
+        // Kosong pada impor berkas yang tidak terikat ke spreadsheet tersebut.
+        $sharedTypes = $sharedSheet ? BorrowerType::SHARED_SHEET_TYPES : [];
 
         // Cari baris header di dalam file: template berisi baris judul &
         // petunjuk di atasnya, sedangkan CSV biasa langsung ber-header.
@@ -374,7 +554,7 @@ class StudentController extends Controller
 
         if ($columnMap === null) {
             return response()->json([
-                'message' => 'Header spreadsheet tidak dikenali. Gunakan template: NIM/NIP, Nama, Email, No. Telepon (Jenis & Jabatan opsional).',
+                'message' => 'Header spreadsheet tidak dikenali. Gunakan Nama dan Email, serta NIM/NIP untuk mahasiswa atau Role untuk spreadsheet pegawai.',
             ], 422);
         }
 
@@ -396,36 +576,51 @@ class StudentController extends Controller
 
             $row = $this->normalizeRow((array) $raw);
             $data = [
-                'student_id' => trim((string) ($row[$columnMap['student_id']] ?? '')),
+                'student_id' => isset($columnMap['student_id'])
+                    ? trim((string) ($row[$columnMap['student_id']] ?? ''))
+                    : '',
                 'name' => trim((string) ($row[$columnMap['name']] ?? '')),
                 'email' => strtolower(trim((string) ($row[$columnMap['email']] ?? ''))),
                 'phone' => isset($columnMap['phone']) ? trim((string) ($row[$columnMap['phone']] ?? '')) : '',
+                'role' => isset($columnMap['role']) ? trim((string) ($row[$columnMap['role']] ?? '')) : '',
                 'position' => isset($columnMap['position']) ? trim((string) ($row[$columnMap['position']] ?? '')) : '',
             ];
 
-            // Kolom "Jenis" opsional: bila kosong, baris dianggap mahasiswa
-            // supaya spreadsheet lama tanpa kolom ini tetap bisa diimpor.
-            $rawType = isset($columnMap['type']) ? trim((string) ($row[$columnMap['type']] ?? '')) : '';
+            // Kategori pegawai ditentukan dari Jabatan / Unit Kerja yang
+            // ditampilkan di bawah nama, bukan dari kolom Role.
+            $rawRole = $data['role'];
             $type = $forcedType !== null
                 ? BorrowerType::clean($forcedType)
-                : ($rawType === '' ? BorrowerType::MAHASISWA : BorrowerType::fromText($rawType));
+                : ($sharedSheet
+                    ? (in_array(BorrowerType::fromText($rawRole), [BorrowerType::MAHASISWA, BorrowerType::UMUM], true)
+                        ? null
+                        : $this->employeeTypeFromPosition($data['position']))
+                    : ($rawRole === '' ? BorrowerType::MAHASISWA : BorrowerType::fromText($rawRole)));
 
             if ($data['student_id'] === '' && $data['name'] === '' && $data['email'] === '') {
                 continue;
             }
 
-            // Jenis yang tidak dikenali Ditolak, bukan diam-diam disimpan
-            // sebagai mahasiswa supaya salah kategori tidak sulit ditelusuri.
-            if ($forcedType === null && $rawType !== '' && $type === null) {
-                $errors[] = "Baris {$rowNumber}: Jenis peminjam \"{$rawType}\" tidak dikenal "
-                    . '(pilihan: '.implode(', ', BorrowerType::options()).').';
+            // Jenis tak dikenal ditolak, bukan diam-diam disimpan sebagai
+            // mahasiswa supaya salah kategori tidak sulit ditelusuri.
+            if (! $sharedSheet && $forcedType === null && $rawRole !== '' && $type === null) {
+                $errors[] = "Baris {$rowNumber}: Jenis peminjam \"{$rawRole}\" tidak dikenal "
+                    .'(pilihan: '.implode(', ', BorrowerType::options()).').';
+
+                continue;
+            }
+
+            // Spreadsheet gabungan hanya menerima kategori pegawai.
+            if ($sharedTypes !== [] && ! in_array($type, $sharedTypes, true)) {
+                $errors[] = "Baris {$rowNumber}: Role \"{$rawRole}\" tidak boleh ada di spreadsheet Tendik & Dosen.";
 
                 continue;
             }
 
             $data['type'] = $type;
+            $data['student_id'] = $data['student_id'] !== '' ? $data['student_id'] : null;
 
-            if (isset($seenStudentIds[$data['student_id']])) {
+            if ($data['student_id'] !== null && isset($seenStudentIds[$data['student_id']])) {
                 $errors[] = "Baris {$rowNumber}: NIM {$data['student_id']} duplikat di dalam file.";
 
                 continue;
@@ -438,16 +633,19 @@ class StudentController extends Controller
             }
 
             $validator = Validator::make($data, [
-                'student_id' => ['required', 'string', 'max:50'],
+                'student_id' => in_array($data['type'], BorrowerType::SHARED_SHEET_TYPES, true)
+                    ? ['nullable', 'string', 'max:50']
+                    : ['required', 'string', 'max:50'],
                 'name' => ['required', 'string', 'max:255'],
                 'email' => ['required', 'email', 'max:255'],
                 'phone' => ['nullable', 'string', 'max:20'],
                 'type' => ['required', 'string', Rule::in(BorrowerType::ALL)],
+                'role' => ['nullable', 'string', 'max:150'],
                 'position' => ['nullable', 'string', 'max:150'],
             ]);
 
             if ($validator->fails()) {
-                $errors[] = "Baris {$rowNumber}: " . implode(' ', $validator->errors()->all());
+                $errors[] = "Baris {$rowNumber}: ".implode(' ', $validator->errors()->all());
 
                 continue;
             }
@@ -456,7 +654,9 @@ class StudentController extends Controller
             // NIM dipakai sebagai kunci utama, email sebagai kunci cadangan.
             // Dengan begitu perbaikan NIM pada spreadsheet ikut terpakai
             // (bukan ditolak sebagai bentrok) sebagaimana perubahan data lain.
-            $byStudentId = Student::where('student_id', $data['student_id'])->first();
+            $byStudentId = $data['student_id'] === null
+                ? null
+                : Student::where('student_id', $data['student_id'])->first();
             $byEmail = Student::where('email', $data['email'])->first();
 
             // Email/NIM milik dua mahasiswa berbeda = bentrok sungguhan.
@@ -466,7 +666,9 @@ class StudentController extends Controller
                 continue;
             }
 
-            $seenStudentIds[$data['student_id']] = true;
+            if ($data['student_id'] !== null) {
+                $seenStudentIds[$data['student_id']] = true;
+            }
             $seenEmails[$data['email']] = true;
 
             $existing = $byStudentId ?? $byEmail;
@@ -474,6 +676,7 @@ class StudentController extends Controller
                 'student_id' => $data['student_id'],
                 'name' => $data['name'],
                 'type' => $data['type'],
+                'role' => $data['role'] !== '' ? $data['role'] : null,
                 'position' => $data['position'] !== '' ? $data['position'] : null,
                 'email' => $data['email'],
                 'phone' => $data['phone'] !== '' ? $data['phone'] : null,
@@ -525,7 +728,7 @@ class StudentController extends Controller
         return response()->json([
             'ok' => true,
             'message' => 'Impor selesai: '.implode(', ', $summary).'.'
-                . (count($errors) > 0 ? ' ' . count($errors) . ' baris dilewati.' : ''),
+                .(count($errors) > 0 ? ' '.count($errors).' baris dilewati.' : ''),
             'imported' => $imported,
             'updated' => $updated,
             'unchanged' => $unchanged,
@@ -540,14 +743,22 @@ class StudentController extends Controller
         $emailRule = 'unique:students,email';
 
         if ($student) {
-            $studentIdRule .= ',' . $student->id;
-            $emailRule .= ',' . $student->id;
+            $studentIdRule .= ','.$student->id;
+            $emailRule .= ','.$student->id;
         }
 
         $validated = $request->validate([
-            'student_id' => ['required', 'string', 'max:50', $studentIdRule],
+            'student_id' => [
+                in_array($request->input('type', $student?->type), BorrowerType::SHARED_SHEET_TYPES, true)
+                    ? 'nullable'
+                    : 'required',
+                'string',
+                'max:50',
+                $studentIdRule,
+            ],
             'name' => ['required', 'string', 'max:255'],
             'type' => ['sometimes', 'string', Rule::in(BorrowerType::ALL)],
+            'role' => ['nullable', 'string', 'max:150'],
             'position' => ['nullable', 'string', 'max:150'],
             'email' => ['required', 'email', 'max:255', $emailRule],
             'phone' => ['nullable', 'string', 'max:20'],
@@ -555,81 +766,93 @@ class StudentController extends Controller
 
         // Pemanggil lama tidak mengirim `type`; defaults ke mahasiswa supaya
         // data lama tidak berubah jenis hanya karena disimpan ulang.
-        $validated['type'] = $validated['type'] ?? ($student?->type ?? BorrowerType::MAHASISWA);
+        $validated['role'] = $validated['role'] ?? ($student?->role ?? null);
         $validated['position'] = $validated['position'] ?? ($student?->position ?? null);
+        $validated['type'] = $validated['type'] ?? ($student?->type ?? BorrowerType::MAHASISWA);
+
+        if (in_array($validated['type'], BorrowerType::SHARED_SHEET_TYPES, true)) {
+            $validated['type'] = BorrowerType::employeeTypeFromPosition($validated['position']);
+        }
 
         return $validated;
     }
 
     /**
-     * Unduh template impor untuk satu kelompok peminjam.
+     * Unduh template impor untuk spreadsheet peminjam.
      *
      * File .xls (HTML table) berisi judul, petunjuk, dan header berformat
      * TANPA data contoh — supaya contoh tidak ikut terimpor saat petugas lupa
      * menghapus baris percontohan. Bisa langsung dibuka di Excel atau diunggah
      * ke Google Sheets.
      *
-     * Template dibuat per kelompok (`?type=mahasiswa|tendik|dosen`) supaya
-     * judul, nama kolom identitas, dan petunjuknya sesuai kelompok tersebut.
-     * Kolom "Jenis" sengaja tidak disertakan: begitu spreadsheet/template
-     * ini ditautkan ke suatu kelompok, seluruh barisnya otomatis menjadi
-     * kelompok itu.
+     * Mahasiswa memakai template khusus. Tendik & Dosen memakai satu template
+     * gabungan dengan Role bebas sebagai pembeda peran; spreadsheet mahasiswa
+     * tidak pernah ikut disentuh.
      */
     public function downloadTemplate(Request $request)
     {
         $type = $this->resolveSpreadsheetType($request);
-        $label = BorrowerType::label($type);
-        // Judul memakai huruf kapital penuh, seperti template lama.
-        $heading = \Illuminate\Support\Str::upper($label);
-        $identity = $this->identityColumnLabel($type);
+        $shared = BorrowerType::usesSharedSheet($type);
+        $label = $shared ? 'Tendik & Dosen' : BorrowerType::label($type);
+        $heading = Str::upper($label);
+        $identity = $shared ? 'NIP (opsional)' : $this->identityColumnLabel($type);
 
         // Petunjuk per kelompok: yang relevan saja yang ditampilkan.
-        $notes = match ($type) {
-            BorrowerType::TENDIK => [
-                'Isi '.$this->strong('NIP').' pegawai, bukan NIM mahasiswa.',
-                'Kolom '.$this->strong('Jabatan / Unit Kerja').' diisi jabatan resmi, mis. '
+        $notes = match (true) {
+            $shared => [
+                'Kolom '.$this->strong('Role').' opsional dan tidak menentukan kategori. Kategori Dosen ditentukan jika '
+                    .$this->strong('Jabatan / Unit Kerja').' memuat kata '.$this->quote('Dosen').'; selain itu masuk Tendik.',
+                'Role dapat berisi peran seperti '.$this->quote('Dosen').', '.$this->quote('Tendik')
+                    .', atau '.$this->quote('Rumah Tangga').'.',
+                'Kolom '.$this->strong('NIP (opsional)').' boleh dikosongkan. Gunakan email untuk mengenali data.',
+                'Isi kolom '.$this->strong('Jabatan / Unit Kerja').' dengan tugas atau unit kerja, misalnya '
+                    .$this->quote('Staf Bagian Keuangan').' atau '.$this->quote('Dosen Teknik Informatika').'.',
+            ],
+            $type === BorrowerType::TENDIK => [
+                'Gunakan '.$this->strong('NIP').' pegawai, bukan NIM mahasiswa.',
+                'Isi kolom '.$this->strong('Jabatan / Unit Kerja').' dengan jabatan resmi, misalnya '
                     .$this->quote('Staf Bagian Keuangan').' atau '.$this->quote('Asisten Lab Komputer').'.',
             ],
-            BorrowerType::DOSEN => [
-                'Isi '.$this->strong('NIP').' dosen, bukan NIM mahasiswa.',
-                'Kolom '.$this->strong('Jabatan / Unit Kerja').' diisi jabatan/program studi, mis. '
+            $type === BorrowerType::DOSEN => [
+                'Gunakan '.$this->strong('NIP').' dosen, bukan NIM mahasiswa.',
+                'Isi kolom '.$this->strong('Jabatan / Unit Kerja').' dengan jabatan atau program studi, misalnya '
                     .$this->quote('Dosen Teknik Informatika').'.',
             ],
             default => [
-                'Isi '.$this->strong('NIM').' mahasiswa.',
-                'Kolom '.$this->strong('Jabatan / Unit Kerja').' boleh diisi nama program studi (opsional).',
+                'Gunakan '.$this->strong('NIM').' mahasiswa.',
+                'Kolom '.$this->strong('Jabatan / Unit Kerja').' dapat diisi dengan nama program studi (opsional).',
             ],
         };
 
-        // Susunan baris file (penting agar nomor baris pada petunjuk tepat):
-        //   1              : judul
-        //   2              : baris kosong pemisah
-        //   3              : "PETUNJUK"
-        //   4 .. 3+N       : N butir petunjuk
-        //   4+N, 5+N       : petunjuk cara mengisi (lanjutan penomoran)
-        //   6+N            : baris kosong pemisah
-        //   7+N            : HEADER kolom
-        //   8+N            : baris kosong pemisah
-        //   9+N dan setelahnya : area data (kosong, siap diisi)
         $noteCount = count($notes);
-        $headerRow = 7 + $noteCount;
+        $headerRow = 7 + $noteCount - ($shared ? 1 : 0);
         $firstDataRow = $headerRow + 2;
+
+        // Kolom "Role" hanya ada pada template gabungan.
+        $colSpan = $shared ? 6 : 5;
+        $typeNoteRow = $shared
+            ? ''
+            : '<tr><td colspan="'.$colSpan.'" style="font-size:10pt; color:#475569; padding:1px 4px;">'
+                .($noteCount + 2).'. Seluruh data pada templat ini akan dikategorikan sebagai '
+                .$this->strong($label).'. Kolom Role tidak perlu ditambahkan.</td></tr>';
 
         $noteRows = '';
         foreach ($notes as $index => $note) {
             $noteRows .= '<tr>'
-                .'<td colspan="5" style="font-size:10pt; color:#475569; padding:1px 4px;">'
+                .'<td colspan="'.$colSpan.'" style="font-size:10pt; color:#475569; padding:1px 4px;">'
                 .($index + 1).'. '.$note
                 .'</td></tr>';
         }
 
         $fillNote = $noteCount + 1;
-        $typeNote = $noteCount + 2;
 
         $headerCell = 'background-color:#0e7490; color:#ffffff; font-weight:bold; '
             .'border:1px solid #155e75; padding:8px 10px; white-space:nowrap;';
+        $typeHeaderCell = $shared
+            ? '<td style="'.$headerCell.'">Role</td>'
+            : '';
 
-        $spacer = '<tr><td colspan="5" style="font-size:1pt; line-height:1pt;">&nbsp;</td></tr>';
+        $spacer = '<tr><td colspan="'.$colSpan.'" style="font-size:1pt; line-height:1pt;">&nbsp;</td></tr>';
 
         $html = <<<HTML
             <html xmlns:x="urn:schemas-microsoft-com:office:excel">
@@ -650,15 +873,17 @@ class StudentController extends Controller
                         <col style="width:240px;">
                         <col style="width:240px;">
                         <col style="width:130px;">
+                        <col style="width:120px;">
                     </colgroup>
-                    <tr><td colspan="5" style="font-size:14pt; font-weight:bold; color:#0e7490; padding:0 4px 2px;">TEMPLATE IMPOR DATA {$heading}</td></tr>
+                    <tr><td colspan="{$colSpan}" style="font-size:14pt; font-weight:bold; color:#0e7490; padding:0 4px 2px;">TEMPLATE IMPOR DATA {$heading}</td></tr>
                     {$spacer}
-                    <tr><td colspan="5" style="font-size:11pt; font-weight:bold; color:#0f172a; padding:0 4px 2px;">PETUNJUK</td></tr>
+                    <tr><td colspan="{$colSpan}" style="font-size:11pt; font-weight:bold; color:#0f172a; padding:0 4px 2px;">PANDUAN PENGISIAN</td></tr>
                     {$noteRows}
-                    <tr><td colspan="5" style="font-size:10pt; color:#475569; padding:1px 4px;">{$fillNote}. Mulai mengisi data pada baris {$firstDataRow} ke bawah. Baris judul, petunjuk, dan header jangan diubah atau dihapus.</td></tr>
-                    <tr><td colspan="5" style="font-size:10pt; color:#475569; padding:1px 4px;">{$typeNote}. Seluruh baris otomatis tersimpan sebagai {$this->strong($label)}, jadi kolom {$this->strong('Jenis')} tidak perlu ditambahkan.</td></tr>
+                    <tr><td colspan="{$colSpan}" style="font-size:10pt; color:#475569; padding:1px 4px;">{$fillNote}. Masukkan data mulai baris {$firstDataRow}. Jangan mengubah atau menghapus judul, panduan, maupun header kolom.</td></tr>
+                    {$typeNoteRow}
                     {$spacer}
                     <tr>
+                        {$typeHeaderCell}
                         <td style="{$headerCell}">{$identity}</td>
                         <td style="{$headerCell}">Nama</td>
                         <td style="{$headerCell}">Jabatan / Unit Kerja</td>
@@ -673,7 +898,7 @@ class StudentController extends Controller
 
         return response($html)
             ->header('Content-Type', 'application/vnd.ms-excel; charset=UTF-8')
-            ->header('Content-Disposition', 'attachment; filename="template-impor-'.$type.'.xls"');
+            ->header('Content-Disposition', 'attachment; filename="template-impor-'.($shared ? 'tendik-dosen' : $type).'.xls"');
     }
 
     /** Tebalkan teks pada template HTML (dipakai berulang agar rapi). */
@@ -705,7 +930,7 @@ class StudentController extends Controller
      * sedangkan XLSX/XLS dibaca dengan PhpSpreadsheet.
      * Mengembalikan null bila file tidak dapat dibaca.
      */
-    private function readRows(\Illuminate\Http\UploadedFile $file): ?array
+    private function readRows(UploadedFile $file): ?array
     {
         $extension = strtolower((string) $file->getClientOriginalExtension());
 
@@ -792,7 +1017,7 @@ class StudentController extends Controller
     private function readSpreadsheetRows(string $path): ?array
     {
         try {
-            $reader = \PhpOffice\PhpSpreadsheet\IOFactory::createReaderForFile($path);
+            $reader = IOFactory::createReaderForFile($path);
             $reader->setReadDataOnly(true);
             $spreadsheet = $reader->load($path);
         } catch (Throwable) {
@@ -827,6 +1052,11 @@ class StudentController extends Controller
         }, $row);
     }
 
+    private function employeeTypeFromPosition(string $position): string
+    {
+        return BorrowerType::employeeTypeFromPosition($position);
+    }
+
     /**
      * Petakan indeks kolom spreadsheet ke field database.
      * Mendukung header bahasa Indonesia maupun Inggris. Tanda baca dan
@@ -835,20 +1065,22 @@ class StudentController extends Controller
     private function mapColumns(array $header): ?array
     {
         $aliases = [
-            'student_id' => ['studentid', 'nim', 'nimnip', 'nip', 'nidn', 'idmahasiswa', 'nomorinduk'],
+            'student_id' => ['studentid', 'nim', 'nimnip', 'nip', 'nipopsional', 'nidn', 'idmahasiswa', 'nomorinduk'],
             'name' => ['name', 'nama', 'namamahasiswa', 'namalengkap', 'namapeminjam'],
             'email' => ['email', 'surel'],
             'phone' => ['phone', 'telepon', 'notelepon', 'notelp', 'nomortelepon', 'nohp', 'hp', 'whatsapp'],
-            // Kolom opsional — hanya dipakai bila ada di spreadsheet. Istilah
-            // "jabatan" sengaja tidak dipakai untuk `type` karena kolom itu
-            // berisi jabatan/unit kerja, bukan jenis peminjam (lihat `position`).
-            'type' => ['jenis', 'jenispeminjam', 'jenisorang', 'tipe', 'kategori', 'statuskepegawaian', 'golongan'],
+            // Role bebas menjadi peran peminjam; "Jabatan / Unit Kerja"
+            // tetap disimpan terpisah sebagai tugas atau unit kerjanya.
+            'role' => ['role', 'peran', 'peranan', 'jenisperan', 'jenis', 'jenispeminjam', 'jenisorang', 'tipe', 'kategori', 'statuskepegawaian', 'golongan'],
             'position' => [
                 'jabatan',
                 'jabatanfungsional',
                 'jabatanunitkerja',
                 'jabatanprogdi',
                 'unitkerja',
+                'tugas',
+                'pekerjaan',
+                'uraianpekerjaan',
                 'programstudi',
                 'prodi',
                 'fakultas',
@@ -869,7 +1101,7 @@ class StudentController extends Controller
             }
         }
 
-        if (! isset($map['student_id'], $map['name'], $map['email'])) {
+        if (! isset($map['name'], $map['email'])) {
             return null;
         }
 

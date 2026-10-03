@@ -26,20 +26,79 @@ export const SPREADSHEET_BORROWER_TYPES = BORROWER_TYPES.filter((type) => (
 ))
 
 /**
- * Kunci localStorage untuk URL spreadsheet tiap jenis. Kunci mahasiswa
- * sengaja memakai nama lama agar browser yang sudah pernah menyimpan URL
- * tidak perlu menautkan ulang spreadsheet.
+ * Kunci localStorage untuk URL spreadsheet tiap kelompok.
+ *
+ * Mahasiswa memakai nama lamanya (`student_sync_csv_url`) agar browser yang
+ * sudah pernah menyimpan URL tidak perlu menautkan ulang spreadsheet.
+ *
+ * Tendik & Dosen memakai satu kunci bersama (`employee_sync_csv_url`) karena
+ * keduanya memang membaca spreadsheet yang sama.
  */
 export function syncStorageKey(type) {
   const value = normalizeBorrowerType(type)
 
-  if (value === DEFAULT_BORROWER_TYPE) return 'student_sync_csv_url'
+  if (value === 'mahasiswa') return 'student_sync_csv_url'
 
-  return `${value}_sync_csv_url`
+  return 'employee_sync_csv_url'
 }
 
 export function hasSpreadsheetSupport(type) {
   return SPREADSHEET_BORROWER_TYPES.some((item) => item.value === normalizeBorrowerType(type))
+}
+
+/**
+ * Kunci localStorage untuk URL webhook tulis-balik. Tendik & Dosen memakai satu
+ * kunci bersama karena spreadsheetnya juga satu; mahasiswa terpisah.
+ *
+ * Cerminan `App\Support\BorrowerType::WEBHOOK_KEYS` di backend.
+ */
+export function webhookStorageKey(type) {
+  return normalizeBorrowerType(type) === 'mahasiswa'
+    ? 'student_sheets_webhook_url'
+    : 'employee_sheets_webhook_url'
+}
+
+/**
+ * Kelompok pembacaan spreadsheet.
+ *
+ * Setiap kelompok dibaca satu kali per siklus sinkronisasi. Tendik & Dosen satu
+ * kelompok karena memakai spreadsheet yang sama — tanpa ini keduanya akan
+ * menarik CSV yang sama dua kali dan menghitung datanya dobel.
+ *
+ * `forcedType` diisi hanya bila seluruh baris spreadsheet pasti satu jenis
+ * (mahasiswa). Untuk kelompok gabungan nilainya null sehingga kolom "Jenis"
+ * pada sheet menentukan jenis tiap baris.
+ *
+ * @param {string[]} [types] Cakupan jenis halaman pemanggil.
+ * @returns {Array<{key: string, label: string, types: string[], forcedType: string|null}>}
+ */
+export function spreadsheetSyncGroups(types) {
+  const pool = (types || SPREADSHEET_BORROWER_TYPES.map((item) => item.value))
+    .map(normalizeBorrowerType)
+    .filter((value) => value !== 'umum')
+
+  const groups = []
+
+  if (pool.includes('mahasiswa')) {
+    groups.push({
+      key: 'mahasiswa',
+      label: 'Mahasiswa',
+      types: ['mahasiswa'],
+      forcedType: 'mahasiswa',
+    })
+  }
+
+  const shared = pool.filter((value) => value === 'tendik' || value === 'dosen')
+  if (shared.length > 0) {
+    groups.push({
+      key: 'employee',
+      label: 'Tendik & Dosen',
+      types: ['tendik', 'dosen'],
+      forcedType: null,
+    })
+  }
+
+  return groups
 }
 
 /** Warna badge jenis peminjam di tabel dan daftar. */
@@ -55,6 +114,10 @@ export function normalizeBorrowerType(value) {
   const found = BORROWER_TYPES.some((type) => type.value === value)
 
   return found ? value : DEFAULT_BORROWER_TYPE
+}
+
+export function employeeTypeFromPosition(position) {
+  return String(position || '').toLowerCase().includes('dosen') ? 'dosen' : 'tendik'
 }
 
 export function borrowerTypeLabel(value) {

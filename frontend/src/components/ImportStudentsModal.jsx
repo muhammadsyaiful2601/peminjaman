@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Download, FileSpreadsheet, FileUp, RefreshCw, X } from 'lucide-react'
 import api from '../api/axios'
 import { downloadBlob } from '../utils/downloadBlob'
+import SheetsWebhookSettings from './borrowers/SheetsWebhookSettings'
 import {
   DEFAULT_BORROWER_TYPE,
   SPREADSHEET_BORROWER_TYPES,
@@ -42,6 +43,9 @@ function ImportStudentsModal({ open, onClose, onImported, initialType, allowedTy
   const [error, setError] = useState('')
   const [result, setResult] = useState(null)
   const [type, setType] = useState(DEFAULT_BORROWER_TYPE)
+  // URL webhook tulis-balik per jenis, dibaca dari halaman induk yang sudah
+  // memuatnya dari backend. Nilai di sini hanya dipakai selama modal terbuka.
+  const [webhookUrls, setWebhookUrls] = useState({})
 
   // URL milik sebuah jenis, dibaca dari cache browser lalu halaman induk.
   // Dibuat stabil dengan useCallback supaya aman dipakai di dalam useEffect.
@@ -124,7 +128,7 @@ function ImportStudentsModal({ open, onClose, onImported, initialType, allowedTy
         const formData = new FormData()
         formData.append('file', selectedFile)
         // Seluruh baris file dipaksa menjadi jenis yang dipilih, jadi file
-        // tendik/dosen tidak wajib punya kolom "Jenis".
+        // tendik/dosen memakai Role untuk menentukan kategori setiap baris.
         formData.append('type', type)
         response = await api.post('/students/import', formData, {
           headers: { 'Content-Type': 'multipart/form-data' },
@@ -170,17 +174,37 @@ function ImportStudentsModal({ open, onClose, onImported, initialType, allowedTy
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" onClick={handleClose}>
-      <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl" onClick={(event) => event.stopPropagation()}>
-        <ModalHeader handleClose={handleClose} />
-        <TypeSection type={type} onChange={handleTypeChange} allowedTypes={allowedTypes} />
-        <TemplateSection type={type} />
-        <SourceTabs source={source} setSource={setSource} />
-        {source === 'file'
-          ? <FileSection fileInputRef={fileInputRef} handleFileChange={handleFileChange} />
-          : <ApiSection type={type} spreadsheet={spreadsheet} setSpreadsheet={setSpreadsheet} />}
-        {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
-        {result && <ResultSection result={result} />}
-        <Footer handleClose={handleClose} handleImport={handleImport} importing={importing} canImport={source === 'file' ? Boolean(selectedFile) : Boolean(spreadsheet.trim())} source={source} />
+      {/*
+        Batas tinggi + area isi yang bisa digulir. Tanpa ini modal memanjang
+        mengikuti isinya (termasuk kode Apps Script yang panjang) sehingga
+        bagian bawah terpotong di layar kecil dan tombol Tutup tidak terjangkau.
+        Header & footer sengaja `shrink-0` agar tetap terlihat.
+      */}
+      <div className="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-xl bg-white shadow-xl" onClick={(event) => event.stopPropagation()}>
+        <div className="shrink-0 px-6 pt-6">
+          <ModalHeader handleClose={handleClose} />
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-6 pb-4">
+          <TypeSection type={type} onChange={handleTypeChange} allowedTypes={allowedTypes} />
+          <TemplateSection type={type} />
+          <SourceTabs source={source} setSource={setSource} />
+          {source === 'file'
+            ? <FileSection fileInputRef={fileInputRef} handleFileChange={handleFileChange} />
+            : <ApiSection
+                type={type}
+                spreadsheet={spreadsheet}
+                setSpreadsheet={setSpreadsheet}
+                webhookUrl={webhookUrls[type] || sources?.[type]?.webhookUrl || ''}
+                onWebhookSaved={(saved) => setWebhookUrls((current) => ({ ...current, [type]: saved }))}
+              />}
+          {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+          {result && <ResultSection result={result} />}
+        </div>
+
+        <div className="shrink-0 border-t border-slate-200 px-6 py-4">
+          <Footer handleClose={handleClose} handleImport={handleImport} importing={importing} canImport={source === 'file' ? Boolean(selectedFile) : Boolean(spreadsheet.trim())} source={source} />
+        </div>
       </div>
     </div>
   )
@@ -263,10 +287,10 @@ function TemplateSection({ type }) {
           <p className="mt-0.5 text-cyan-700">
             Unduh template Excel untuk kelompok{' '}
             <strong>{borrowerTypeLabel(type)}</strong> — sudah berisi judul, petunjuk, dan header kolom. Isi data mulai
-            baris ke-4, lalu simpan sebagai CSV atau unggah langsung ke Google Sheets
+            dari baris yang ditunjukkan pada panduan, lalu simpan sebagai CSV atau unggah langsung ke Google Sheets
             (<em>File → Import</em>) dan unduh kembali sebagai CSV. Kolom
-            {' '}<strong>Jenis</strong> dan <strong>Jabatan / Unit Kerja</strong> tidak perlu diisi karena seluruh baris
-            otomatis menjadi {borrowerTypeLabel(type).toLowerCase()}.
+            {' '}<strong>Role</strong> dan <strong>Jabatan / Unit Kerja</strong> mengikuti panduan pada template.
+            NIP pegawai boleh dikosongkan; email wajib diisi.
           </p>
           <TemplateButton type={type} />
         </div>
@@ -333,15 +357,16 @@ function FileSection({ fileInputRef, handleFileChange }) {
       <p className="mt-1.5 text-xs text-slate-500">
         Format yang didukung: <code className="rounded bg-slate-100 px-1">.xlsx</code>,{' '}
         <code className="rounded bg-slate-100 px-1">.xls</code>, <code className="rounded bg-slate-100 px-1">.csv</code>. Kolom wajib:{' '}
-        <code className="rounded bg-slate-100 px-1">NIM/NIP</code>, <code className="rounded bg-slate-100 px-1">Nama</code>,{' '}
-        <code className="rounded bg-slate-100 px-1">Email</code>. NIM yang sudah ada akan diperbarui.
+        <code className="rounded bg-slate-100 px-1">Nama</code> dan <code className="rounded bg-slate-100 px-1">Email</code>.
+        NIM wajib untuk mahasiswa; NIP opsional untuk Tendik dan Dosen. Email dipakai untuk mencocokkan pembaruan.
       </p>
     </div>
   )
 }
 
-function ApiSection({ type, spreadsheet, setSpreadsheet }) {
+function ApiSection({ type, spreadsheet, setSpreadsheet, webhookUrl, onWebhookSaved }) {
   const label = borrowerTypeLabel(type)
+  const shared = type === 'tendik' || type === 'dosen'
 
   return (
     <div className="mb-4 space-y-3">
@@ -354,6 +379,14 @@ function ApiSection({ type, spreadsheet, setSpreadsheet }) {
         publikasi. Tidak memerlukan API key. URL ini tersimpan terpisah untuk kelompok{' '}
         <strong>{label}</strong> dan akan ditarik otomatis setiap 5 menit.
       </p>
+
+      <p className="rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-2 text-xs text-cyan-900">
+        {shared
+          ? 'Tendik & Dosen memakai satu spreadsheet bersama. Kategori dilihat dari Jabatan / Unit Kerja: jika memuat kata Dosen, data masuk kategori Dosen; selain itu masuk kategori Tendik. Role hanya menjelaskan peran kerja dan boleh dikosongkan. NIP boleh dikosongkan; email wajib diisi.'
+          : 'Spreadsheet mahasiswa berdiri sendiri dan tidak ikut berubah karena perubahan data pegawai.'}
+      </p>
+
+      <SheetsWebhookSettings type={type} webhookUrl={webhookUrl} onSaved={onWebhookSaved} />
     </div>
   )
 }

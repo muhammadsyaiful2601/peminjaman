@@ -18,6 +18,8 @@ class Branding
         'app_logo_path' => null,
         'landing_photo_path' => null,
         'letterhead_logo_path' => null,
+        // Font dokumen PDF; katalognya ada di App\Support\PdfFont.
+        'pdf_font' => 'dejavu_sans',
     ];
 
     public static function all(): array

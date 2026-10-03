@@ -4,8 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
+        @include('pdf.partials.pdf-fonts')
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: DejaVu Sans, sans-serif; color: #111827; font-size: 10px; margin: 28px 34px; }
+        body { font-family: {!! \App\Support\PdfFont::stack() !!}; color: #111827; font-size: 10px; margin: 28px 34px; }
         .header { margin-bottom: 0; padding-bottom: 0; border-bottom: 0; }
         .header-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
         .header-table td { border: 0; vertical-align: middle; }
